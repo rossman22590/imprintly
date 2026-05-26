@@ -6,6 +6,7 @@ import {
   DashboardPage,
   EditBookPage,
   ErrorPage,
+  KDPStudioPage,
   LandingPage,
   ProfilePage,
   SignInPage,
@@ -62,6 +63,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <EditBookPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "books/:bookId/kdp",
+        element: (
+          <ProtectedRoute>
+            <KDPStudioPage />
           </ProtectedRoute>
         ),
       },

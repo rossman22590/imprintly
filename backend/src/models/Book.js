@@ -87,6 +87,97 @@ const chapterSchema = new mongoose.Schema(
   }
 );
 
+const kdpSettingsSchema = new mongoose.Schema(
+  {
+    format: {
+      type: String,
+      enum: ["ebook", "paperback", "hardcover"],
+      default: "paperback",
+    },
+    trimSize: {
+      type: String,
+      default: "6x9",
+      maxLength: [30, "Trim size cannot exceed 30 characters"],
+    },
+    paperType: {
+      type: String,
+      default: "bw-white",
+      maxLength: [50, "Paper type cannot exceed 50 characters"],
+    },
+    pageCountOverride: {
+      type: String,
+      default: "",
+      maxLength: [20, "Page count override cannot exceed 20 characters"],
+    },
+    coverImageSize: {
+      type: String,
+      default: "2K",
+      maxLength: [10, "Cover image size cannot exceed 10 characters"],
+    },
+    tocDesign: {
+      type: String,
+      default: "basic",
+      maxLength: [30, "TOC design cannot exceed 30 characters"],
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
+const kdpAssetsSchema = new mongoose.Schema(
+  {
+    tableOfContents: {
+      type: String,
+      default: "",
+      maxLength: [20000, "Table of contents cannot exceed 20000 characters"],
+    },
+    description: {
+      type: String,
+      default: "",
+      maxLength: [20000, "Description cannot exceed 20000 characters"],
+    },
+    keywords: {
+      type: String,
+      default: "",
+      maxLength: [5000, "Keywords cannot exceed 5000 characters"],
+    },
+    categories: {
+      type: String,
+      default: "",
+      maxLength: [10000, "Categories cannot exceed 10000 characters"],
+    },
+    backCoverBlurb: {
+      type: String,
+      default: "",
+      maxLength: [12000, "Back cover blurb cannot exceed 12000 characters"],
+    },
+    authorBio: {
+      type: String,
+      default: "",
+      maxLength: [12000, "Author biography cannot exceed 12000 characters"],
+    },
+    copyrightPage: {
+      type: String,
+      default: "",
+      maxLength: [12000, "Copyright page cannot exceed 12000 characters"],
+    },
+    coverPrompt: {
+      type: String,
+      default: "",
+      maxLength: [12000, "Cover prompt cannot exceed 12000 characters"],
+    },
+    riskNotes: {
+      type: String,
+      default: "",
+      maxLength: [20000, "Risk notes cannot exceed 20000 characters"],
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
 const bookSchema = new mongoose.Schema(
   {
     userId: {
@@ -244,6 +335,20 @@ const bookSchema = new mongoose.Schema(
         default: null,
       },
       completedAt: {
+        type: Date,
+        default: null,
+      },
+    },
+    kdp: {
+      settings: {
+        type: kdpSettingsSchema,
+        default: () => ({}),
+      },
+      assets: {
+        type: kdpAssetsSchema,
+        default: () => ({}),
+      },
+      updatedAt: {
         type: Date,
         default: null,
       },

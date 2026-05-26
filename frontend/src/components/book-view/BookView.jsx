@@ -1,6 +1,7 @@
 import { useState } from "react";
 import BookViewSidebar from "./BookViewSidebar";
-import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
+import { Link } from "react-router";
+import { ChevronLeft, ChevronRight, Menu, Store } from "lucide-react";
 import MDEditor from "@uiw/react-md-editor";
 import rehypeSanitize from "rehype-sanitize";
 import { resolveImageUrl } from "../../utils/api-endpoints";
@@ -81,6 +82,14 @@ function BookView({ book }) {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link
+              to={`/books/${book._id}/kdp`}
+              className="hidden sm:inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            >
+              <Store className="size-4" />
+              KDP Studio
+            </Link>
+
             {/* Font side controls */}
             <div className="mr-4 flex items-center gap-2">
               <button

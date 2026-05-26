@@ -6,6 +6,7 @@ const {
   createBook,
   updateBookContent,
   updateBookCover,
+  updateBookKdp,
   deleteBook,
 } = require("../controllers/books.controller");
 const { uploadBookCoverImage } = require("../middlewares/upload.middleware");
@@ -28,5 +29,8 @@ router
 
 // PUT /api/books/:bookId/cover - Upload/update book cover image
 router.route("/:bookId/cover").put(uploadBookCoverImage, updateBookCover);
+
+// PATCH /api/books/:bookId/kdp - Save KDP Studio settings and generated assets
+router.route("/:bookId/kdp").patch(updateBookKdp);
 
 module.exports = router;

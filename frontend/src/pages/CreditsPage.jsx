@@ -68,8 +68,8 @@ function CreditsPage() {
 
   return (
     <DashboardLayout>
-      <main className="container max-w-6xl p-4 md:p-6 mx-auto">
-        <header className="mb-6 flex flex-col gap-2">
+      <main className="container max-w-6xl h-full min-h-0 p-4 md:p-6 mx-auto flex flex-col">
+        <header className="mb-6 flex shrink-0 flex-col gap-2">
           <p className="text-violet-600 text-xs font-semibold uppercase tracking-wide">
             Usage
           </p>
@@ -81,8 +81,8 @@ function CreditsPage() {
         {isLoading ? (
           <div className="h-40 rounded-xl border border-slate-200 bg-white animate-pulse" />
         ) : (
-          <>
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="min-h-0 flex-1 flex flex-col">
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 shrink-0">
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <div className="size-10 rounded-lg bg-violet-50 flex items-center justify-center mb-4">
                   <Coins className="size-5 text-violet-600" />
@@ -118,8 +118,8 @@ function CreditsPage() {
               </div>
             </section>
 
-            <section className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-              <div className="px-4 sm:px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+            <section className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-0 flex flex-1 flex-col">
+              <div className="px-4 sm:px-5 py-4 border-b border-slate-200 flex shrink-0 items-center justify-between gap-3">
                 <h2 className="text-slate-950 font-semibold">
                   Transaction history
                 </h2>
@@ -133,7 +133,7 @@ function CreditsPage() {
                   No transactions yet.
                 </p>
               ) : (
-                <ul className="divide-y divide-slate-100">
+                <ul className="divide-y divide-slate-100 overflow-y-auto min-h-0 flex-1 overscroll-contain">
                   {transactions.map((transaction) => {
                     const Icon = transactionIcon(
                       transaction.type,
@@ -186,7 +186,7 @@ function CreditsPage() {
                 </ul>
               )}
             </section>
-          </>
+          </div>
         )}
       </main>
     </DashboardLayout>

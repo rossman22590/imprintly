@@ -1019,6 +1019,24 @@ async function runQualityTool(req, res) {
         "Flag claims that may need citations, fact-checking, or source warnings. Return concise editorial notes.",
       cover:
         "Create a detailed AI image prompt for a professional book cover based on the text.",
+      kdp_description:
+        "Write a polished Amazon KDP book description. Make it sales-focused, clear, and formatted with short paragraphs. Do not invent credentials, awards, or claims not supported by the content.",
+      kdp_keywords:
+        "Suggest 7 Amazon KDP keyword slots. Each slot should be a phrase a reader might search for. Return one numbered list only.",
+      kdp_categories:
+        "Suggest 5 likely Amazon/KDP browse category directions for this book. Include a short reason for each. Do not claim exact category availability.",
+      kdp_blurb:
+        "Write a concise back-cover blurb for the print edition. Make it compelling but accurate to the book.",
+      kdp_author_bio:
+        "Draft a professional author bio based only on the author name and available book context. If credentials are missing, keep it general and do not invent facts.",
+      kdp_toc:
+        "Generate a clean table of contents for the book using the chapter titles and structure. Return a publish-ready table of contents with chapter numbers and titles only.",
+      kdp_copyright:
+        "Draft a clean copyright page template for this book. Include placeholders where publisher, ISBN, edition, or rights details are unknown.",
+      kdp_risk_check:
+        "Review the book context for KDP publishing risks: unsupported claims, missing disclosures, metadata mismatch, weak positioning, formatting risks, and cover concerns. Return concise actionable notes.",
+      kdp_cover_prompt:
+        "Create a detailed prompt for a KDP-ready book cover concept. Include front cover direction plus notes for a wraparound paperback cover with back cover, spine, barcode space, bleed, and safe zones.",
     };
     const instruction = instructionMap[safeAction];
 

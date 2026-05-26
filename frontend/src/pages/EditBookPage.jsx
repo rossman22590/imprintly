@@ -16,6 +16,7 @@ import {
   NotebookText,
   Save,
   Sparkles,
+  Store,
   WandSparkles,
   X,
 } from "lucide-react";
@@ -1102,6 +1103,17 @@ function EditBookPage() {
             >
               <span className="hidden lg:inline">Generate Full Book</span>
               <span className="lg:hidden">AI Book</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => navigate(`/books/${bookId}/kdp`)}
+              icon={Store}
+              size="sm"
+            >
+              <span className="hidden lg:inline">KDP Studio</span>
+              <span className="lg:hidden">KDP</span>
             </Button>
 
             <Dropdown

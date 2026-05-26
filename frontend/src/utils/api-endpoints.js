@@ -42,6 +42,7 @@ export const API_ENDPOINTS = {
     CREATE: "/api/books",
     UPDATE_CONTENT: "/api/books",
     UPDATE_COVER: "/api/books",
+    UPDATE_KDP: "/api/books",
     DELETE: "/api/books",
   },
   AI: {

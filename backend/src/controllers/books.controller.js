@@ -27,6 +27,37 @@ const {
   chargeImageUsage,
 } = require("../utils/credits.service");
 
+const KDP_SETTING_LIMITS = {
+  format: 20,
+  trimSize: 30,
+  paperType: 50,
+  pageCountOverride: 20,
+  coverImageSize: 10,
+  tocDesign: 30,
+};
+
+const KDP_ASSET_LIMITS = {
+  tableOfContents: 20000,
+  description: 20000,
+  keywords: 5000,
+  categories: 10000,
+  backCoverBlurb: 12000,
+  authorBio: 12000,
+  copyrightPage: 12000,
+  coverPrompt: 12000,
+  riskNotes: 20000,
+};
+
+function pickKdpStrings(payload = {}, limits = {}) {
+  return Object.entries(limits).reduce((picked, [key, limit]) => {
+    if (payload[key] !== undefined) {
+      picked[key] = String(payload[key]).slice(0, limit);
+    }
+
+    return picked;
+  }, {});
+}
+
 async function normalizeChapterPayloads(chapters = []) {
   if (!Array.isArray(chapters)) return [];
 
@@ -420,6 +451,60 @@ async function updateBookCover(req, res) {
   }
 }
 
+async function updateBookKdp(req, res) {
+  try {
+    const { bookId } = req.params;
+    const book = await Book.findById(bookId);
+
+    if (!book) {
+      return res.status(404).json({ error: "Book not found!" });
+    }
+
+    if (book.userId.toString() !== req.user.id.toString()) {
+      return res
+        .status(403)
+        .json({ error: "Forbidden: You cannot update this book!" });
+    }
+
+    const nextSettings = {
+      ...(book.kdp?.settings?.toObject?.() || book.kdp?.settings || {}),
+      ...pickKdpStrings(req.body.settings, KDP_SETTING_LIMITS),
+    };
+    const nextAssets = {
+      ...(book.kdp?.assets?.toObject?.() || book.kdp?.assets || {}),
+      ...pickKdpStrings(req.body.metadata || req.body.assets, KDP_ASSET_LIMITS),
+    };
+
+    book.kdp = {
+      settings: nextSettings,
+      assets: nextAssets,
+      updatedAt: new Date(),
+    };
+
+    const updatedBook = await book.save();
+
+    return res.status(200).json({
+      message: "KDP Studio saved.",
+      book: updatedBook,
+    });
+  } catch (error) {
+    console.error("Error updating KDP Studio data:", error);
+
+    if (error.name === "CastError") {
+      return res.status(400).json({ error: "Invalid book ID format!" });
+    }
+
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        error: "Validation failed",
+        details: error.message,
+      });
+    }
+
+    return res.status(500).json({ error: "Internal Server Error!" });
+  }
+}
+
 async function deleteBook(req, res) {
   try {
     const { bookId } = req.params;
@@ -468,5 +553,6 @@ module.exports = {
   createBook,
   updateBookContent,
   updateBookCover,
+  updateBookKdp,
   deleteBook,
 };

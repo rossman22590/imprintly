@@ -3,6 +3,8 @@ const { generateDocx } = require("../utils/docx.generator");
 const { generateEpub } = require("../utils/epub.generator");
 const { generateMarkdown } = require("../utils/markdown.generator");
 const { generatePdf } = require("../utils/pdf.generator");
+const { generateKdpReportPdf } = require("../utils/kdp-report-pdf.generator");
+const { generateKdpTocPdf } = require("../utils/kdp-toc-pdf.generator");
 const { migrateBookImagesToStorage } = require("../utils/image-asset-migration");
 
 function setNoStoreHeaders(res) {
@@ -97,6 +99,64 @@ async function exportAsPdf(req, res) {
   }
 }
 
+async function exportKdpTableOfContentsPdf(req, res) {
+  try {
+    const book = await getOwnedExportBook(req, res);
+
+    if (!book) return;
+
+    const pdfBuffer = await generateKdpTocPdf(book, {
+      design: req.query.design,
+    });
+    const filename = `${book.title.replace(
+      /[^a-zA-Z0-9]/g,
+      "_"
+    )}_table_of_contents.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.setHeader("Content-Transfer-Encoding", "binary");
+    setNoStoreHeaders(res);
+
+    return res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Error exporting KDP table of contents PDF:", error);
+
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+}
+
+async function exportKdpReportPdf(req, res) {
+  try {
+    const book = await getOwnedExportBook(req, res);
+
+    if (!book) return;
+
+    const pdfBuffer = await generateKdpReportPdf(book);
+    const filename = `${book.title.replace(
+      /[^a-zA-Z0-9]/g,
+      "_"
+    )}_risk_notes.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.setHeader("Content-Transfer-Encoding", "binary");
+    setNoStoreHeaders(res);
+
+    return res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Error exporting KDP risk notes PDF:", error);
+
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+}
+
 async function exportAsMarkdown(req, res) {
   try {
     const book = await getOwnedExportBook(req, res);
@@ -140,4 +200,11 @@ async function exportAsEpub(req, res) {
   }
 }
 
-module.exports = { exportAsDocx, exportAsEpub, exportAsMarkdown, exportAsPdf };
+module.exports = {
+  exportAsDocx,
+  exportAsEpub,
+  exportAsMarkdown,
+  exportAsPdf,
+  exportKdpReportPdf,
+  exportKdpTableOfContentsPdf,
+};
