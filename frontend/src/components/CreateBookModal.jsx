@@ -211,15 +211,30 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
         setIsGeneratingFullBook(false);
         activePollRef.current = null;
 
-        if (book && job.status !== "cancelled") {
+        const hasGeneratedContent = Array.isArray(book?.chapters)
+          ? book.chapters.some((chapter) => chapter.content?.trim())
+          : false;
+
+        if (book && job.status === "complete") {
           toast.success(
-            job.status === "complete"
-              ? "Full AI book generated!"
-              : "Book generated with failed chapters."
+            "Full AI book generated!"
           );
           onBookCreate(book._id);
           onClose();
           resetModal();
+        } else if (book && job.status === "failed" && hasGeneratedContent) {
+          toast.error("Book generated with failed chapters.");
+          onBookCreate(book._id);
+          onClose();
+          resetModal();
+        } else if (job.status === "failed") {
+          const failureReason =
+            job.failedChapters?.[0]?.error ||
+            job.error ||
+            job.progress?.message ||
+            "The AI provider did not return usable chapter content.";
+
+          toast.error(failureReason, { duration: 8000 });
         } else if (job.status === "cancelled") {
           toast("Generation cancelled.");
         }

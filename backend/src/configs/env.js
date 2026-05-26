@@ -15,7 +15,8 @@ const ENV = {
     process.env.GEMINI_STRUCTURE_MODEL ?? "gemini-3.5-flash",
   GEMINI_SECTION_MODEL: process.env.GEMINI_SECTION_MODEL ?? "gemini-3.5-flash",
   GEMINI_QUALITY_MODEL: process.env.GEMINI_QUALITY_MODEL ?? "gemini-3.5-flash",
-  GEMINI_MAX_OUTPUT_TOKENS: process.env.GEMINI_MAX_OUTPUT_TOKENS ?? "9000",
+  GEMINI_MAX_OUTPUT_TOKENS: process.env.GEMINI_MAX_OUTPUT_TOKENS ?? "16000",
+  GEMINI_THINKING_LEVEL: process.env.GEMINI_THINKING_LEVEL ?? "low",
   GEMINI_IMAGE_MODEL:
     process.env.GEMINI_IMAGE_MODEL ?? "gemini-3.1-flash-image-preview",
   GEMINI_IMAGE_SIZE: process.env.GEMINI_IMAGE_SIZE ?? "1K",

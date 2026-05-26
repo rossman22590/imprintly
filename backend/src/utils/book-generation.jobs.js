@@ -58,6 +58,22 @@ function countWords(content = "") {
   return content.split(/\s+/).filter(Boolean).length;
 }
 
+function assertGeneratedChapterContent(result = {}, { provider, chapterTitle }) {
+  const content = String(result.content || "").trim();
+
+  if (content.length >= 100) {
+    return content;
+  }
+
+  const providerName = provider === "gemini" ? "Gemini" : "Groq";
+  const chapterLabel = chapterTitle ? ` for "${chapterTitle}"` : "";
+  const reason = content ? "too-short" : "empty";
+
+  throw new Error(
+    `${providerName} returned ${reason} chapter content${chapterLabel}.`
+  );
+}
+
 function isEnabled(value) {
   return value === true || value === "true" || value === "yes" || value === 1;
 }
@@ -511,6 +527,10 @@ async function runGenerationJob(jobId) {
           audience: safeAudience,
           bookContext,
         });
+        let chapterContent = assertGeneratedChapterContent(result, {
+          provider,
+          chapterTitle: chapter.title,
+        });
 
         totalStats = addStats(totalStats, result.stats);
         await chargeTokenUsage({
@@ -527,7 +547,6 @@ async function runGenerationJob(jobId) {
             chapterTitle: chapter.title,
           },
         });
-        let chapterContent = result.content;
         const chapterStats = { ...result.stats };
         let chapterStatus = "complete";
 

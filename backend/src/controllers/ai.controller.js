@@ -96,6 +96,24 @@ function countWords(content = "") {
   return content.split(/\s+/).filter(Boolean).length;
 }
 
+function assertGeneratedChapterContent(result = {}, { provider, chapterTitle }) {
+  const content = String(result.content || "").trim();
+
+  if (content.length >= 100) {
+    return content;
+  }
+
+  const providerName = provider === "gemini" ? "Gemini" : "Groq";
+  const chapterLabel = chapterTitle ? ` for "${chapterTitle}"` : "";
+  const reason = content ? "too-short" : "empty";
+
+  const error = new Error(
+    `${providerName} returned ${reason} chapter content${chapterLabel}.`
+  );
+  error.statusCode = 502;
+  throw error;
+}
+
 function isEnabled(value) {
   return value === true || value === "true" || value === "yes" || value === 1;
 }
@@ -353,43 +371,7 @@ async function generateChapterContent(req, res) {
 
     await assertHasCredits(req.user.id, 0.0001);
 
-    if (selectedProvider === "groq") {
-      const result = await generateGroqSection({
-        chapterTitle: safeChapterTitle,
-        chapterDescription: safeChapterDescription,
-        style: safeStyle,
-        bookTitle: sanitizeInput(bookTitle, 200),
-        genre: sanitizeInput(genre, 100) || "Nonfiction",
-        audience: sanitizeInput(audience, 200) || "General readers",
-        bookContext: sanitizeInput(bookContext, 3000),
-      });
-
-      if (!result.content || result.content.trim().length < 100) {
-        return res.status(500).json({
-          error: "Generated content is too short or invalid!",
-        });
-      }
-      const billing = await chargeGeneratedTokens({
-        req,
-        stats: result.stats,
-        reason: "chapter_generation",
-        description: `Generated chapter "${safeChapterTitle}"`,
-        provider: "groq",
-        model: result.modelName,
-        metadata: { chapterTitle: safeChapterTitle },
-      });
-
-      return res.status(200).json({
-        message: "Groq chapter content generated successfully!",
-        content: result.content,
-        provider: "groq",
-        model: result.modelName,
-        stats: result.stats,
-        billing: serializeBilling(billing),
-      });
-    }
-
-    const result = await generateGeminiSection({
+    const result = await generateSectionForProvider(selectedProvider, {
       chapterTitle: safeChapterTitle,
       chapterDescription: safeChapterDescription,
       style: safeStyle,
@@ -398,26 +380,27 @@ async function generateChapterContent(req, res) {
       audience: sanitizeInput(audience, 200) || "General readers",
       bookContext: sanitizeInput(bookContext, 3000),
     });
+    const content = assertGeneratedChapterContent(result, {
+      provider: selectedProvider,
+      chapterTitle: safeChapterTitle,
+    });
 
-    if (!result.content || result.content.trim().length < 100) {
-      return res.status(500).json({
-        error: "Generated content is too short or invalid!",
-      });
-    }
     const billing = await chargeGeneratedTokens({
       req,
       stats: result.stats,
       reason: "chapter_generation",
       description: `Generated chapter "${safeChapterTitle}"`,
-      provider: "gemini",
+      provider: selectedProvider,
       model: result.modelName,
       metadata: { chapterTitle: safeChapterTitle },
     });
 
     return res.status(200).json({
-      message: "Gemini chapter content generated successfully!",
-      content: result.content,
-      provider: "gemini",
+      message: `${
+        selectedProvider === "gemini" ? "Gemini" : "Groq"
+      } chapter content generated successfully!`,
+      content,
+      provider: selectedProvider,
       model: result.modelName,
       stats: result.stats,
       billing: serializeBilling(billing),
@@ -550,6 +533,10 @@ async function generateFullBook(req, res) {
           audience: safeAudience,
           bookContext,
         });
+        const content = assertGeneratedChapterContent(result, {
+          provider: selectedProvider,
+          chapterTitle: chapter.title,
+        });
 
         totalStats = addStats(totalStats, result.stats);
         const chapterBilling = await chargeGeneratedTokens({
@@ -564,9 +551,9 @@ async function generateFullBook(req, res) {
         billingCharges.push(serializeBilling(chapterBilling));
         generatedChapters.push({
           ...chapter,
-          content: result.content,
+          content,
           generationStatus: "complete",
-          wordCount: countWords(result.content),
+          wordCount: countWords(content),
           generationStats: result.stats,
         });
       } catch (error) {
