@@ -178,6 +178,58 @@ const kdpAssetsSchema = new mongoose.Schema(
   }
 );
 
+const bookBibleSchema = new mongoose.Schema(
+  {
+    characters: {
+      type: String,
+      default: "",
+      maxLength: [12000, "Characters bible cannot exceed 12000 characters"],
+    },
+    locations: {
+      type: String,
+      default: "",
+      maxLength: [12000, "Locations bible cannot exceed 12000 characters"],
+    },
+    worldRules: {
+      type: String,
+      default: "",
+      maxLength: [12000, "World rules bible cannot exceed 12000 characters"],
+    },
+    timeline: {
+      type: String,
+      default: "",
+      maxLength: [12000, "Timeline bible cannot exceed 12000 characters"],
+    },
+    styleGuide: {
+      type: String,
+      default: "",
+      maxLength: [12000, "Style guide cannot exceed 12000 characters"],
+    },
+    canonFacts: {
+      type: String,
+      default: "",
+      maxLength: [12000, "Canon facts cannot exceed 12000 characters"],
+    },
+    unresolvedThreads: {
+      type: String,
+      default: "",
+      maxLength: [12000, "Unresolved threads cannot exceed 12000 characters"],
+    },
+    notes: {
+      type: String,
+      default: "",
+      maxLength: [12000, "Bible notes cannot exceed 12000 characters"],
+    },
+    updatedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
 const bookSchema = new mongoose.Schema(
   {
     userId: {
@@ -361,6 +413,10 @@ const bookSchema = new mongoose.Schema(
         type: Date,
         default: null,
       },
+    },
+    bible: {
+      type: bookBibleSchema,
+      default: () => ({}),
     },
     status: {
       type: String,

@@ -3,9 +3,22 @@ export function normalizeBook(book) {
     return null;
   }
 
+  const bible = book.bible && typeof book.bible === "object" ? book.bible : {};
+
   return {
     ...book,
     chapters: Array.isArray(book.chapters) ? book.chapters : [],
+    bible: {
+      characters: bible.characters || "",
+      locations: bible.locations || "",
+      worldRules: bible.worldRules || "",
+      timeline: bible.timeline || "",
+      styleGuide: bible.styleGuide || "",
+      canonFacts: bible.canonFacts || "",
+      unresolvedThreads: bible.unresolvedThreads || "",
+      notes: bible.notes || "",
+      updatedAt: bible.updatedAt || null,
+    },
   };
 }
 

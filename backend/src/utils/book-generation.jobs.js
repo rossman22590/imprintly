@@ -29,6 +29,10 @@ const {
   chargeTokenUsage,
 } = require("./credits.service");
 const { normalizeChapterLength } = require("./chapter-length");
+const {
+  normalizeBookBiblePayload,
+  serializeBookBible,
+} = require("./book-bible");
 
 const activeJobs = new Set();
 
@@ -328,6 +332,7 @@ async function resolveBookForJob(job) {
     genre: sanitizeInput(payload.genre, 100) || "Nonfiction",
     audience: sanitizeInput(payload.audience, 200) || "General readers",
     chapters: normalizeOutlineChapters(payload.outline || []),
+    bible: normalizeBookBiblePayload(payload.bible),
     generation: {
       provider: job.provider,
       status: "queued",
@@ -415,6 +420,7 @@ async function runGenerationJob(jobId) {
     );
     let outlineTree = payload.outline || book.generation?.outlineTree || null;
     let outlineGrounding = book.generation?.grounding || null;
+    const bookBible = serializeBookBible(payload.bible || book.bible);
 
     await updateBookProgress(book, job, {
       startedAt: job.startedAt,
@@ -578,6 +584,7 @@ async function runGenerationJob(jobId) {
           genre: safeGenre,
           audience: safeAudience,
           bookContext,
+          bookBible,
           useGoogleSearch,
           includeTextGraphics,
           chapterLength,

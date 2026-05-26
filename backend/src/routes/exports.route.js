@@ -5,6 +5,7 @@ const {
   exportAsEpub,
   exportAsMarkdown,
   exportAsPdf,
+  exportContinuityReportPdf,
   exportKdpReportPdf,
   exportKdpTableOfContentsPdf,
 } = require("../controllers/exports.controller");
@@ -16,6 +17,7 @@ router.get("/:bookId/docx", exportAsDocx);
 router.get("/:bookId/epub", exportAsEpub);
 router.get("/:bookId/markdown", exportAsMarkdown);
 router.get("/:bookId/pdf", exportAsPdf);
+router.post("/:bookId/continuity-report.pdf", exportContinuityReportPdf);
 router.get("/:bookId/kdp-report.pdf", exportKdpReportPdf);
 router.get("/:bookId/kdp-table-of-contents.pdf", exportKdpTableOfContentsPdf);
 

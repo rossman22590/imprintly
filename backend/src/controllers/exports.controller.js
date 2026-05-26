@@ -5,6 +5,9 @@ const { generateMarkdown } = require("../utils/markdown.generator");
 const { generatePdf } = require("../utils/pdf.generator");
 const { generateKdpReportPdf } = require("../utils/kdp-report-pdf.generator");
 const { generateKdpTocPdf } = require("../utils/kdp-toc-pdf.generator");
+const {
+  generateContinuityReportPdf,
+} = require("../utils/continuity-report-pdf.generator");
 const { migrateBookImagesToStorage } = require("../utils/image-asset-migration");
 
 function setNoStoreHeaders(res) {
@@ -157,6 +160,48 @@ async function exportKdpReportPdf(req, res) {
   }
 }
 
+async function exportContinuityReportPdf(req, res) {
+  try {
+    const book = await getOwnedExportBook(req, res);
+
+    if (!book) return;
+
+    const report = String(req.body?.report || "").trim();
+
+    if (!report) {
+      return res
+        .status(400)
+        .json({ error: "Continuity report content is required." });
+    }
+
+    if (report.length > 60000) {
+      return res
+        .status(413)
+        .json({ error: "Continuity report is too large to export." });
+    }
+
+    const pdfBuffer = await generateContinuityReportPdf(book, report);
+    const filename = `${book.title.replace(
+      /[^a-zA-Z0-9]/g,
+      "_"
+    )}_continuity_report.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.setHeader("Content-Transfer-Encoding", "binary");
+    setNoStoreHeaders(res);
+
+    return res.send(pdfBuffer);
+  } catch (error) {
+    console.error("Error exporting continuity report PDF:", error);
+
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+}
+
 async function exportAsMarkdown(req, res) {
   try {
     const book = await getOwnedExportBook(req, res);
@@ -201,6 +246,7 @@ async function exportAsEpub(req, res) {
 }
 
 module.exports = {
+  exportContinuityReportPdf,
   exportAsDocx,
   exportAsEpub,
   exportAsMarkdown,

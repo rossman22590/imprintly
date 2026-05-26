@@ -8,6 +8,7 @@ import { useAuthContext } from "../contexts/AuthContext";
 import { getPublicShareUrl } from "../utils/public-share";
 import {
   ChevronDown,
+  BookMarked,
   Copy,
   Edit,
   ExternalLink,
@@ -28,6 +29,7 @@ import {
 } from "lucide-react";
 import {
   BookDetailsTab,
+  BookBibleTab,
   Button,
   ChapterEditorTab,
   ChaptersSidebar,
@@ -110,6 +112,78 @@ const AI_APPEND_HEADINGS = {
   sources: "AI Source Warnings",
   cover: "AI Cover Prompt",
 };
+
+const DEFAULT_BOOK_BIBLE = {
+  characters: "",
+  locations: "",
+  worldRules: "",
+  timeline: "",
+  styleGuide: "",
+  canonFacts: "",
+  unresolvedThreads: "",
+  notes: "",
+  updatedAt: null,
+};
+
+const BIBLE_JSON_KEYS = [
+  "characters",
+  "locations",
+  "worldRules",
+  "timeline",
+  "styleGuide",
+  "canonFacts",
+  "unresolvedThreads",
+  "notes",
+];
+
+function parseBibleToolContent(content = "") {
+  const raw = String(content || "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  const firstBrace = raw.indexOf("{");
+  const lastBrace = raw.lastIndexOf("}");
+  const trimmed =
+    firstBrace >= 0 && lastBrace > firstBrace
+      ? raw.slice(firstBrace, lastBrace + 1)
+      : raw;
+
+  try {
+    const parsed = JSON.parse(trimmed);
+
+    return BIBLE_JSON_KEYS.reduce((bible, key) => {
+      bible[key] = String(parsed?.[key] || "");
+      return bible;
+    }, { ...DEFAULT_BOOK_BIBLE });
+  } catch {
+    return {
+      ...DEFAULT_BOOK_BIBLE,
+      notes: trimmed,
+    };
+  }
+}
+
+function buildBookManuscriptContext(book = {}) {
+  const chapters = Array.isArray(book.chapters) ? book.chapters : [];
+  const chapterText = chapters
+    .map(
+      (chapter, index) =>
+        `# Chapter ${index + 1}: ${chapter.title || "Untitled"}\n${
+          chapter.description ? `${chapter.description}\n\n` : ""
+        }${chapter.content || ""}`
+    )
+    .join("\n\n---\n\n");
+
+  return [
+    `Book title: ${book.title || ""}`,
+    `Genre: ${book.genre || "Nonfiction"}`,
+    `Audience: ${book.audience || "General readers"}`,
+    chapterText,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
 
 function buildAiToolProposal({ action, originalContent, aiContent }) {
   const heading = AI_APPEND_HEADINGS[action];
@@ -254,7 +328,7 @@ function EditBookPage() {
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("editor"); // "editor" | "details"
+  const [activeTab, setActiveTab] = useState("editor"); // "editor" | "bible" | "details"
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingCover, setIsGeneratingCover] = useState(false);
@@ -262,6 +336,11 @@ function EditBookPage() {
   const [isGeneratingChapterImage, setIsGeneratingChapterImage] =
     useState(false);
   const [pendingAiToolReview, setPendingAiToolReview] = useState(null);
+  const [pendingBibleReview, setPendingBibleReview] = useState(null);
+  const [continuityReport, setContinuityReport] = useState("");
+  const [isDownloadingContinuityReport, setIsDownloadingContinuityReport] =
+    useState(false);
+  const [runningBibleTool, setRunningBibleTool] = useState("");
   const [generationJob, setGenerationJob] = useState(null);
   const skipNextAutosaveRef = useRef(false);
   const autosaveTimerRef = useRef(null);
@@ -302,6 +381,18 @@ function EditBookPage() {
   const handleEditBook = (event) => {
     const { name, value } = event.target;
     setBook((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleEditBible = (field, value) => {
+    setBook((prev) => ({
+      ...prev,
+      bible: {
+        ...DEFAULT_BOOK_BIBLE,
+        ...(prev.bible || {}),
+        [field]: value,
+        updatedAt: new Date().toISOString(),
+      },
+    }));
   };
 
   const handleAddChapter = () => {
@@ -433,6 +524,7 @@ function EditBookPage() {
           provider === "gemini" && Boolean(book.generation?.useGoogleSearch),
         includeTextGraphics: Boolean(book.generation?.includeTextGraphics),
         chapterLength: book.generation?.chapterLength || "medium",
+        bookBible: book.bible,
         bookTitle: book.title,
         genre: book.genre || "Nonfiction",
         audience: book.audience || "General readers",
@@ -675,6 +767,7 @@ function EditBookPage() {
             Boolean(book.generation?.useGoogleSearch),
           includeTextGraphics: Boolean(book.generation?.includeTextGraphics),
           chapterLength: book.generation?.chapterLength || "medium",
+          bible: book.bible,
         }
       );
 
@@ -882,6 +975,51 @@ function EditBookPage() {
     }
   };
 
+  const handleDownloadContinuityReport = async () => {
+    if (!String(continuityReport || "").trim()) {
+      toast.error("Run a continuity check first.");
+      return;
+    }
+
+    setIsDownloadingContinuityReport(true);
+    const loadingToast = toast.loading("Generating continuity report PDF...");
+
+    try {
+      const { data } = await axiosInstance.post(
+        `${API_ENDPOINTS.EXPORTS.CONTINUITY_REPORT}/${bookId}/continuity-report.pdf`,
+        { report: continuityReport },
+        { responseType: "blob" }
+      );
+
+      const url = window.URL.createObjectURL(
+        new Blob([data], { type: "application/pdf" })
+      );
+      const linkEl = document.createElement("a");
+      const safeTitle = String(book?.title || "book").replace(
+        /[^a-zA-Z0-9-_]+/g,
+        "_"
+      );
+
+      linkEl.href = url;
+      linkEl.setAttribute("download", `${safeTitle}_continuity_report.pdf`);
+      document.body.appendChild(linkEl);
+      linkEl.click();
+      linkEl.parentNode.removeChild(linkEl);
+      window.URL.revokeObjectURL(url);
+
+      toast.dismiss(loadingToast);
+      toast.success("Continuity report downloaded.");
+    } catch (error) {
+      console.error("Error exporting continuity report:", error);
+      toast.dismiss(loadingToast);
+      toast.error(
+        error.response?.data?.error || "Failed to export continuity report."
+      );
+    } finally {
+      setIsDownloadingContinuityReport(false);
+    }
+  };
+
   const handleCreatePreviewShare = async () => {
     setIsPreviewShareSaving(true);
 
@@ -977,6 +1115,7 @@ function EditBookPage() {
         bookTitle: book.title,
         chapterTitle: currentChapter.title,
         audience: book.audience || "General readers",
+        bookBible: book.bible,
       });
 
       const proposedContent = buildAiToolProposal({
@@ -1005,6 +1144,112 @@ function EditBookPage() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleBibleTool = async (action) => {
+    const currentChapter = book.chapters[selectedChapterIndex];
+    const manuscriptContext = buildBookManuscriptContext(book);
+    const currentChapterContext = currentChapter
+      ? `# ${currentChapter.title || "Current chapter"}\n${
+          currentChapter.description ? `${currentChapter.description}\n\n` : ""
+        }${currentChapter.content || ""}`
+      : "";
+    const content =
+      action === "bible_update" ? currentChapterContext : manuscriptContext;
+
+    if (!String(content || "").trim()) {
+      toast.error("Add chapter content before running Book Bible tools.");
+      return;
+    }
+
+    setRunningBibleTool(action);
+    const loadingToast = toast.loading(
+      action === "continuity_check"
+        ? "Checking continuity..."
+        : "Building Book Bible..."
+    );
+
+    try {
+      const {
+        data: { content: aiContent },
+      } = await axiosInstance.post(API_ENDPOINTS.AI.QUALITY_TOOL, {
+        action,
+        content,
+        provider: book.generation?.provider || "gemini",
+        bookTitle: book.title,
+        chapterTitle:
+          action === "bible_update" ? currentChapter?.title || "" : "",
+        audience: book.audience || "General readers",
+        bookBible: book.bible,
+      });
+
+      toast.dismiss(loadingToast);
+
+      if (action === "continuity_check") {
+        setContinuityReport(aiContent);
+        setActiveTab("bible");
+        toast.success("Continuity report ready.");
+        return;
+      }
+
+      if (action === "bible_extract") {
+        const nextBook = {
+          ...book,
+          bible: {
+            ...DEFAULT_BOOK_BIBLE,
+            ...parseBibleToolContent(aiContent),
+            updatedAt: new Date().toISOString(),
+          },
+        };
+
+        skipNextAutosaveRef.current = true;
+        setPendingBibleReview(null);
+        setBook(nextBook);
+        setActiveTab("bible");
+
+        const saved = await handleSaveChanges(nextBook, false);
+
+        if (saved) {
+          toast.success("Book Bible extracted and saved.");
+        } else {
+          toast.error("Book Bible extracted, but save failed.");
+        }
+        return;
+      }
+
+      setPendingBibleReview({
+        action,
+        bible: parseBibleToolContent(aiContent),
+        raw: aiContent,
+      });
+      setActiveTab("bible");
+      toast.success("Book Bible update ready to review.");
+    } catch (error) {
+      console.error("Error running Book Bible tool:", error);
+      toast.dismiss(loadingToast);
+      toast.error(error.response?.data?.error || "Book Bible tool failed.");
+    } finally {
+      setRunningBibleTool("");
+    }
+  };
+
+  const handleApplyBibleReview = async () => {
+    if (!pendingBibleReview) return;
+
+    const nextBook = {
+      ...book,
+      bible: {
+        ...DEFAULT_BOOK_BIBLE,
+        ...pendingBibleReview.bible,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+
+    skipNextAutosaveRef.current = true;
+    setBook(nextBook);
+    setPendingBibleReview(null);
+    await handleSaveChanges(nextBook, false);
+    toast.success("Book Bible saved.");
   };
 
   const handleApplyAiToolReview = async () => {
@@ -1139,6 +1384,19 @@ function EditBookPage() {
 
               <button
                 type="button"
+                onClick={() => setActiveTab("bible")}
+                className={`flex-1 ${
+                  activeTab === "bible"
+                    ? "bg-white text-slate-800 shadow-sm"
+                    : "text-slate-500 hover:text-slate-700 focus-visible:text-slate-700"
+                } text-sm font-medium whitespace-nowrap rounded-md px-3 sm:px-4 py-2 flex justify-center items-center gap-2 transition-all duration-200`}
+              >
+                <BookMarked className="size-4" />
+                <span className="hidden sm:inline">Bible</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setActiveTab("details")}
                 className={`flex-1 ${
                   activeTab === "details"
@@ -1191,6 +1449,10 @@ function EditBookPage() {
               </DropdownItem>
               <DropdownItem onClick={() => handleAiTool("cover")}>
                 Cover prompt
+              </DropdownItem>
+              <DropdownItem onClick={() => handleBibleTool("continuity_check")}>
+                <BookMarked className="text-slate-500 size-4" />
+                Check book continuity
               </DropdownItem>
             </Dropdown>
 
@@ -1538,6 +1800,20 @@ function EditBookPage() {
               isGeneratingImage={isGeneratingChapterImage}
               onGenerateChapterImage={handleGenerateChapterImage}
               onGenerateInlineImageCommand={handleGenerateInlineImageCommand}
+            />
+          ) : activeTab === "bible" ? (
+            <BookBibleTab
+              book={book}
+              onEditBible={handleEditBible}
+              onRunBibleTool={handleBibleTool}
+              runningBibleTool={runningBibleTool}
+              pendingBibleReview={pendingBibleReview}
+              onApplyBibleReview={handleApplyBibleReview}
+              onDiscardBibleReview={() => setPendingBibleReview(null)}
+              continuityReport={continuityReport}
+              onClearContinuityReport={() => setContinuityReport("")}
+              onDownloadContinuityReport={handleDownloadContinuityReport}
+              isDownloadingContinuityReport={isDownloadingContinuityReport}
             />
           ) : (
             <BookDetailsTab

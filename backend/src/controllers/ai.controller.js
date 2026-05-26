@@ -49,6 +49,10 @@ const {
   resolveExportImagePath,
 } = require("../utils/export-markdown");
 const { normalizeChapterLength } = require("../utils/chapter-length");
+const {
+  normalizeBookBiblePayload,
+  serializeBookBible,
+} = require("../utils/book-bible");
 
 /**
  * Basic input sanitization.
@@ -431,6 +435,7 @@ async function generateChapterContent(req, res) {
       genre,
       audience,
       bookContext,
+      bookBible,
       model,
     } = req.body;
 
@@ -456,6 +461,7 @@ async function generateChapterContent(req, res) {
       genre: sanitizeInput(genre, 100) || "Nonfiction",
       audience: sanitizeInput(audience, 200) || "General readers",
       bookContext: sanitizeInput(bookContext, 3000),
+      bookBible: serializeBookBible(bookBible),
       useGoogleSearch,
       includeTextGraphics,
       chapterLength,
@@ -615,6 +621,7 @@ async function generateFullBook(req, res) {
       audience: safeAudience,
       chapters,
     });
+    const bookBible = serializeBookBible(req.body.bible || book?.bible);
 
     const generatedChapters = [];
     let failedCount = 0;
@@ -629,6 +636,7 @@ async function generateFullBook(req, res) {
           genre: safeGenre,
           audience: safeAudience,
           bookContext,
+          bookBible,
           useGoogleSearch,
           includeTextGraphics,
           chapterLength,
@@ -699,6 +707,9 @@ async function generateFullBook(req, res) {
       book.audience = safeAudience;
       book.chapters = generatedChapters;
       book.generation = generation;
+      if (req.body.bible) {
+        book.bible = normalizeBookBiblePayload(req.body.bible);
+      }
       await book.save();
     } else {
       book = await Book.create({
@@ -710,6 +721,9 @@ async function generateFullBook(req, res) {
         audience: safeAudience,
         chapters: generatedChapters,
         generation,
+        ...(req.body.bible
+          ? { bible: normalizeBookBiblePayload(req.body.bible) }
+          : {}),
       });
     }
 
@@ -1027,6 +1041,7 @@ async function runQualityTool(req, res) {
       bookTitle,
       chapterTitle,
       audience,
+      bookBible,
     } = req.body;
 
     if (!action || !content) {
@@ -1039,6 +1054,7 @@ async function runQualityTool(req, res) {
     const safeAction = sanitizeInput(action, 50);
     const safeTone = sanitizeInput(tone, 100);
     const safeContent = String(content).slice(0, 20000);
+    const safeBookBible = serializeBookBible(bookBible);
     const instructionMap = {
       rewrite: "Rewrite the text for clarity, flow, and professional polish.",
       expand:
@@ -1073,6 +1089,12 @@ async function runQualityTool(req, res) {
         "Review the book context for KDP publishing risks: unsupported claims, missing disclosures, metadata mismatch, weak positioning, formatting risks, and cover concerns. Return concise actionable notes.",
       kdp_cover_prompt:
         "Create a detailed prompt for a KDP-ready book cover concept. Include front cover direction plus notes for a wraparound paperback cover with back cover, spine, barcode space, bleed, and safe zones.",
+      bible_extract:
+        "Extract a complete Book Bible from the provided manuscript or outline. Return only valid JSON with these string keys: characters, locations, worldRules, timeline, styleGuide, canonFacts, unresolvedThreads, notes. Values may use concise markdown bullets. Capture names, aliases, traits, relationships, motivations, secrets, locations, rules, chronology, tone, POV, tense, promises, and facts the AI must not contradict.",
+      bible_update:
+        "Merge the existing Book Bible with the provided new chapter or manuscript content. Preserve existing canon, add newly established facts, update timeline and unresolved threads, and avoid deleting facts unless clearly contradicted by the new content. Return only valid JSON with these string keys: characters, locations, worldRules, timeline, styleGuide, canonFacts, unresolvedThreads, notes.",
+      continuity_check:
+        "Compare the content against the Book Bible and return a concise continuity report in markdown. List contradictions, timeline problems, character drift, location/world-rule conflicts, unresolved plot thread issues, and recommended fixes. If no issues are found, say that clearly.",
     };
     const instruction = instructionMap[safeAction];
 
@@ -1087,6 +1109,8 @@ async function runQualityTool(req, res) {
 Book: ${sanitizeInput(bookTitle, 200)}
 Chapter: ${sanitizeInput(chapterTitle, 200)}
 Audience: ${sanitizeInput(audience, 200)}
+Book Bible / Canon:
+${safeBookBible || "Not provided."}
 Task: ${instruction}
 
 Return only the result. Preserve markdown where appropriate.

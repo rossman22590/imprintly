@@ -6,8 +6,8 @@ const { generateShareToken } = require("../utils/share-token");
 const {
   assertUploadedImageFile,
   deleteUploadFile,
-  normalizeUploadUrl,
 } = require("../utils/upload-paths");
+const { uploadImageFileToStorage } = require("../utils/image-storage");
 
 const PUBLIC_SHARE_THEMES = new Set([
   "",
@@ -330,13 +330,21 @@ async function updateAvatar(req, res) {
       return res.status(404).json({ error: "User not found!" });
     }
 
-    // Delete old avatar image if it exists
+    const storedAvatarUrl = await uploadImageFileToStorage(
+      req.file.path,
+      req.file.filename,
+      req.file.mimetype
+    );
+
     if (user.avatar) {
       deleteUploadFile(user.avatar);
     }
 
-    // Save relative path from backend root
-    user.avatar = normalizeUploadUrl(`/uploads/${req.file.filename}`);
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    user.avatar = storedAvatarUrl;
     const updatedUser = await user.save();
 
     return res.status(200).json({

@@ -69,3 +69,16 @@ test("Gemini section prompt applies large chapter length instructions", () => {
   assert.match(prompt, /about 14-20 ebook pages/);
   assert.match(prompt, /hyper-detailed/);
 });
+
+test("Gemini section prompt includes book bible canon instructions", () => {
+  const prompt = buildGeminiSectionPrompt({
+    chapterTitle: "The Hidden Gate",
+    bookTitle: "Moonforge",
+    bookBible: "Characters: Mira has green eyes.\nWorld Rules: Magic cannot revive the dead.",
+  });
+
+  assert.match(prompt, /Book Bible \/ source of truth/);
+  assert.match(prompt, /Mira has green eyes/);
+  assert.match(prompt, /Treat the Book Bible as canon/);
+  assert.match(prompt, /Do not contradict it/);
+});

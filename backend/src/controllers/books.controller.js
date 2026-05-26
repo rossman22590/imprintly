@@ -28,6 +28,7 @@ const {
 } = require("../utils/credits.service");
 const { generateShareToken } = require("../utils/share-token");
 const { normalizeChapterLength } = require("../utils/chapter-length");
+const { normalizeBookBiblePayload } = require("../utils/book-bible");
 
 const KDP_SETTING_LIMITS = {
   format: 20,
@@ -266,6 +267,7 @@ async function createBook(req, res) {
       language,
       targetWordCount,
       generation,
+      bible,
       generateCover,
       coverPrompt,
       coverModel,
@@ -288,6 +290,7 @@ async function createBook(req, res) {
       language,
       targetWordCount,
       generation: normalizeGenerationPayload(generation),
+      bible: normalizeBookBiblePayload(bible),
       chapters: await normalizeChapterPayloads(chapters || []),
     });
     let coverError = "";
@@ -363,6 +366,13 @@ async function updateBookContent(req, res) {
       language: req.body.language,
       targetWordCount: req.body.targetWordCount,
       generation: normalizeGenerationPayload(req.body.generation),
+      bible:
+        req.body.bible === undefined
+          ? undefined
+          : {
+              ...normalizeBookBiblePayload(req.body.bible),
+              updatedAt: new Date(),
+            },
       status: req.body.status,
     };
 

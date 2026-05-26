@@ -24,6 +24,7 @@ export { default as BookView } from "./book-view/BookView";
 export { default as ChaptersSidebar } from "./edit-book/ChaptersSidebar";
 export { default as ChapterEditorTab } from "./edit-book/ChapterEditorTab";
 export { default as BookDetailsTab } from "./edit-book/BookDetailsTab";
+export { default as BookBibleTab } from "./edit-book/BookBibleTab";
 
 // Others
 export { default as ProfileMenu } from "./ProfileMenu";

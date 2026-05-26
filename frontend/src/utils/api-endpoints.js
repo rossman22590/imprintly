@@ -61,6 +61,7 @@ export const API_ENDPOINTS = {
     EPUB: "/api/exports",
     MARKDOWN: "/api/exports",
     PDF: "/api/exports",
+    CONTINUITY_REPORT: "/api/exports",
   },
   PUBLIC: {
     BOOKSHELF: "/api/public/bookshelves",
