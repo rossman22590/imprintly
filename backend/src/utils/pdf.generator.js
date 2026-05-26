@@ -437,14 +437,23 @@ const pdfCodeCharacterReplacements = new Map([
   ["\u2013", "-"],
   ["\u2014", "-"],
   ["\u2026", "..."],
+  ["\u2022", "-"],
+  ["\u2023", "-"],
+  ["\u2043", "-"],
+  ["\u25E6", "-"],
+  ["\u00B0", " deg "],
+  ["\u2248", "~"],
+  ["\u2264", "<="],
+  ["\u2265", ">="],
 ]);
 
 function normalizeCodeTextForPdf(text = "") {
   return String(text || "")
     .replace(/\t/g, "  ")
     .replace(/\u00A0/g, " ")
-    .replace(/[\u2500-\u257F\u25B2-\u25C4\u2190-\u21FF\u2018-\u2026]/g, (char) =>
-      pdfCodeCharacterReplacements.get(char) || "?"
+    .replace(
+      /[\u00B0\u2022\u2023\u2043\u2248\u2264\u2265\u2500-\u257F\u25B2-\u25C4\u25E6\u2190-\u21FF\u2018-\u2026]/g,
+      (char) => pdfCodeCharacterReplacements.get(char) || "?"
     )
     .replace(/[^\n\r\x20-\x7E]/g, "?");
 }
@@ -604,6 +613,71 @@ function cleanDiagramSegmentLine(line = "") {
     .trim();
 }
 
+function parseBoxedListDiagram(lines = []) {
+  const normalizedLines = lines.map(normalizeCodeTextForPdf);
+  const nonEmptyLines = normalizedLines.filter((line) => line.trim());
+
+  if (nonEmptyLines.filter(isBoxBorderLine).length < 2) return null;
+
+  const segments = [];
+  let current = [];
+  let hasSeenBorder = false;
+
+  nonEmptyLines.forEach((line) => {
+    if (isBoxBorderLine(line)) {
+      if (hasSeenBorder && current.length > 0) {
+        segments.push(current);
+      }
+
+      current = [];
+      hasSeenBorder = true;
+      return;
+    }
+
+    if (hasSeenBorder) current.push(line);
+  });
+
+  if (current.length > 0) segments.push(current);
+
+  const cleanedSegments = segments
+    .map((segment) => segment.map(cleanDiagramSegmentLine).filter(Boolean))
+    .filter((segment) => segment.length > 0);
+
+  if (cleanedSegments.length === 0) return null;
+
+  let title = "";
+  let items = [];
+
+  if (cleanedSegments[0].length === 1 && cleanedSegments.length >= 2) {
+    title = cleanedSegments[0][0];
+    items = cleanedSegments.slice(1).flat();
+  } else if (cleanedSegments[0].length >= 3) {
+    title = cleanedSegments[0][0];
+    items = cleanedSegments[0].slice(1);
+  }
+
+  title = String(title || "")
+    .replace(/^\[|\]$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  items = items
+    .map((item) => String(item || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .filter((item) => !isBoxBorderLine(item));
+
+  const listLikeItems = items.filter((item) =>
+    /^(\d+[).]\s+|[-*]\s+|[A-Za-z][^:]{2,70}:\s+|\[[^\]]{2,}\])/.test(item)
+  );
+
+  if (!title || items.length < 2) return null;
+  if (listLikeItems.length < Math.ceil(items.length * 0.5)) return null;
+
+  return {
+    title,
+    items,
+  };
+}
+
 function isConnectorSegment(lines = []) {
   const cleanedLines = lines.map(cleanDiagramSegmentLine).filter(Boolean);
 
@@ -691,6 +765,91 @@ function parseStackDiagram(lines = []) {
   };
 }
 
+function cleanNestedBoxLine(line = "") {
+  return String(line || "")
+    .replace(/^\s*\|\s?/, "")
+    .replace(/\s?\|\s*$/, "")
+    .trim()
+    .replace(/^\|\s?/, "")
+    .replace(/\s?\|$/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function detailFromBracketNodes(line = "") {
+  const nodes = getBracketNodes(line);
+
+  if (!nodes.length) return cleanDiagramSegmentLine(line);
+
+  return nodes
+    .map((node) => {
+      const after = line
+        .slice(node.end)
+        .split("[")[0]
+        .replace(/^\s*\((.*)\)\s*$/, "$1")
+        .trim();
+
+      return after ? `${node.label}: ${after}` : node.label;
+    })
+    .join("\n");
+}
+
+function parseNestedArchitectureDiagram(lines = []) {
+  const normalizedLines = lines.map(normalizeCodeTextForPdf);
+  const nonEmptyLines = normalizedLines.filter((line) => line.trim());
+
+  if (nonEmptyLines.filter(isBoxBorderLine).length < 2) return null;
+
+  const allBorderIndexes = normalizedLines
+    .map((line, index) => ({
+      index,
+      line: cleanNestedBoxLine(line),
+    }))
+    .filter((entry) => isBoxBorderLine(entry.line))
+    .map((entry) => entry.index);
+  const innerBorderIndexes = allBorderIndexes.slice(1, -1);
+
+  if (innerBorderIndexes.length < 4) return null;
+
+  const title =
+    normalizedLines
+      .slice(1)
+      .map(cleanNestedBoxLine)
+      .find((line) => line && !isBoxBorderLine(line)) || "Architecture";
+  const layers = [];
+
+  for (let index = 0; index < innerBorderIndexes.length - 1; index += 1) {
+    const start = innerBorderIndexes[index];
+    const end = innerBorderIndexes[index + 1];
+    const segment = normalizedLines
+      .slice(start + 1, end)
+      .map(cleanNestedBoxLine)
+      .filter(Boolean)
+      .filter((line) => !isBoxBorderLine(line));
+
+    if (segment.length === 0) continue;
+
+    const label = segment[0];
+    const detail = segment
+      .slice(1)
+      .map(detailFromBracketNodes)
+      .filter(Boolean)
+      .join("\n");
+
+    if (label && !layers.some((layer) => layer.label === label)) {
+      layers.push({ label, detail });
+    }
+  }
+
+  if (layers.length < 2) return null;
+
+  return {
+    title,
+    layers,
+    connectors: [],
+  };
+}
+
 function splitTableLine(line = "") {
   const trimmed = String(line || "").trim();
 
@@ -766,10 +925,22 @@ function parseAsciiTableDiagram(lines = []) {
   const paddedRows = rows.map((row) =>
     Array.from({ length: columnCount }, (_, index) => row[index] || "")
   );
+  const populatedColumnIndexes = Array.from(
+    { length: columnCount },
+    (_, index) => index
+  ).filter((columnIndex) =>
+    paddedRows.some((row) => String(row[columnIndex] || "").trim())
+  );
+
+  if (populatedColumnIndexes.length < 2) return null;
+
+  const compactRows = paddedRows.map((row) =>
+    populatedColumnIndexes.map((columnIndex) => row[columnIndex])
+  );
 
   return {
-    header: paddedRows[0],
-    rows: paddedRows.slice(1),
+    header: compactRows[0],
+    rows: compactRows.slice(1),
   };
 }
 
@@ -985,6 +1156,247 @@ function parseLinearFlowDiagram(lines = []) {
   return {
     title: "",
     nodes,
+  };
+}
+
+function isConnectorOnlyLine(line = "") {
+  const trimmed = String(line || "").trim();
+
+  return /^[|v^<>+\-/\\\s]+$/.test(trimmed) && /[|v^<>+\-/\\]/.test(trimmed);
+}
+
+function cleanConnectorLabel(value = "") {
+  return String(value || "")
+    .replace(/^\|?\s*/, "")
+    .replace(/^\((.*)\)$/, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseProcessBoxLine(line = "") {
+  const trimmed = String(line || "").trim();
+
+  if (!trimmed.startsWith("|")) return null;
+
+  const content = trimmed.replace(/^\|\s*/, "").replace(/\s*\|$/, "").trim();
+
+  if (!content || isConnectorOnlyLine(content)) return null;
+  if (/^\(.*/.test(content)) {
+    return {
+      connector: cleanConnectorLabel(content),
+    };
+  }
+
+  const [labelPart, ...rest] = content.split("|");
+  const label = labelPart.trim();
+  const detail = rest
+    .join("|")
+    .replace(/^\s*[-=]*>\s*/, "")
+    .trim();
+
+  if (!label) return null;
+
+  return {
+    label,
+    detail,
+  };
+}
+
+function parseProcessDiagram(lines = []) {
+  const nonEmptyLines = [];
+
+  lines
+    .map(normalizeCodeTextForPdf)
+    .filter((line) => line.trim())
+    .forEach((line) => {
+      if (line.trim() === nonEmptyLines[nonEmptyLines.length - 1]?.trim()) {
+        return;
+      }
+
+      nonEmptyLines.push(line);
+    });
+
+  if (nonEmptyLines.length < 5) return null;
+
+  const hasVerticalConnectors = nonEmptyLines.filter(isConnectorOnlyLine).length >= 2;
+  const hasBoxLines = nonEmptyLines.some((line) => line.trim().startsWith("|"));
+
+  if (!hasVerticalConnectors || !hasBoxLines) return null;
+
+  const nodes = [];
+  let pendingConnector = "";
+
+  const addNode = (label, detail = "") => {
+    const cleanLabel = String(label || "")
+      .replace(/^\[|\]$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const cleanDetail = String(detail || "").replace(/\s+/g, " ").trim();
+
+    if (!cleanLabel || /^[-+=]+$/.test(cleanLabel)) return;
+
+    nodes.push({
+      label: cleanLabel,
+      detail: cleanDetail || pendingConnector,
+    });
+    pendingConnector = "";
+  };
+
+  nonEmptyLines.forEach((line) => {
+    const trimmed = line.trim();
+
+    if (isBoxBorderLine(trimmed) || isConnectorOnlyLine(trimmed)) return;
+
+    const boxed = parseProcessBoxLine(trimmed);
+
+    if (boxed?.connector) {
+      pendingConnector = [pendingConnector, boxed.connector].filter(Boolean).join(" ");
+      return;
+    }
+
+    if (boxed?.label) {
+      addNode(boxed.label, boxed.detail);
+      return;
+    }
+
+    const bracketNode = trimmed.match(/^\[([^\]]{2,})\]$/);
+
+    if (bracketNode) {
+      addNode(bracketNode[1]);
+      return;
+    }
+
+    if (/^\(.*/.test(trimmed) || pendingConnector) {
+      pendingConnector = [pendingConnector, cleanConnectorLabel(trimmed)]
+        .filter(Boolean)
+        .join(" ");
+      return;
+    }
+
+    if (nodes.length === 0 || /:/.test(trimmed)) {
+      addNode(trimmed);
+      return;
+    }
+
+    nodes[nodes.length - 1].detail = [nodes[nodes.length - 1].detail, trimmed]
+      .filter(Boolean)
+      .join(" ");
+  });
+
+  if (nodes.length < 3) return null;
+
+  return {
+    title: "Process Flow",
+    nodes,
+  };
+}
+
+function isSystemHeading(line = "") {
+  return /^[A-Z0-9][A-Za-z0-9\s/()&.-]{5,}:\s*$/.test(String(line || "").trim());
+}
+
+function getPipeBoxLabels(line = "") {
+  const parts = String(line || "")
+    .split("|")
+    .map((part) =>
+      part
+        .replace(/\+[-=]+>?/g, " ")
+        .replace(/[-=]+>/g, " ")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+    )
+    .filter((part) => /[A-Za-z]{3,}/.test(part));
+
+  return parts.filter((part) => !/^(v|Deposits|Loans)$/i.test(part));
+}
+
+function parseSystemFlowSection(title = "", sectionLines = []) {
+  const normalized = sectionLines
+    .map(normalizeCodeTextForPdf)
+    .filter((line) => line.trim());
+  const boxes = [];
+  const notes = [];
+
+  normalized.forEach((line) => {
+    getBracketNodes(line).forEach((node) => {
+      if (!boxes.includes(node.label)) boxes.push(node.label);
+    });
+
+    getPipeBoxLabels(line).forEach((label) => {
+      if (!boxes.includes(label)) boxes.push(label);
+    });
+
+    const parenthetical = line.match(/\(([^)]{6,})\)/)?.[1];
+
+    if (parenthetical) notes.push(parenthetical.trim());
+  });
+
+  if (boxes.length < 2) return null;
+
+  const detailLines = normalized
+    .filter((line) => !isBoxBorderLine(line))
+    .map((line) =>
+      line
+        .replace(/\[[^\]]+\]/g, " ")
+        .replace(/[+\-|<>^v/\\]+/g, " ")
+        .replace(/\([^)]*\)/g, " ")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+    )
+    .filter((line) => /[A-Za-z]{3,}/.test(line));
+
+  return {
+    title: title.replace(/:\s*$/, ""),
+    nodes: boxes.map((label, index) => ({
+      label,
+      detail: index === 0 ? [...detailLines, ...notes].join("\n") : "",
+    })),
+  };
+}
+
+function parseSystemComparisonDiagram(lines = []) {
+  const normalized = [];
+  const sections = [];
+  let currentTitle = "";
+  let currentLines = [];
+
+  lines
+    .map(normalizeCodeTextForPdf)
+    .filter((line) => line.trim())
+    .forEach((line) => {
+      if (line.trim() === normalized[normalized.length - 1]?.trim()) return;
+      normalized.push(line);
+    });
+
+  const flush = () => {
+    if (!currentTitle || currentLines.length === 0) return;
+    const section = parseSystemFlowSection(currentTitle, currentLines);
+    if (section) sections.push(section);
+  };
+
+  normalized.forEach((line) => {
+    if (isSystemHeading(line)) {
+      flush();
+      currentTitle = line.trim();
+      currentLines = [];
+      return;
+    }
+
+    if (currentTitle) currentLines.push(line);
+  });
+
+  flush();
+
+  if (sections.length < 2) return null;
+
+  return {
+    title: "System Comparison",
+    nodes: sections.map((section) => ({
+      label: section.title,
+      detail: section.nodes
+        .map((node) => [node.label, node.detail].filter(Boolean).join(": "))
+        .join("\n"),
+    })),
   };
 }
 
@@ -1357,6 +1769,106 @@ function renderTableDiagram(doc, table) {
   return true;
 }
 
+function renderBoxedListDiagram(doc, diagram) {
+  if (!diagram?.title || !diagram?.items?.length) return false;
+
+  const cardX = PDF_CONFIG.margins.left;
+  const cardW = getContentWidth(doc);
+  const padding = 18;
+  const itemGap = 8;
+  const itemW = cardW - padding * 2;
+
+  doc.font(PDF_CONFIG.fonts.bodyBold).fontSize(12);
+  const titleH = Math.max(
+    34,
+    textHeight(doc, diagram.title, {
+      width: itemW - 24,
+      align: "center",
+      lineGap: 2,
+    }) + 18
+  );
+
+  doc.font(PDF_CONFIG.fonts.body).fontSize(9.6);
+  const itemHeights = diagram.items.map((item) => {
+    const numberMatch = String(item).match(/^(\d+)[).]\s*(.*)$/);
+    const itemText = numberMatch ? numberMatch[2] : item;
+
+    return Math.max(
+      32,
+      textHeight(doc, itemText, {
+        width: itemW - 52,
+        lineGap: 2,
+      }) + 16
+    );
+  });
+  const cardH =
+    padding +
+    titleH +
+    12 +
+    itemHeights.reduce((sum, height) => sum + height, 0) +
+    itemGap * Math.max(0, diagram.items.length - 1) +
+    padding;
+
+  ensureSpace(doc, cardH + 18);
+  doc.moveDown(0.35);
+
+  const top = doc.y;
+  let y = top + padding;
+
+  doc
+    .roundedRect(cardX, top, cardW, cardH, 12)
+    .fillAndStroke("#f8fafc", "#cbd5e1");
+  doc
+    .roundedRect(cardX + padding, y, itemW, titleH, 10)
+    .fillAndStroke("#eef2ff", "#c4b5fd");
+  doc
+    .font(PDF_CONFIG.fonts.bodyBold)
+    .fontSize(12)
+    .fillColor("#312e81")
+    .text(diagram.title, cardX + padding + 12, y + 10, {
+      width: itemW - 24,
+      align: "center",
+      lineGap: 2,
+    });
+
+  y += titleH + 12;
+
+  diagram.items.forEach((item, index) => {
+    const itemH = itemHeights[index];
+    const numberMatch = String(item).match(/^(\d+)[).]\s*(.*)$/);
+    const marker = numberMatch ? numberMatch[1] : String(index + 1);
+    const itemText = numberMatch ? numberMatch[2] : item;
+    const itemX = cardX + padding;
+
+    doc
+      .roundedRect(itemX, y, itemW, itemH, 9)
+      .fillAndStroke("#ffffff", "#dbeafe");
+    doc.circle(itemX + 18, y + 16, 10).fill("#7c3aed");
+    doc
+      .font(PDF_CONFIG.fonts.bodyBold)
+      .fontSize(8.5)
+      .fillColor("#ffffff")
+      .text(marker, itemX + 8, y + 11, {
+        width: 20,
+        align: "center",
+        lineBreak: false,
+      });
+    doc
+      .font(PDF_CONFIG.fonts.body)
+      .fontSize(9.6)
+      .fillColor("#334155")
+      .text(itemText, itemX + 42, y + 9, {
+        width: itemW - 54,
+        lineGap: 2,
+      });
+
+    y += itemH + itemGap;
+  });
+
+  doc.y = top + cardH + 12;
+  return true;
+}
+
 function renderStackDiagram(doc, diagram) {
   if (!diagram?.layers?.length) return false;
 
@@ -1487,10 +1999,34 @@ function renderSemanticDiagram(doc, originalLines = [], language = "") {
     return false;
   }
 
+  const systemComparison = parseSystemComparisonDiagram(originalLines);
+
+  if (systemComparison) {
+    return renderFlowDiagram(doc, systemComparison);
+  }
+
+  const nestedArchitecture = parseNestedArchitectureDiagram(originalLines);
+
+  if (nestedArchitecture) {
+    return renderStackDiagram(doc, nestedArchitecture);
+  }
+
+  const boxedList = parseBoxedListDiagram(originalLines);
+
+  if (boxedList) {
+    return renderBoxedListDiagram(doc, boxedList);
+  }
+
   const tableDiagram = parseAsciiTableDiagram(originalLines);
 
   if (tableDiagram) {
     return renderTableDiagram(doc, tableDiagram);
+  }
+
+  const processDiagram = parseProcessDiagram(originalLines);
+
+  if (processDiagram) {
+    return renderVerticalFlowDiagram(doc, processDiagram);
   }
 
   const flowDiagram = parseFlowDiagram(originalLines);
@@ -1974,10 +2510,14 @@ module.exports = {
     isDiagramCodeBlock,
     normalizeCodeTextForPdf,
     parseAsciiTableDiagram,
+    parseBoxedListDiagram,
     parseBranchDiagram,
     parseComparisonDiagram,
     parseFlowDiagram,
     parseLinearFlowDiagram,
+    parseNestedArchitectureDiagram,
+    parseProcessDiagram,
+    parseSystemComparisonDiagram,
     parseStackDiagram,
   },
 };

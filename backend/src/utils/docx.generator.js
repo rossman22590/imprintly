@@ -17,6 +17,7 @@ const {
   prepareExportImages,
   resolveExportImagePath,
 } = require("./export-markdown");
+const { __private: diagramTools } = require("./pdf.generator");
 
 const md = new MarkdownIt();
 
@@ -193,6 +194,192 @@ function createImageParagraph(src, alt = "", options = {}) {
   }
 }
 
+function parseExportDiagram(content = "", language = "") {
+  const normalizedLanguage = String(language || "").trim().toLowerCase();
+  const lines = String(content || "").replace(/\n$/, "").split("\n");
+
+  if (
+    normalizedLanguage &&
+    !["text", "txt", "plain", "diagram", "flow", "reader-diagram"].includes(
+      normalizedLanguage
+    ) &&
+    !diagramTools.isDiagramCodeBlock(lines)
+  ) {
+    return null;
+  }
+
+  const table = diagramTools.parseAsciiTableDiagram(lines);
+
+  if (table) return { type: "table", ...table };
+
+  const nestedArchitecture = diagramTools.parseNestedArchitectureDiagram(lines);
+
+  if (nestedArchitecture) {
+    return {
+      type: "flow",
+      title: nestedArchitecture.title || "Architecture",
+      nodes: nestedArchitecture.layers,
+    };
+  }
+
+  const boxedList = diagramTools.parseBoxedListDiagram(lines);
+
+  if (boxedList) return { type: "boxed-list", ...boxedList };
+
+  const process = diagramTools.parseProcessDiagram(lines);
+
+  if (process) return { type: "flow", ...process };
+
+  const stack = diagramTools.parseStackDiagram(lines);
+
+  if (stack) {
+    return {
+      type: "flow",
+      title: stack.title || "Diagram",
+      nodes: stack.layers,
+    };
+  }
+
+  const flow =
+    diagramTools.parseFlowDiagram(lines) ||
+    diagramTools.parseBranchDiagram(lines) ||
+    diagramTools.parseComparisonDiagram(lines) ||
+    diagramTools.parseLinearFlowDiagram(lines);
+
+  if (flow) return { type: "flow", ...flow };
+
+  return diagramTools.isDiagramCodeBlock(lines)
+    ? {
+        type: "pre",
+        lines: lines.map(diagramTools.normalizeCodeTextForPdf),
+      }
+    : null;
+}
+
+function createDiagramTitleParagraph(title = "Diagram") {
+  return new Paragraph({
+    children: [
+      new TextRun({
+        text: title,
+        bold: true,
+        color: "312e81",
+        font: DOCX_CONFIG.fonts.heading,
+        size: 22,
+      }),
+    ],
+    spacing: { before: 180, after: 100 },
+  });
+}
+
+function createDiagramNodeParagraph(label = "", detail = "") {
+  return new Paragraph({
+    children: [
+      new TextRun({
+        text: label,
+        bold: true,
+        color: "0f172a",
+        font: DOCX_CONFIG.fonts.body,
+        size: 21,
+      }),
+      ...(detail
+        ? [
+            new TextRun({
+              text: detail,
+              break: 1,
+              color: "475569",
+              font: DOCX_CONFIG.fonts.body,
+              size: 18,
+            }),
+          ]
+        : []),
+    ],
+    spacing: { before: 80, after: 80, line: 276 },
+    shading: { fill: "ffffff", type: "clear" },
+    border: {
+      top: { color: "cbd5e1", space: 4, style: "single", size: 4 },
+      bottom: { color: "cbd5e1", space: 4, style: "single", size: 4 },
+      left: { color: "cbd5e1", space: 4, style: "single", size: 4 },
+      right: { color: "cbd5e1", space: 4, style: "single", size: 4 },
+    },
+    indent: { left: 240, right: 240 },
+  });
+}
+
+function createDiagramParagraphs(diagram) {
+  if (!diagram) return [];
+
+  if (diagram.type === "table") {
+    return [
+      createDiagramTitleParagraph("Structured Table"),
+      createDiagramNodeParagraph(diagram.header.join(" | ")),
+      ...diagram.rows.map((row) => createDiagramNodeParagraph(row.join(" | "))),
+    ];
+  }
+
+  if (diagram.type === "flow") {
+    const paragraphs = [createDiagramTitleParagraph(diagram.title || "Diagram")];
+
+    (diagram.nodes || []).forEach((node, index) => {
+      paragraphs.push(createDiagramNodeParagraph(node.label, node.detail));
+
+      if (index < diagram.nodes.length - 1) {
+        paragraphs.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "↓",
+                bold: true,
+                color: "7c3aed",
+                font: DOCX_CONFIG.fonts.body,
+                size: 20,
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 20, after: 20 },
+          })
+        );
+      }
+    });
+
+    return paragraphs;
+  }
+
+  if (diagram.type === "boxed-list") {
+    return [
+      createDiagramTitleParagraph(diagram.title || "Key Points"),
+      ...(diagram.items || []).map((item) => createDiagramNodeParagraph(item)),
+    ];
+  }
+
+  if (diagram.type === "pre") {
+    return [
+      createDiagramTitleParagraph("Diagram"),
+      new Paragraph({
+        children: diagram.lines.flatMap((line, index) => [
+          ...(index > 0 ? [new TextRun({ text: "", break: 1 })] : []),
+          new TextRun({
+            text: line || " ",
+            font: DOCX_CONFIG.fonts.code,
+            size: 16,
+            color: DOCX_CONFIG.colors.codeBlock,
+          }),
+        ]),
+        spacing: { before: 120, after: 180, line: 240 },
+        shading: { fill: DOCX_CONFIG.colors.codeBg, type: "clear" },
+        border: {
+          top: { color: DOCX_CONFIG.colors.codeBorder, space: 4, style: "single", size: 4 },
+          bottom: { color: DOCX_CONFIG.colors.codeBorder, space: 4, style: "single", size: 4 },
+          left: { color: DOCX_CONFIG.colors.codeBorder, space: 4, style: "single", size: 4 },
+          right: { color: DOCX_CONFIG.colors.codeBorder, space: 4, style: "single", size: 4 },
+        },
+        indent: { left: 240, right: 240 },
+      }),
+    ];
+  }
+
+  return [];
+}
+
 function processMdContent(mdContent) {
   if (!mdContent || mdContent.trim() === "") {
     return [];
@@ -250,6 +437,16 @@ function processMdContent(mdContent) {
 
       // Handle code blocks
       if (token.type === "fence" || token.type === "code_block") {
+        const diagramParagraphs = createDiagramParagraphs(
+          parseExportDiagram(token.content, token.info)
+        );
+
+        if (diagramParagraphs.length > 0) {
+          paragraphs.push(...diagramParagraphs);
+          i++;
+          continue;
+        }
+
         const codeLines = token.content
           .replace(/\n$/, "")
           .split("\n");

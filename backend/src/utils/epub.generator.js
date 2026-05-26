@@ -8,6 +8,120 @@ const {
   prepareExportImages,
   resolveExportImagePath,
 } = require("./export-markdown");
+const { __private: diagramTools } = require("./pdf.generator");
+
+function parseExportDiagram(content = "", language = "") {
+  const normalizedLanguage = String(language || "").trim().toLowerCase();
+  const lines = String(content || "").replace(/\n$/, "").split("\n");
+
+  if (
+    normalizedLanguage &&
+    !["text", "txt", "plain", "diagram", "flow", "reader-diagram"].includes(
+      normalizedLanguage
+    ) &&
+    !diagramTools.isDiagramCodeBlock(lines)
+  ) {
+    return null;
+  }
+
+  const table = diagramTools.parseAsciiTableDiagram(lines);
+
+  if (table) return { type: "table", ...table };
+
+  const nestedArchitecture = diagramTools.parseNestedArchitectureDiagram(lines);
+
+  if (nestedArchitecture) {
+    return {
+      type: "flow",
+      title: nestedArchitecture.title || "Architecture",
+      nodes: nestedArchitecture.layers,
+    };
+  }
+
+  const boxedList = diagramTools.parseBoxedListDiagram(lines);
+
+  if (boxedList) return { type: "boxed-list", ...boxedList };
+
+  const process = diagramTools.parseProcessDiagram(lines);
+
+  if (process) return { type: "flow", ...process };
+
+  const stack = diagramTools.parseStackDiagram(lines);
+
+  if (stack) {
+    return {
+      type: "flow",
+      title: stack.title || "Diagram",
+      nodes: stack.layers,
+    };
+  }
+
+  const flow =
+    diagramTools.parseFlowDiagram(lines) ||
+    diagramTools.parseBranchDiagram(lines) ||
+    diagramTools.parseComparisonDiagram(lines) ||
+    diagramTools.parseLinearFlowDiagram(lines);
+
+  if (flow) return { type: "flow", ...flow };
+
+  return diagramTools.isDiagramCodeBlock(lines)
+    ? {
+        type: "pre",
+        lines: lines.map(diagramTools.normalizeCodeTextForPdf),
+      }
+    : null;
+}
+
+function renderDiagramHtml(diagram) {
+  if (!diagram) return "";
+
+  if (diagram.type === "table") {
+    return `<figure class="bookify-diagram"><figcaption>Structured Table</figcaption><table class="bookify-table"><thead><tr>${diagram.header
+      .map((cell) => `<th>${escapeXml(cell)}</th>`)
+      .join("")}</tr></thead><tbody>${diagram.rows
+      .map(
+        (row) =>
+          `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).join("")}</tr>`
+      )
+      .join("")}</tbody></table></figure>`;
+  }
+
+  if (diagram.type === "flow") {
+    return `<figure class="bookify-diagram"><figcaption>${escapeXml(
+      diagram.title || "Diagram"
+    )}</figcaption><div class="bookify-flow">${(diagram.nodes || [])
+      .map(
+        (node, index) =>
+          `<div class="bookify-node"><strong>${escapeXml(
+            node.label
+          )}</strong>${node.detail ? `<p>${escapeXml(node.detail)}</p>` : ""}</div>${
+            index < diagram.nodes.length - 1
+              ? '<div class="bookify-arrow">↓</div>'
+              : ""
+          }`
+      )
+      .join("")}</div></figure>`;
+  }
+
+  if (diagram.type === "boxed-list") {
+    return `<figure class="bookify-diagram bookify-callout"><figcaption>${escapeXml(
+      diagram.title || "Key Points"
+    )}</figcaption><ol class="bookify-list">${(diagram.items || [])
+      .map((item) => {
+        const match = String(item).match(/^\d+[).]\s*(.*)$/);
+        return `<li>${escapeXml(match ? match[1] : item)}</li>`;
+      })
+      .join("")}</ol></figure>`;
+  }
+
+  if (diagram.type === "pre") {
+    return `<figure class="bookify-diagram"><figcaption>Diagram</figcaption><pre>${escapeXml(
+      diagram.lines.join("\n")
+    )}</pre></figure>`;
+  }
+
+  return "";
+}
 
 function createMarkdownRenderer(imageRegistry) {
   const renderer = new MarkdownIt({
@@ -30,6 +144,19 @@ function createMarkdownRenderer(imageRegistry) {
 
     return self.renderToken(tokens, idx, options);
   };
+
+  const renderCodeLike = (tokens, idx) => {
+    const token = tokens[idx];
+    const language = String(token.info || "").trim().split(/\s+/)[0] || "";
+    const diagram = parseExportDiagram(token.content, language);
+
+    if (diagram) return renderDiagramHtml(diagram);
+
+    return `<pre><code>${escapeXml(token.content)}</code></pre>`;
+  };
+
+  renderer.renderer.rules.fence = renderCodeLike;
+  renderer.renderer.rules.code_block = renderCodeLike;
 
   return renderer;
 }
@@ -117,7 +244,17 @@ pre, code { font-family: "Courier New", monospace; }
 pre { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; color: #0f172a; font-size: 0.86em; line-height: 1.45; overflow-x: auto; padding: 1em; white-space: pre; }
 blockquote { border-left: 4px solid #d1d5db; padding-left: 1em; color: #4b5563; }
 img { display: block; max-width: 100%; height: auto; margin: 1.25em auto; }
-.cover { max-height: 90vh; }`
+.cover { max-height: 90vh; }
+.bookify-diagram { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; margin: 1.4em 0; padding: 1em; }
+.bookify-diagram figcaption { color: #312e81; font-weight: bold; margin-bottom: 0.8em; text-align: center; }
+.bookify-node { background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; margin: 0.5em 0; padding: 0.8em; text-align: center; }
+.bookify-node p { color: #475569; margin: 0.35em 0 0; }
+.bookify-arrow { color: #7c3aed; font-weight: bold; text-align: center; }
+.bookify-list { margin: 0; padding-left: 1.4em; }
+.bookify-list li { background: #fff; border: 1px solid #dbeafe; border-radius: 8px; margin: 0.55em 0; padding: 0.65em 0.8em; }
+.bookify-table { border-collapse: collapse; width: 100%; }
+.bookify-table th, .bookify-table td { border: 1px solid #cbd5e1; padding: 0.5em; text-align: left; }
+.bookify-table th { background: #111827; color: #fff; }`
   );
 
   const coverMarkup = coverImage

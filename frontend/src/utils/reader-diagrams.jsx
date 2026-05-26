@@ -51,6 +51,14 @@ const diagramCharacterReplacements = new Map([
   ["\u2013", "-"],
   ["\u2014", "-"],
   ["\u2026", "..."],
+  ["\u2022", "-"],
+  ["\u2023", "-"],
+  ["\u2043", "-"],
+  ["\u25E6", "-"],
+  ["\u00B0", " deg "],
+  ["\u2248", "~"],
+  ["\u2264", "<="],
+  ["\u2265", ">="],
 ]);
 
 function normalizeDiagramText(text = "") {
@@ -58,7 +66,7 @@ function normalizeDiagramText(text = "") {
     .replace(/\t/g, "  ")
     .replace(/\u00A0/g, " ")
     .replace(
-      /[\u2500-\u257F\u25B2-\u25C4\u2190-\u21FF\u2018-\u2026]/g,
+      /[\u00B0\u2022\u2023\u2043\u2248\u2264\u2265\u2500-\u257F\u25B2-\u25C4\u25E6\u2190-\u21FF\u2018-\u2026]/g,
       (char) => diagramCharacterReplacements.get(char) || "?"
     );
 }
@@ -122,6 +130,44 @@ function isAsciiDiagramBlock(lines = []) {
   return separatorCount >= 2 && contentCount >= 1;
 }
 
+function isDiagramHeadingLine(line = "") {
+  const trimmed = String(line || "").trim();
+
+  if (!trimmed) return false;
+  if (isAsciiDiagramLine(trimmed)) return false;
+
+  return (
+    /^[A-Z0-9][A-Za-z0-9\s/()&.-]{5,}:\s*$/.test(trimmed) ||
+    /^(System Diagram|Diagram|Architecture|Process Flow|Flow Diagram)$/i.test(trimmed)
+  );
+}
+
+function hasNearbyAsciiDiagramLine(lines = [], startIndex = 0) {
+  return lines
+    .slice(startIndex + 1, startIndex + 4)
+    .some((line) => isAsciiDiagramLine(line));
+}
+
+function isAsciiDiagramContinuationLine(line = "", block = []) {
+  if (block.length === 0) return false;
+
+  const value = String(line || "");
+  const trimmed = value.trim();
+
+  if (!trimmed) return false;
+  if (!/^\s{2,}\S/.test(value)) return false;
+  if (!/[A-Za-z0-9&]/.test(trimmed)) return false;
+
+  const blockText = block.join("\n");
+  const hasBranchingBracketRow = block.some(
+    (blockLine) => (blockLine.match(/\[[^\]]{2,}\]/g) || []).length >= 2
+  );
+  const hasTitleBracket = /\[[^\]]{4,}\]/.test(blockText);
+  const hasConnectors = /[+|<>^v-]{2,}/.test(blockText);
+
+  return hasConnectors && (hasBranchingBracketRow || hasTitleBracket);
+}
+
 function normalizeReaderMarkdown(markdown = "") {
   const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
   const output = [];
@@ -144,7 +190,7 @@ function normalizeReaderMarkdown(markdown = "") {
     block = [];
   };
 
-  lines.forEach((line) => {
+  lines.forEach((line, index) => {
     if (isFenceLine(line)) {
       flushBlock();
       output.push(line);
@@ -152,7 +198,22 @@ function normalizeReaderMarkdown(markdown = "") {
       return;
     }
 
+    if (
+      !inFence &&
+      block.length === 0 &&
+      isDiagramHeadingLine(line) &&
+      hasNearbyAsciiDiagramLine(lines, index)
+    ) {
+      block.push(line);
+      return;
+    }
+
     if (!inFence && isAsciiDiagramLine(line)) {
+      block.push(line);
+      return;
+    }
+
+    if (!inFence && isAsciiDiagramContinuationLine(line, block)) {
       block.push(line);
       return;
     }
@@ -198,6 +259,71 @@ function hasConnectorLine(lines = []) {
 
     return /^[|v^<>+\-/\\\s]+$/.test(trimmed) && /[|v^<>+\-/\\]/.test(trimmed);
   });
+}
+
+function parseBoxedListDiagram(lines = []) {
+  const nonEmptyLines = getNormalizedDiagramLines(lines);
+
+  if (nonEmptyLines.filter(isBoxBorderLine).length < 2) return null;
+
+  const segments = [];
+  let current = [];
+  let hasSeenBorder = false;
+
+  nonEmptyLines.forEach((line) => {
+    if (isBoxBorderLine(line)) {
+      if (hasSeenBorder && current.length > 0) {
+        segments.push(current);
+      }
+
+      current = [];
+      hasSeenBorder = true;
+      return;
+    }
+
+    if (hasSeenBorder) current.push(line);
+  });
+
+  if (current.length > 0) segments.push(current);
+
+  const cleanedSegments = segments
+    .map((segment) => segment.map(cleanSegmentLine).filter(Boolean))
+    .filter((segment) => segment.length > 0);
+
+  if (cleanedSegments.length === 0) return null;
+
+  let title = "";
+  let items = [];
+
+  if (cleanedSegments[0].length === 1 && cleanedSegments.length >= 2) {
+    title = cleanedSegments[0][0];
+    items = cleanedSegments.slice(1).flat();
+  } else if (cleanedSegments[0].length >= 3) {
+    title = cleanedSegments[0][0];
+    items = cleanedSegments[0].slice(1);
+  }
+
+  title = String(title || "")
+    .replace(/^\[|\]$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  items = items
+    .map((item) => String(item || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .filter((item) => !isBoxBorderLine(item));
+
+  const listLikeItems = items.filter((item) =>
+    /^(\d+[).]\s+|[-*]\s+|[A-Za-z][^:]{2,70}:\s+|\[[^\]]{2,}\])/.test(item)
+  );
+
+  if (!title || items.length < 2) return null;
+  if (listLikeItems.length < Math.ceil(items.length * 0.5)) return null;
+
+  return {
+    type: "boxed-list",
+    title,
+    items,
+  };
 }
 
 function parseFlowDiagram(lines = []) {
@@ -270,6 +396,127 @@ function parseFlowDiagram(lines = []) {
   };
 }
 
+function cleanGenericDiagramDetail(value = "") {
+  return String(value || "")
+    .replace(/[|+<>^v/\\-]+/g, " ")
+    .replace(/^\((.*)\)$/, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function getGenericDiagramTitle(lines = []) {
+  const firstLine = String(lines[0] || "").trim();
+
+  if (!firstLine || isAsciiDiagramLine(firstLine)) return "";
+  if (/^(Diagram|Flow Diagram|System Diagram|Process Flow|Architecture)$/i.test(firstLine)) {
+    return firstLine;
+  }
+
+  return isDiagramHeadingLine(firstLine) ? firstLine.replace(/:\s*$/, "") : "";
+}
+
+function parseGenericBracketDiagram(lines = []) {
+  const normalizedLines = getNormalizedDiagramLines(lines);
+  const title = getGenericDiagramTitle(normalizedLines);
+  const bodyLines = title ? normalizedLines.slice(1) : normalizedLines;
+  const hasConnectors =
+    hasConnectorLine(bodyLines) ||
+    bodyLines.some((line) => /-{2,}>|<-{2,}|\+[-+]+\+/.test(line));
+
+  if (!hasConnectors) return null;
+
+  let nodeRows = bodyLines
+    .map((line, index) => ({
+      index,
+      line,
+      nodes: getBracketNodes(line),
+    }))
+    .filter((row) => row.nodes.length > 0);
+
+  if (nodeRows.length < 2) return null;
+
+  const firstNodeAsTitle =
+    !title &&
+    nodeRows[0].nodes.length === 1 &&
+    nodeRows.slice(1).some((row) => row.nodes.length >= 2);
+  const diagramTitle = firstNodeAsTitle
+    ? nodeRows[0].nodes[0].label
+    : title || "Diagram";
+
+  if (firstNodeAsTitle) {
+    nodeRows = nodeRows.slice(1);
+  }
+
+  if (nodeRows.length < 1) return null;
+
+  const rows = nodeRows.map((row, rowIndex) => {
+    const nextNodeRowIndex =
+      nodeRows[rowIndex + 1]?.index ?? Number.POSITIVE_INFINITY;
+    const boundaries = row.nodes.map((node, index) => {
+      const previousCenter = row.nodes[index - 1]?.center ?? 0;
+      const nextCenter =
+        row.nodes[index + 1]?.center ?? Number.POSITIVE_INFINITY;
+
+      return {
+        start: index === 0 ? 0 : Math.floor((previousCenter + node.center) / 2),
+        end:
+          index === row.nodes.length - 1
+            ? Number.POSITIVE_INFINITY
+            : Math.ceil((node.center + nextCenter) / 2),
+      };
+    });
+    const details = row.nodes.map((node, index) => {
+      const sameLineDetail = cleanGenericDiagramDetail(
+        row.line.slice(
+          node.end,
+          row.nodes[index + 1]?.start ?? undefined
+        )
+      );
+
+      return sameLineDetail && /[A-Za-z0-9]/.test(sameLineDetail)
+        ? [sameLineDetail]
+        : [];
+    });
+
+    bodyLines
+      .slice(row.index + 1, nextNodeRowIndex)
+      .filter((line) => line.trim() && !isConnectorOnlyLine(line))
+      .forEach((line) => {
+        boundaries.forEach((boundary, index) => {
+          const segment = cleanGenericDiagramDetail(
+            line.slice(
+              boundary.start,
+              boundary.end === Infinity ? undefined : boundary.end
+            )
+          );
+
+          if (segment && /[A-Za-z0-9]/.test(segment)) {
+            details[index].push(segment);
+          }
+        });
+      });
+
+    return {
+      nodes: row.nodes.map((node, index) => ({
+        label: node.label,
+        detail: Array.from(new Set(details[index])).join("\n"),
+      })),
+    };
+  });
+
+  const uniqueLabels = new Set(
+    rows.flatMap((row) => row.nodes.map((node) => node.label))
+  );
+
+  if (uniqueLabels.size < 2) return null;
+
+  return {
+    type: "generic-flow",
+    title: diagramTitle,
+    rows,
+  };
+}
+
 function parseStackDiagram(lines = []) {
   const nonEmptyLines = getNormalizedDiagramLines(lines);
   const borderCount = nonEmptyLines.filter(isBoxBorderLine).length;
@@ -334,6 +581,91 @@ function parseStackDiagram(lines = []) {
     title,
     layers,
     connectors,
+  };
+}
+
+function cleanNestedBoxLine(line = "") {
+  return String(line || "")
+    .replace(/^\s*\|\s?/, "")
+    .replace(/\s?\|\s*$/, "")
+    .trim()
+    .replace(/^\|\s?/, "")
+    .replace(/\s?\|$/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function detailFromBracketNodes(line = "") {
+  const nodes = getBracketNodes(line);
+
+  if (!nodes.length) return cleanSegmentLine(line);
+
+  return nodes
+    .map((node) => {
+      const after = line
+        .slice(node.end)
+        .split("[")[0]
+        .replace(/^\s*\((.*)\)\s*$/, "$1")
+        .trim();
+
+      return after ? `${node.label}: ${after}` : node.label;
+    })
+    .join("\n");
+}
+
+function parseNestedArchitectureDiagram(lines = []) {
+  const normalizedLines = lines.map(normalizeDiagramText);
+  const nonEmptyLines = normalizedLines.filter((line) => line.trim());
+
+  if (nonEmptyLines.filter(isBoxBorderLine).length < 2) return null;
+
+  const allBorderIndexes = normalizedLines
+    .map((line, index) => ({
+      index,
+      line: cleanNestedBoxLine(line),
+    }))
+    .filter((entry) => isBoxBorderLine(entry.line))
+    .map((entry) => entry.index);
+  const innerBorderIndexes = allBorderIndexes.slice(1, -1);
+
+  if (innerBorderIndexes.length < 4) return null;
+
+  const title =
+    normalizedLines
+      .slice(1)
+      .map(cleanNestedBoxLine)
+      .find((line) => line && !isBoxBorderLine(line)) || "Architecture";
+  const layers = [];
+
+  for (let index = 0; index < innerBorderIndexes.length - 1; index += 1) {
+    const start = innerBorderIndexes[index];
+    const end = innerBorderIndexes[index + 1];
+    const segment = normalizedLines
+      .slice(start + 1, end)
+      .map(cleanNestedBoxLine)
+      .filter(Boolean)
+      .filter((line) => !isBoxBorderLine(line));
+
+    if (segment.length === 0) continue;
+
+    const label = segment[0];
+    const detail = segment
+      .slice(1)
+      .map(detailFromBracketNodes)
+      .filter(Boolean)
+      .join("\n");
+
+    if (label && !layers.some((layer) => layer.label === label)) {
+      layers.push({ label, detail });
+    }
+  }
+
+  if (layers.length < 2) return null;
+
+  return {
+    type: "architecture",
+    title,
+    layers,
   };
 }
 
@@ -409,11 +741,23 @@ function parseTableDiagram(lines = []) {
   const paddedRows = rows.map((row) =>
     Array.from({ length: columnCount }, (_, index) => row[index] || "")
   );
+  const populatedColumnIndexes = Array.from(
+    { length: columnCount },
+    (_, index) => index
+  ).filter((columnIndex) =>
+    paddedRows.some((row) => String(row[columnIndex] || "").trim())
+  );
+
+  if (populatedColumnIndexes.length < 2) return null;
+
+  const compactRows = paddedRows.map((row) =>
+    populatedColumnIndexes.map((columnIndex) => row[columnIndex])
+  );
 
   return {
     type: "table",
-    header: paddedRows[0],
-    rows: paddedRows.slice(1),
+    header: compactRows[0],
+    rows: compactRows.slice(1),
   };
 }
 
@@ -589,11 +933,292 @@ function parseProcessDiagram(lines = []) {
   };
 }
 
+function isSystemHeading(line = "") {
+  return /^[A-Z0-9][A-Za-z0-9\s/()&.-]{5,}:\s*$/.test(String(line || "").trim());
+}
+
+function getPipeBoxLabels(line = "") {
+  const parts = String(line || "")
+    .split("|")
+    .map((part) =>
+      part
+        .replace(/\+[-=]+>?/g, " ")
+        .replace(/[-=]+>/g, " ")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+    )
+    .filter((part) => /[A-Za-z]{3,}/.test(part));
+
+  return parts.filter((part) => !/^(v|Deposits|Loans)$/i.test(part));
+}
+
+function cleanSystemLabel(value = "") {
+  return String(value || "")
+    .replace(/[+|]/g, " ")
+    .replace(/<-{2,}|-{2,}>/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function getParentheticalDetails(line = "") {
+  return Array.from(String(line || "").matchAll(/\(([^)]{4,})\)/g)).map((match) =>
+    match[1].trim()
+  );
+}
+
+function extractBoxConnectorLabels(line = "") {
+  const parts = String(line || "")
+    .split(/\+-+\+/)
+    .map(cleanSystemLabel)
+    .filter((part) => /[A-Za-z]{3,}/.test(part));
+
+  return parts.filter((part) => !/^(v)$/i.test(part));
+}
+
+function parsePipeBoxRow(line = "", connectorLine = "") {
+  const labels = getPipeBoxLabels(line).map(cleanSystemLabel).filter(Boolean);
+
+  if (labels.length < 2) return null;
+
+  return {
+    nodes: labels.map((label) => ({ label, detail: "" })),
+    connectors: extractBoxConnectorLabels(connectorLine).slice(0, labels.length - 1),
+  };
+}
+
+function parseArrowSystemRow(line = "", detailLine = "") {
+  const cleanLine = cleanSegmentLine(line).replace(/\+$/g, "").trim();
+
+  if (!/(?:-{2,}>|<-{2,})/.test(cleanLine)) return null;
+
+  const labels = cleanLine
+    .split(/(?:<-{2,}|-{2,}>)/)
+    .map(cleanSystemLabel)
+    .filter((label) => /[A-Za-z0-9]{2,}/.test(label))
+    .filter((label) => !/^(v|Message)$/i.test(label));
+
+  if (labels.length < 2) return null;
+
+  const details = getParentheticalDetails(detailLine);
+
+  return {
+    nodes: labels.map((label, index) => ({
+      label,
+      detail: details[index] || "",
+    })),
+    connectors: [],
+  };
+}
+
+function parseSpacedSystemRow(line = "", detailLine = "") {
+  const cleanLine = cleanSegmentLine(line);
+
+  if (/(?:-{2,}>|<-{2,}|\+[-=]+\+|\|)/.test(cleanLine)) return null;
+
+  const labels = cleanLine
+    .split(/\s{3,}/)
+    .map(cleanSystemLabel)
+    .filter((label) => /[A-Za-z0-9]{2,}/.test(label));
+
+  if (labels.length < 2 || labels.length > 4) return null;
+  if (!/(?:-{2,}>|<-{2,})/.test(detailLine)) return null;
+
+  const details = getParentheticalDetails(detailLine);
+
+  return {
+    nodes: labels.map((label, index) => ({
+      label,
+      detail: details[index] || "",
+    })),
+    connectors: Array.from({ length: labels.length - 1 }, () => "->"),
+  };
+}
+
+function parseSystemRows(lines = []) {
+  const rows = [];
+  const notes = [];
+  const consumedDetailIndexes = new Set();
+
+  lines.forEach((line, index) => {
+    if (consumedDetailIndexes.has(index)) return;
+
+    const trimmed = line.trim();
+    const previousLine = lines[index - 1] || "";
+    const nextLine = lines[index + 1] || "";
+    const spacedRow = parseSpacedSystemRow(trimmed, nextLine);
+
+    if (spacedRow) {
+      rows.push(spacedRow);
+      consumedDetailIndexes.add(index + 1);
+      return;
+    }
+
+    const arrowRow = parseArrowSystemRow(trimmed, nextLine);
+
+    if (arrowRow) {
+      rows.push(arrowRow);
+      if (getParentheticalDetails(nextLine).length) {
+        consumedDetailIndexes.add(index + 1);
+      }
+      return;
+    }
+
+    const pipeRow = parsePipeBoxRow(trimmed, previousLine);
+
+    if (pipeRow) {
+      rows.push(pipeRow);
+      return;
+    }
+
+    getParentheticalDetails(trimmed).forEach((note) => {
+      if (!notes.includes(note)) notes.push(note);
+    });
+  });
+
+  return { rows, notes };
+}
+
+function parseSystemFlowSection(title = "", sectionLines = []) {
+  const normalized = getNormalizedDiagramLines(sectionLines);
+  const { rows, notes } = parseSystemRows(normalized);
+  const boxes = [];
+
+  rows.forEach((row) => {
+    row.nodes.forEach((node) => {
+      if (!boxes.includes(node.label)) boxes.push(node.label);
+    });
+  });
+
+  if (boxes.length < 2) {
+    normalized.forEach((line) => {
+      getBracketNodes(line).forEach((node) => {
+        if (!boxes.includes(node.label)) boxes.push(node.label);
+      });
+
+      getPipeBoxLabels(line).forEach((label) => {
+        if (!boxes.includes(label)) boxes.push(label);
+      });
+    });
+  }
+
+  if (boxes.length < 2) return null;
+
+  const detailLines = normalized
+    .filter((line) => !isBoxBorderLine(line))
+    .map((line) =>
+      line
+        .replace(/\[[^\]]+\]/g, " ")
+        .replace(/[+\-|<>^v/\\]+/g, " ")
+        .replace(/\([^)]*\)/g, " ")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+    )
+    .filter((line) => /[A-Za-z]{3,}/.test(line));
+
+  return {
+    title: title.replace(/:\s*$/, ""),
+    rows,
+    notes,
+    nodes: boxes.map((label, index) => ({
+      label,
+      detail: index === 0 ? [...detailLines, ...notes].join("\n") : "",
+    })),
+  };
+}
+
+function isBoxedSystemTitle(line = "") {
+  const cleanLine = cleanNestedBoxLine(line);
+
+  if (!/[A-Za-z]{3,}/.test(cleanLine)) return false;
+  if (/(?:-{2,}>|<-{2,}|\+[-=]+\+|\|)/.test(cleanLine)) return false;
+
+  return (
+    /\b(SYSTEM|ARCHITECTURE|LEDGER|NETWORK|MODEL|PROCESS|SWIFT|CBDC|mBRIDGE)\b/i.test(
+      cleanLine
+    ) && cleanLine.length <= 72
+  );
+}
+
+function parseBoxedSystemComparisonDiagram(lines = []) {
+  const normalized = getNormalizedDiagramLines(lines);
+  const sections = [];
+  let currentTitle = "";
+  let currentLines = [];
+
+  const flush = () => {
+    if (!currentTitle || currentLines.length === 0) return;
+    const section = parseSystemFlowSection(currentTitle, currentLines);
+    if (section) sections.push(section);
+  };
+
+  normalized.forEach((line) => {
+    const cleaned = cleanNestedBoxLine(line);
+
+    if (!cleaned || isBoxBorderLine(cleaned)) return;
+
+    if (isBoxedSystemTitle(cleaned)) {
+      flush();
+      currentTitle = cleaned;
+      currentLines = [];
+      return;
+    }
+
+    if (currentTitle) currentLines.push(cleaned);
+  });
+
+  flush();
+
+  if (sections.length < 2) return null;
+
+  return {
+    type: "system-comparison",
+    sections,
+  };
+}
+
+function parseSystemComparisonDiagram(lines = []) {
+  const normalized = getNormalizedDiagramLines(lines);
+  const sections = [];
+  let currentTitle = "";
+  let currentLines = [];
+
+  const flush = () => {
+    if (!currentTitle || currentLines.length === 0) return;
+    const section = parseSystemFlowSection(currentTitle, currentLines);
+    if (section) sections.push(section);
+  };
+
+  normalized.forEach((line) => {
+    if (isSystemHeading(line)) {
+      flush();
+      currentTitle = line.trim();
+      currentLines = [];
+      return;
+    }
+
+    if (currentTitle) currentLines.push(line);
+  });
+
+  flush();
+
+  if (sections.length < 2) return null;
+
+  return {
+    type: "system-comparison",
+    sections,
+  };
+}
+
 function parseReaderDiagram(lines = []) {
   return (
-    parseTableDiagram(lines) ||
+    parseSystemComparisonDiagram(lines) ||
+    parseBoxedSystemComparisonDiagram(lines) ||
+    parseNestedArchitectureDiagram(lines) ||
+    parseBoxedListDiagram(lines) ||
     parseStackDiagram(lines) ||
     parseProcessDiagram(lines) ||
+    parseTableDiagram(lines) ||
+    parseGenericBracketDiagram(lines) ||
     parseFlowDiagram(lines) ||
     parseLinearFlowDiagram(lines) ||
     parseBadgeBlock(lines)
@@ -741,6 +1366,34 @@ function TableDiagram({ diagram }) {
   );
 }
 
+function BoxedListDiagram({ diagram }) {
+  return (
+    <DiagramShell title={diagram.title || "Key Points"}>
+      <ol className="grid gap-3">
+        {diagram.items.map((item, index) => {
+          const match = String(item).match(/^(\d+)[).]\s*(.*)$/);
+          const number = match ? match[1] : String(index + 1);
+          const text = match ? match[2] : item;
+
+          return (
+            <li
+              key={`${item}-${index}`}
+              className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs"
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white">
+                {number}
+              </span>
+              <span className="min-w-0 text-sm leading-relaxed text-slate-800">
+                {text}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </DiagramShell>
+  );
+}
+
 function LinearDiagram({ diagram }) {
   return (
     <DiagramShell title="Process Flow">
@@ -757,6 +1410,134 @@ function LinearDiagram({ diagram }) {
               </div>
             ) : null}
           </React.Fragment>
+        ))}
+      </div>
+    </DiagramShell>
+  );
+}
+
+function GenericFlowDiagram({ diagram }) {
+  return (
+    <DiagramShell title={diagram.title || "Diagram"}>
+      <div className="space-y-4">
+        {diagram.rows.map((row, rowIndex) => {
+          const columnCount = Math.min(Math.max(row.nodes.length, 1), 4);
+
+          return (
+            <React.Fragment key={`generic-row-${rowIndex}`}>
+              <div className="overflow-x-auto">
+                <div
+                  className="grid min-w-full gap-3"
+                  style={{
+                    gridTemplateColumns:
+                      columnCount === 1
+                        ? "minmax(0, 1fr)"
+                        : `repeat(${columnCount}, minmax(180px, 1fr))`,
+                  }}
+                >
+                  {row.nodes.map((node, nodeIndex) => (
+                    <NodeCard key={`${node.label}-${nodeIndex}`} node={node} />
+                  ))}
+                </div>
+              </div>
+              {rowIndex < diagram.rows.length - 1 ? (
+                <div className="flex justify-center">
+                  <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-violet-700">
+                    continues
+                  </span>
+                </div>
+              ) : null}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </DiagramShell>
+  );
+}
+
+function SystemRow({ row }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="flex flex-col gap-3 md:flex-row md:items-stretch">
+        {row.nodes.map((node, index) => (
+          <React.Fragment key={`${node.label}-${index}`}>
+            <div className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white p-3 shadow-xs">
+              <p className="text-sm font-bold leading-snug text-slate-950">
+                {node.label}
+              </p>
+              {node.detail ? (
+                <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                  {node.detail}
+                </p>
+              ) : null}
+            </div>
+            {index < row.nodes.length - 1 ? (
+              <div className="flex items-center justify-center">
+                <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-violet-700">
+                  {row.connectors?.[index] || "->"}
+                </span>
+              </div>
+            ) : null}
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SystemComparisonDiagram({ diagram }) {
+  return (
+    <DiagramShell title="System Diagram">
+      <div className="space-y-5">
+        {diagram.sections.map((section, sectionIndex) => {
+          const rows = section.rows?.length
+            ? section.rows
+            : [{ nodes: section.nodes || [], connectors: [] }];
+
+          return (
+            <section
+              key={`${section.title}-${sectionIndex}`}
+              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs"
+            >
+              <h3 className="mb-4 text-sm font-bold uppercase tracking-[0.14em] text-slate-700">
+                {section.title}
+              </h3>
+              <div className="space-y-3">
+                {rows.map((row, rowIndex) => (
+                  <SystemRow key={`${section.title}-row-${rowIndex}`} row={row} />
+                ))}
+              </div>
+              {section.notes?.length ? (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-900">
+                  {section.notes.join(" ")}
+                </div>
+              ) : null}
+            </section>
+          );
+        })}
+      </div>
+    </DiagramShell>
+  );
+}
+
+function ArchitectureDiagram({ diagram }) {
+  return (
+    <DiagramShell title={diagram.title || "Architecture"}>
+      <div className="grid gap-4 md:grid-cols-2">
+        {diagram.layers.map((layer, index) => (
+          <div
+            key={`${layer.label}-${index}`}
+            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs"
+          >
+            <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-700">
+              {layer.label}
+            </h3>
+            {layer.detail ? (
+              <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-700">
+                {layer.detail}
+              </p>
+            ) : null}
+          </div>
         ))}
       </div>
     </DiagramShell>
@@ -822,6 +1603,34 @@ function BadgeBlock({ diagram }) {
   );
 }
 
+function ReaderDiagramBlock({ code, title = "Diagram" }) {
+  const normalizedCode = getNormalizedDiagramLines(String(code || "").split("\n"))
+    .join("\n")
+    .trim();
+  const maxLineLength = Math.max(
+    ...normalizedCode.split("\n").map((line) => line.length),
+    1
+  );
+  const fontSize =
+    maxLineLength > 120 ? "0.66em" : maxLineLength > 90 ? "0.72em" : "0.8em";
+
+  return (
+    <figure className="not-prose my-8 max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <figcaption className="border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-700">
+        {title}
+      </figcaption>
+      <div className="overflow-x-auto bg-slate-50 p-5">
+        <pre
+          className="m-0 min-w-max whitespace-pre font-mono leading-[1.55] text-slate-900"
+          style={{ fontSize }}
+        >
+          {normalizedCode}
+        </pre>
+      </div>
+    </figure>
+  );
+}
+
 function getTextFromChildren(children) {
   if (children === null || children === undefined) return "";
   if (typeof children === "string" || typeof children === "number") {
@@ -866,19 +1675,23 @@ export function ReaderCodeBlock({ children, className = "", inline = false }) {
   }
 
   if (diagram?.type === "table") return <TableDiagram diagram={diagram} />;
+  if (diagram?.type === "boxed-list") return <BoxedListDiagram diagram={diagram} />;
+  if (diagram?.type === "system-comparison") {
+    return <SystemComparisonDiagram diagram={diagram} />;
+  }
+  if (diagram?.type === "architecture") {
+    return <ArchitectureDiagram diagram={diagram} />;
+  }
+  if (diagram?.type === "generic-flow") {
+    return <GenericFlowDiagram diagram={diagram} />;
+  }
   if (diagram?.type === "stack") return <StackDiagram diagram={diagram} />;
   if (diagram?.type === "process") return <ProcessDiagram diagram={diagram} />;
   if (diagram?.type === "flow") return <FlowDiagram diagram={diagram} />;
   if (diagram?.type === "linear") return <LinearDiagram diagram={diagram} />;
   if (diagram?.type === "badge") return <BadgeBlock diagram={diagram} />;
 
-  return (
-    <div className="not-prose my-7 overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-      <span className="block whitespace-pre font-mono text-[0.82em] leading-relaxed text-slate-800">
-        {code}
-      </span>
-    </div>
-  );
+  return <ReaderDiagramBlock code={code} title={shouldTryDiagram ? "Diagram" : "Code"} />;
 }
 
 const readerMarkdownComponents = {

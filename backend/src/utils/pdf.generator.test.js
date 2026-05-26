@@ -6,11 +6,15 @@ const {
   isDiagramCodeBlock,
   normalizeCodeTextForPdf,
   parseAsciiTableDiagram,
+  parseBoxedListDiagram,
   parseBranchDiagram,
   parseComparisonDiagram,
   parseFlowDiagram,
   parseLinearFlowDiagram,
+  parseNestedArchitectureDiagram,
+  parseProcessDiagram,
   parseStackDiagram,
+  parseSystemComparisonDiagram,
   getCoverImagePlacement,
 } = __private;
 
@@ -104,6 +108,52 @@ test("parses boxed architecture stack diagrams into semantic PDF layers", () => 
   assert.match(diagram.layers[1].detail, /Behavioral Sandboxing/);
 });
 
+test("parses nested architecture diagrams into layers", () => {
+  const diagram = parseNestedArchitectureDiagram([
+    "+---------------------------------------------------------------------+",
+    "|                          Host OS Kernel                             |",
+    "|                                                                     |",
+    "|  +---------------------------------------------------------------+  |",
+    "|  |                           Namespaces                          |  |",
+    "|  |   [PID] (Isolated Processes)     [NET] (Isolated Network)     |  |",
+    "|  |   [MNT] (Isolated File System)   [IPC] (Isolated Comm)        |  |",
+    "|  +---------------------------------------------------------------+  |",
+    "|                                                                     |",
+    "|  +---------------------------------------------------------------+  |",
+    "|  |                        Control Groups                         |  |",
+    "|  |   [RAM Limit: 512MB]   [CPU Limit: 1 Core]   [I/O Limit]      |  |",
+    "|  +---------------------------------------------------------------+  |",
+    "+---------------------------------------------------------------------+",
+  ]);
+
+  assert.equal(diagram.title, "Host OS Kernel");
+  assert.deepEqual(
+    diagram.layers.map((layer) => layer.label),
+    ["Namespaces", "Control Groups"]
+  );
+  assert.match(diagram.layers[0].detail, /PID: Isolated Processes/);
+  assert.match(diagram.layers[1].detail, /RAM Limit: 512MB/);
+});
+
+test("parses boxed list diagrams into readable callouts", () => {
+  const diagram = parseBoxedListDiagram([
+    "       +-------------------------------------------------------+",
+    '       |             THE BENEFITS OF CONTAINERS                |',
+    "       +-------------------------------------------------------+",
+    '       |  1. Consistency (No "Works on my machine" issues)     |',
+    "       |  2. Portability (Run on Cloud, Laptop, or Datacenter) |",
+    "       |  3. Efficiency (High density, lower hardware costs)   |",
+    "       |  4. Rapid Scaling (Instant startup for load spikes)   |",
+    "       |  5. Microservices-Friendly (Isolate small service components)|",
+    "       +-------------------------------------------------------+",
+  ]);
+
+  assert.equal(diagram.title, "THE BENEFITS OF CONTAINERS");
+  assert.equal(diagram.items.length, 5);
+  assert.match(diagram.items[0], /Consistency/);
+  assert.match(diagram.items[4], /Microservices-Friendly/);
+});
+
 test("parses ascii tables into PDF table rows", () => {
   const table = parseAsciiTableDiagram([
     "+------------------+--------------------------+--------------------------+",
@@ -122,6 +172,25 @@ test("parses ascii tables into PDF table rows", () => {
   assert.equal(table.rows.length, 1);
   assert.match(table.rows[0][0], /Volunteering/);
   assert.match(table.rows[0][2], /Avoid solo tasks/);
+});
+
+test("drops empty spacer columns and normalizes bullet glyphs in ascii tables", () => {
+  const table = parseAsciiTableDiagram([
+    "+----------------------------+     +----------------------------+",
+    "| Retail CBDC (e.g., eCNY)   |     | Wholesale CBDC (mBridge)   |",
+    "+----------------------------+     +----------------------------+",
+    "| \u2022 Peer-to-Peer Transactions |     | \u2022 Cross-Border Settlement |",
+    "| \u2022 Commercial Bank Wallets   |     | \u2022 Direct Liquidity Access |",
+    "+----------------------------+     +----------------------------+",
+  ]);
+
+  assert.deepEqual(table.header, [
+    "Retail CBDC (e.g., eCNY)",
+    "Wholesale CBDC (mBridge)",
+  ]);
+  assert.equal(table.rows.length, 1);
+  assert.match(table.rows[0][0], /- Peer-to-Peer Transactions/);
+  assert.match(table.rows[0][1], /- Cross-Border Settlement/);
 });
 
 test("parses side-by-side comparison diagrams", () => {
@@ -195,4 +264,64 @@ test("parses vertical bracket flows that use pipe and v connectors", () => {
       "Result: Tender, Melt-in-Mouth Texture",
     ]
   );
+});
+
+test("parses duplicated boxed process diagrams", () => {
+  const diagram = parseProcessDiagram([
+    "Ambient Air: ~425 ppm CO2",
+    "|",
+    "|",
+    "v",
+    "v",
+    "+---------------------------+",
+    "+---------------------------+",
+    "| Boreas Collector Fans | --> Sorbent filters trap CO2",
+    "| Boreas Collector Fans | --> Sorbent filters trap CO2",
+    "+---------+-----------------+",
+    "+---------+-----------------+",
+    "| (Desorption",
+    "Heated to 100?C via geothermal energy)",
+    "v",
+    "v",
+    "| Pure CO2 Gas Stream |",
+    "| Pure CO2 Gas Stream |",
+    "[Solid Calcium Carbonate (Stone)]",
+    "[Solid Calcium Carbonate (Stone)]",
+  ]);
+
+  assert.equal(diagram.title, "Process Flow");
+  assert.deepEqual(
+    diagram.nodes.map((node) => node.label),
+    [
+      "Ambient Air: ~425 ppm CO2",
+      "Boreas Collector Fans",
+      "Pure CO2 Gas Stream",
+      "Solid Calcium Carbonate (Stone)",
+    ]
+  );
+  assert.match(diagram.nodes[1].detail, /Sorbent filters trap CO2/);
+});
+
+test("parses sectioned system comparison diagrams before table parsing", () => {
+  const diagram = parseSystemComparisonDiagram([
+    "LEGACY SYSTEM (Fractional Reserve):",
+    "+---------------+     Deposits     +-----------------+     Loans      +---------------+",
+    "|   Consumer    +----------------->| Commercial Bank +--------------->|   Borrower    |",
+    "+---------------+                  +-----------------+                +---------------+",
+    "                                           |",
+    "                                           v (Subject to run risk / insolvencies)",
+    "",
+    "CBDC SYSTEM (Disintermediated):",
+    "+---------------+             Direct Digital Liabilities             +---------------+",
+    "|   Consumer    +---------------------------------------------------->| Central Bank  |",
+    "+---------------+                                                     +---------------+",
+    "                      (Risk-free money bypasses the commercial system)",
+  ]);
+
+  assert.deepEqual(
+    diagram.nodes.map((node) => node.label),
+    ["LEGACY SYSTEM (Fractional Reserve)", "CBDC SYSTEM (Disintermediated)"]
+  );
+  assert.match(diagram.nodes[0].detail, /Commercial Bank/);
+  assert.match(diagram.nodes[1].detail, /Central Bank/);
 });

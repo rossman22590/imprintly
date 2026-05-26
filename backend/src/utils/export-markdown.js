@@ -247,6 +247,21 @@ function isAsciiDiagramBlock(lines = []) {
   return separatorCount >= 2 && contentCount >= 1;
 }
 
+function dedupeDiagramLines(lines = []) {
+  const output = [];
+
+  lines.forEach((line) => {
+    const current = String(line || "").trim();
+    const previous = String(output[output.length - 1] || "").trim();
+
+    if (current && current === previous) return;
+
+    output.push(line);
+  });
+
+  return output;
+}
+
 function wrapAsciiDiagramBlocks(markdown = "") {
   const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
   const output = [];
@@ -261,7 +276,7 @@ function wrapAsciiDiagramBlocks(markdown = "") {
         output.push("");
       }
 
-      output.push("```text", ...block, "```");
+      output.push("```text", ...dedupeDiagramLines(block), "```");
     } else {
       output.push(...block);
     }
@@ -437,6 +452,7 @@ module.exports = {
   normalizeMarkdownForExport,
   prepareExportImages,
   repairBrokenImageMarkdown,
+  dedupeDiagramLines,
   resolveExportImagePath,
   rewriteMarkdownImageUrls,
 };
