@@ -26,6 +26,7 @@ import DashboardLayout from "../layouts/DashboardLayout";
 import axiosInstance from "../lib/axios";
 import { API_ENDPOINTS, resolveImageUrl } from "../utils/api-endpoints";
 import { normalizeBook } from "../utils/api-shapes";
+import { markdownToPlainText } from "../utils/markdown-clipboard";
 
 const TRIM_SIZES = [
   { id: "5x8", label: '5" × 8"', width: 5, height: 8 },
@@ -262,7 +263,7 @@ function StudioTextarea({ label, value, onChange, action, rows = 8, hint }) {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(value || "");
+      await navigator.clipboard.writeText(markdownToPlainText(value));
       toast.success("Copied.");
     } catch {
       toast.error("Copy failed.");
@@ -868,7 +869,7 @@ function KDPStudioPage() {
 
   const copyToClipboard = async (value) => {
     try {
-      await navigator.clipboard.writeText(value || "");
+      await navigator.clipboard.writeText(markdownToPlainText(value));
       toast.success("Copied.");
     } catch {
       toast.error("Copy failed.");
