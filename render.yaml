@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: bookify-api
+    runtime: node
+    buildCommand: corepack enable && cd backend && pnpm install
+    startCommand: cd backend && pnpm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CLIENT_URL
+        fromService:
+          type: web
+          name: bookify-web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: DB_URI
+        sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: DEFAULT_AI_PROVIDER
+        value: groq
+      - key: IMAGE_UPLOAD_API_URL
+        value: https://uplaodpixio-production.up.railway.app/api/upload
+      - key: TRUSTED_IMAGE_HOSTS
+        value: pixiomedia.nyc3.digitaloceanspaces.com
+
+  - type: web
+    name: bookify-web
+    runtime: static
+    buildCommand: corepack enable && cd frontend && pnpm install && pnpm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: bookify-api
+          envVarKey: RENDER_EXTERNAL_URL
+    routes:
+      - type: rewrite
+        source: "/*"
+        destination: "/index.html"

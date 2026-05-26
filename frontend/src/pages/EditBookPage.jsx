@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router";
 import toast from "react-hot-toast";
 import axiosInstance from "../lib/axios";
 import { API_BASE_URL, API_ENDPOINTS } from "../utils/api-endpoints";
+import { normalizeBook } from "../utils/api-shapes";
 import {
   ChevronDown,
   Edit,
@@ -258,8 +259,14 @@ function EditBookPage() {
         const { data } = await axiosInstance.get(
           `${API_ENDPOINTS.BOOKS.GET_BY_ID}/${bookId}`
         );
+        const nextBook = normalizeBook(data?.book);
+
+        if (!nextBook) {
+          throw new Error("Book payload missing from API response.");
+        }
+
         skipNextAutosaveRef.current = true;
-        setBook(data.book);
+        setBook(nextBook);
       } catch (error) {
         console.error("Error fetching book:", error);
         toast.error("Failed to fetch book details!", { duration: 5000 });
@@ -325,7 +332,7 @@ function EditBookPage() {
 
       if (data?.book) {
         skipNextAutosaveRef.current = true;
-        setBook(data.book);
+        setBook(normalizeBook(data?.book));
       }
 
       if (showToast) {
@@ -361,7 +368,7 @@ function EditBookPage() {
           headers: { "Content-Type": "multipart/form-data" },
         }
       );
-      setBook(data.book);
+      setBook(normalizeBook(data?.book));
       toast.success("Cover image updated successfully!");
     } catch (error) {
       console.error("Error uploading cover image:", error);
@@ -462,7 +469,7 @@ function EditBookPage() {
       });
 
       skipNextAutosaveRef.current = true;
-      setBook(nextBook);
+      setBook(normalizeBook(nextBook));
       toast.dismiss(loadingToast);
       toast.success("Cover image generated.");
     } catch (error) {
@@ -497,7 +504,7 @@ function EditBookPage() {
       });
 
       skipNextAutosaveRef.current = true;
-      setBook(nextBook);
+      setBook(normalizeBook(nextBook));
       toast.dismiss(loadingToast);
       toast.success("Chapter image inserted into markdown.");
     } catch (error) {
@@ -536,7 +543,8 @@ function EditBookPage() {
         model: command.model,
         insertIntoContent: false,
       });
-      const nextChapters = [...(nextBook?.chapters || book.chapters)];
+      const normalizedNextBook = normalizeBook(nextBook) || book;
+      const nextChapters = [...normalizedNextBook.chapters];
       const contentWithCommand =
         command.sourceContent || book.chapters[index]?.content || "";
       const imageMarkdown = buildImageMarkdown({ image, prompt });
@@ -553,7 +561,7 @@ function EditBookPage() {
       };
 
       const updatedBook = {
-        ...(nextBook || book),
+        ...normalizedNextBook,
         chapters: nextChapters,
       };
 
@@ -656,7 +664,7 @@ function EditBookPage() {
 
         if (nextBook) {
           skipNextAutosaveRef.current = true;
-          setBook(nextBook);
+          setBook(normalizeBook(nextBook));
         }
 
         if (["complete", "failed", "cancelled"].includes(nextJob.status)) {

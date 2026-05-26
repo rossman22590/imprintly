@@ -31,6 +31,20 @@ axiosInstance.interceptors.request.use(
 // Response interceptor - runs after a response is received
 axiosInstance.interceptors.response.use(
   (response) => {
+    const contentType = response.headers?.["content-type"] || "";
+
+    if (
+      contentType.includes("text/html") &&
+      typeof response.data === "string"
+    ) {
+      const err = new Error(
+        "The API request returned the frontend HTML. Set VITE_API_BASE_URL to the Render backend web service URL."
+      );
+      err.response = response;
+
+      return Promise.reject(err);
+    }
+
     const url = response.config?.url || "";
     const method = (response.config?.method || "get").toLowerCase();
     const shouldRefreshCredits =

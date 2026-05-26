@@ -7,6 +7,8 @@ function BookViewSidebar({
   onSelectChapter,
   onClose,
 }) {
+  const chapters = Array.isArray(book?.chapters) ? book.chapters : [];
+
   return (
     <>
       {/* Mobile overlay */}
@@ -43,7 +45,7 @@ function BookViewSidebar({
         </div>
 
         <ul className="h-full pb-20 overflow-y-auto">
-          {book.chapters.map((chapter, index) => (
+          {chapters.map((chapter, index) => (
             <li key={index} className="border-b last:border-b-0 border-gray-50">
               <button
                 type="button"

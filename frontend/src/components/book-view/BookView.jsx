@@ -7,8 +7,9 @@ function BookView({ book }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
   const [fontSize, setFontSize] = useState(18);
+  const chapters = Array.isArray(book?.chapters) ? book.chapters : [];
 
-  if (!book.chapters || book.chapters.length === 0) {
+  if (chapters.length === 0) {
     return (
       <main className="h-[calc(100vh-64px)] bg-white flex items-center justify-center">
         <p className="text-gray-500">No chapters available.</p>
@@ -16,7 +17,7 @@ function BookView({ book }) {
     );
   }
 
-  const selectedChapter = book.chapters[selectedChapterIndex];
+  const selectedChapter = chapters[selectedChapterIndex] || chapters[0];
 
   return (
     <div className="h-[calc(100vh-64px)] bg-white text-gray-900 flex">
@@ -110,17 +111,17 @@ function BookView({ book }) {
               </button>
 
               <span className="text-gray-500 text-sm">
-                {selectedChapterIndex + 1} of {book.chapters.length}
+                {selectedChapterIndex + 1} of {chapters.length}
               </span>
 
               <button
                 type="button"
                 onClick={() =>
                   setSelectedChapterIndex(
-                    Math.min(selectedChapterIndex + 1, book.chapters.length - 1)
+                    Math.min(selectedChapterIndex + 1, chapters.length - 1)
                   )
                 }
-                disabled={selectedChapterIndex === book.chapters.length - 1}
+                disabled={selectedChapterIndex === chapters.length - 1}
                 className="bg-gray-100 rounded-lg px-4 py-2 inline-flex items-center gap-2 transition-colors duration-150 hover:bg-gray-200 focus-visible:bg-gray-200 disabled:opacity-50"
               >
                 <span>Next Chapter</span>

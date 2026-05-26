@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import axiosInstance from "../lib/axios";
 import { API_ENDPOINTS } from "../utils/api-endpoints";
+import { normalizeBooks } from "../utils/api-shapes";
 import toast from "react-hot-toast";
 import DashboardLayout from "../layouts/DashboardLayout";
 import { BookCard, Button, CreateBookModal } from "../components";
@@ -113,7 +114,7 @@ function DashboardPage() {
 
       try {
         const { data } = await axiosInstance.get(API_ENDPOINTS.BOOKS.GET_ALL);
-        setBooks(data.books);
+        setBooks(normalizeBooks(data?.books));
       } catch (error) {
         console.error("Error fetching user books:", error);
         toast.error("Failed to load your library!", { duration: 5000 });

@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from "react-router";
 import { useEffect, useState } from "react";
 import { API_ENDPOINTS } from "../utils/api-endpoints";
+import { normalizeBook } from "../utils/api-shapes";
 import axiosInstance from "../lib/axios";
 import DashboardLayout from "../layouts/DashboardLayout";
 import { Book } from "lucide-react";
@@ -38,7 +39,7 @@ function BookPage() {
         const { data } = await axiosInstance.get(
           `${API_ENDPOINTS.BOOKS.GET_BY_ID}/${bookId}`
         );
-        setBook(data.book);
+        setBook(normalizeBook(data?.book));
       } catch (error) {
         console.error("Error fetching book:", error);
         toast.error("Failed to fetch book details!", { duration: 5000 });
