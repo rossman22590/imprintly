@@ -25,6 +25,17 @@ const ENV = {
   TRUSTED_IMAGE_HOSTS:
     process.env.TRUSTED_IMAGE_HOSTS ??
     "pixiomedia.nyc3.digitaloceanspaces.com",
+  STARTING_CREDITS: process.env.STARTING_CREDITS ?? "500",
+  USD_PER_CREDIT: process.env.USD_PER_CREDIT ?? "0.001",
+  AI_IMAGE_CREDITS: process.env.AI_IMAGE_CREDITS ?? "10",
+  AI_TOKEN_MARKUP_MULTIPLIER:
+    process.env.AI_TOKEN_MARKUP_MULTIPLIER ?? "1.3",
+  GEMINI_INPUT_USD_PER_MILLION:
+    process.env.GEMINI_INPUT_USD_PER_MILLION ?? "1",
+  GEMINI_OUTPUT_USD_PER_MILLION:
+    process.env.GEMINI_OUTPUT_USD_PER_MILLION ?? "1",
+  GEMINI_FALLBACK_USD_PER_MILLION:
+    process.env.GEMINI_FALLBACK_USD_PER_MILLION ?? "1",
   PUBLIC_API_URL: process.env.PUBLIC_API_URL ?? "",
   CLIENT_URL: process.env.CLIENT_URL ?? "",
 };

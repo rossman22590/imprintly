@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const ENV = require("../configs/env");
 const User = require("../models/User");
+const { ensureUserCredits, serializeCredits } = require("../utils/credits.service");
 
 function generateToken(userId) {
   return jwt.sign({ id: userId }, ENV.JWT_SECRET_KEY, { expiresIn: "7d" });
@@ -23,6 +24,7 @@ async function registerUser(req, res) {
     }
 
     const user = await User.create({ name, email, password });
+    await ensureUserCredits(user._id);
 
     return res.status(201).json({
       message: "User registered successfully!",
@@ -30,6 +32,7 @@ async function registerUser(req, res) {
         _id: user._id,
         name: user.name,
         email: user.email,
+        credits: serializeCredits(user),
       },
       token: generateToken(user._id),
     });
@@ -54,6 +57,8 @@ async function signInUser(req, res) {
       return res.status(401).json({ error: "Invalid credentials!" });
     }
 
+    await ensureUserCredits(user._id);
+
     return res.status(200).json({
       message: "User signed in successfully!",
       user: {
@@ -61,6 +66,7 @@ async function signInUser(req, res) {
         name: user.name,
         email: user.email,
         avatar: user.avatar,
+        credits: serializeCredits(user),
       },
       token: generateToken(user._id),
     });

@@ -22,6 +22,12 @@ const {
   insertImageUnderTitle,
   isGeneratedUploadUrl,
 } = require("./chapter-image-markdown");
+const {
+  CREDIT_CONFIG,
+  assertHasCredits,
+  chargeImageUsage,
+  chargeTokenUsage,
+} = require("./credits.service");
 
 const activeJobs = new Set();
 
@@ -340,6 +346,10 @@ async function runGenerationJob(jobId) {
       provider === "groq" ? getGroqModels() : getGeminiModels();
     let totalStats = emptyStats(provider);
     const book = await resolveBookForJob(job);
+    await assertHasCredits(
+      job.userId,
+      includeChapterImages || includeCover ? CREDIT_CONFIG.imageCredits : 0.0001
+    );
 
     let chapters = normalizeOutlineChapters(
       !job.retryFailedOnly && payload.outline?.length
@@ -371,6 +381,15 @@ async function runGenerationJob(jobId) {
       chapters = normalizeOutlineChapters(outlineResult.chapters);
       outlineTree = outlineResult.outlineTree;
       totalStats = addStats(totalStats, outlineResult.stats);
+      await chargeTokenUsage({
+        userId: job.userId,
+        usage: outlineResult.stats,
+        reason: "full_book_outline_generation",
+        description: `Generated full-book outline for "${book.title}"`,
+        provider,
+        model: outlineResult.modelName,
+        metadata: { jobId: job.id, bookId: book._id.toString() },
+      });
       book.title = outlineResult.title || book.title;
       book.subtitle = payload.subtitle || outlineResult.subtitle || book.subtitle;
     }
@@ -416,11 +435,26 @@ async function runGenerationJob(jobId) {
           book,
           customPrompt: sanitizeInput(payload.coverPrompt, 4000),
         });
+        await assertHasCredits(job.userId, CREDIT_CONFIG.imageCredits);
         const image = await generateGeminiImage({
           prompt: finalPrompt,
           model: payload.coverModel,
           aspectRatio: "2:3",
           imageSize: payload.coverImageSize || "1K",
+        });
+        await chargeImageUsage({
+          userId: job.userId,
+          reason: "cover_image_generation",
+          description: `Generated cover image for "${book.title}"`,
+          provider: "gemini",
+          model: image.model,
+          usage: image.stats,
+          metadata: {
+            jobId: job.id,
+            bookId: book._id.toString(),
+            aspectRatio: image.aspectRatio,
+            imageSize: image.imageSize,
+          },
         });
 
         book.coverImage = image.url;
@@ -479,6 +513,20 @@ async function runGenerationJob(jobId) {
         });
 
         totalStats = addStats(totalStats, result.stats);
+        await chargeTokenUsage({
+          userId: job.userId,
+          usage: result.stats,
+          reason: "full_book_chapter_generation",
+          description: `Generated chapter "${chapter.title}"`,
+          provider,
+          model: result.modelName,
+          metadata: {
+            jobId: job.id,
+            bookId: book._id.toString(),
+            chapterIndex,
+            chapterTitle: chapter.title,
+          },
+        });
         let chapterContent = result.content;
         const chapterStats = { ...result.stats };
         let chapterStatus = "complete";
@@ -492,6 +540,7 @@ async function runGenerationJob(jobId) {
           await updateBookProgress(book, job);
 
           try {
+            await assertHasCredits(job.userId, CREDIT_CONFIG.imageCredits);
             const image = await generateGeminiImage({
               prompt: buildChapterImagePrompt({
                 book,
@@ -502,6 +551,22 @@ async function runGenerationJob(jobId) {
               }),
               aspectRatio: "16:9",
               imageSize: "1K",
+            });
+            await chargeImageUsage({
+              userId: job.userId,
+              reason: "chapter_image_generation",
+              description: `Generated image for "${chapter.title}"`,
+              provider: "gemini",
+              model: image.model,
+              usage: image.stats,
+              metadata: {
+                jobId: job.id,
+                bookId: book._id.toString(),
+                chapterIndex,
+                chapterTitle: chapter.title,
+                aspectRatio: image.aspectRatio,
+                imageSize: image.imageSize,
+              },
             });
             const imageAlt = `${
               chapter.title || `Chapter ${chapterIndex + 1}`

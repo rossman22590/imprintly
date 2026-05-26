@@ -41,6 +41,31 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    credits: {
+      balance: {
+        type: Number,
+        default: 500,
+        min: [0, "Credit balance cannot be negative"],
+      },
+      lifetimeGranted: {
+        type: Number,
+        default: 500,
+        min: [0, "Lifetime granted credits cannot be negative"],
+      },
+      lifetimeSpent: {
+        type: Number,
+        default: 0,
+        min: [0, "Lifetime spent credits cannot be negative"],
+      },
+      ledgerInitialized: {
+        type: Boolean,
+        default: false,
+      },
+      initializedAt: {
+        type: Date,
+        default: null,
+      },
+    },
   },
   {
     timestamps: true,

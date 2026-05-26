@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuthContext } from "../contexts/AuthContext";
 import { Link, useNavigate } from "react-router";
-import { LogoIcon, ProfileMenu } from "../components";
+import { CreditBalancePill, LogoIcon, ProfileMenu } from "../components";
 
 function DashboardLayout({ children }) {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -42,18 +42,22 @@ function DashboardLayout({ children }) {
           </span>
         </Link>
 
-        {/* Profile menu */}
-        <ProfileMenu
-          isOpen={isProfileMenuOpen}
-          onToggle={(event) => {
-            event.stopPropagation();
-            setIsProfileMenuOpen(!isProfileMenuOpen);
-          }}
-          avatarUrl={user?.avatar || ""}
-          username={user?.name || ""}
-          email={user?.email || ""}
-          signoutCallback={handleSignout}
-        />
+        <div className="flex items-center gap-2">
+          <CreditBalancePill />
+
+          {/* Profile menu */}
+          <ProfileMenu
+            isOpen={isProfileMenuOpen}
+            onToggle={(event) => {
+              event.stopPropagation();
+              setIsProfileMenuOpen(!isProfileMenuOpen);
+            }}
+            avatarUrl={user?.avatar || ""}
+            username={user?.name || ""}
+            email={user?.email || ""}
+            signoutCallback={handleSignout}
+          />
+        </div>
       </header>
 
       {/* Main content */}

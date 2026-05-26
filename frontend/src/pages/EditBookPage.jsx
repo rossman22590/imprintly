@@ -23,6 +23,7 @@ import {
   Button,
   ChapterEditorTab,
   ChaptersSidebar,
+  CreditBalancePill,
   Dropdown,
   DropdownItem,
 } from "../components";
@@ -1036,6 +1037,8 @@ function EditBookPage() {
 
           {/* Action buttons */}
           <div className="flex items-center gap-2">
+            <CreditBalancePill compact />
+
             <Dropdown
               trigger={
                 <Button

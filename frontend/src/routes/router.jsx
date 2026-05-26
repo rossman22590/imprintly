@@ -1,6 +1,7 @@
 import { createBrowserRouter, Outlet } from "react-router";
 import {
   BookPage,
+  CreditsPage,
   DashboardPage,
   EditBookPage,
   ErrorPage,
@@ -60,6 +61,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <EditBookPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "credits",
+        element: (
+          <ProtectedRoute>
+            <CreditsPage />
           </ProtectedRoute>
         ),
       },

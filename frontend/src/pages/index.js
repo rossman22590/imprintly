@@ -5,4 +5,5 @@ export { default as DashboardPage } from "./DashboardPage";
 export { default as BookPage } from "./BookPage";
 export { default as EditBookPage } from "./EditBookPage";
 export { default as ProfilePage } from "./ProfilePage";
+export { default as CreditsPage } from "./CreditsPage";
 export { default as ErrorPage } from "./ErrorPage";

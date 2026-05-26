@@ -15,6 +15,7 @@ export { default as Footer } from "./home/Footer";
 // Dashboard page components
 export { default as BookCard } from "./BookCard";
 export { default as CreateBookModal } from "./CreateBookModal";
+export { default as CreditBalancePill } from "./CreditBalancePill";
 
 // Book page component
 export { default as BookView } from "./book-view/BookView";

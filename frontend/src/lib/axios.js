@@ -30,7 +30,19 @@ axiosInstance.interceptors.request.use(
 
 // Response interceptor - runs after a response is received
 axiosInstance.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const url = response.config?.url || "";
+    const method = (response.config?.method || "get").toLowerCase();
+    const shouldRefreshCredits =
+      method !== "get" &&
+      (url.includes("/api/ai") || url.includes("/api/books"));
+
+    if (shouldRefreshCredits && typeof window !== "undefined") {
+      window.dispatchEvent(new Event("credits:refresh"));
+    }
+
+    return response;
+  },
   (err) => {
     console.error("Error in Axios response interceptor:", err);
 
@@ -40,6 +52,10 @@ axiosInstance.interceptors.response.use(
         console.error(
           "Internal Server Error! Please try again in a few minutes."
         );
+      }
+
+      if (err.response.status === 402 && typeof window !== "undefined") {
+        window.dispatchEvent(new Event("credits:refresh"));
       }
     } else if (err.code === "ECONNABORTED") {
       console.error("Request timeout! Please try again later.");

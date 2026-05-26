@@ -7,6 +7,7 @@ const path = require("path");
 const ENV = require("./configs/env");
 const { connectToDB } = require("./configs/db");
 const authRouter = require("./routes/auth.route");
+const creditsRouter = require("./routes/credits.route");
 const profileRouter = require("./routes/profile.route");
 const booksRouter = require("./routes/books.route");
 const aiRouter = require("./routes/ai.route");
@@ -49,6 +50,7 @@ app.use("/api", apiLimiter);
 
 // Routes
 app.use("/api/auth", authLimiter, authRouter);
+app.use("/api/credits", creditsRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/books", booksRouter);
 app.use("/api/ai", aiRouter);

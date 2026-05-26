@@ -29,6 +29,9 @@ export const API_ENDPOINTS = {
     UPLOAD_AVATAR: "/api/profile/avatar",
     DELETE_AVATAR: "/api/profile/avatar",
   },
+  CREDITS: {
+    GET: "/api/credits",
+  },
   BOOKS: {
     GET_ALL: "/api/books",
     GET_BY_ID: "/api/books",

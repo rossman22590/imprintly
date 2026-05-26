@@ -34,6 +34,13 @@ const {
   publicJob,
   retryGenerationJob,
 } = require("../utils/book-generation.jobs");
+const {
+  CREDIT_CONFIG,
+  assertHasCredits,
+  chargeImageUsage,
+  chargeTokenUsage,
+  serializeBilling,
+} = require("../utils/credits.service");
 const { deleteUploadFile } = require("../utils/upload-paths");
 
 /**
@@ -65,8 +72,32 @@ function normalizeProvider(provider) {
     : "groq";
 }
 
+async function chargeGeneratedTokens({
+  req,
+  stats,
+  reason,
+  description,
+  provider,
+  model,
+  metadata,
+}) {
+  return chargeTokenUsage({
+    userId: req.user.id,
+    usage: stats,
+    reason,
+    description,
+    provider,
+    model: model || stats?.modelName || "",
+    metadata,
+  });
+}
+
 function countWords(content = "") {
   return content.split(/\s+/).filter(Boolean).length;
+}
+
+function isEnabled(value) {
+  return value === true || value === "true" || value === "yes" || value === 1;
 }
 
 function normalizeOutlineChapters(outline = []) {
@@ -216,6 +247,8 @@ async function generateBookOutline(req, res) {
       20
     );
 
+    await assertHasCredits(req.user.id, 0.0001);
+
     if (selectedProvider === "groq") {
       const outlineResult = await generateGroqBookStructure({
         title: safeTopic,
@@ -225,6 +258,15 @@ async function generateBookOutline(req, res) {
         chapterCount: safeChapterCount,
         genre: sanitizeInput(genre, 100) || "Nonfiction",
         audience: sanitizeInput(audience, 200) || "General readers",
+      });
+      const billing = await chargeGeneratedTokens({
+        req,
+        stats: outlineResult.stats,
+        reason: "outline_generation",
+        description: `Generated outline for "${safeTopic}"`,
+        provider: "groq",
+        model: outlineResult.modelName,
+        metadata: { topic: safeTopic, chapterCount: safeChapterCount },
       });
 
       return res.status(200).json({
@@ -240,6 +282,7 @@ async function generateBookOutline(req, res) {
           stats: outlineResult.stats,
           statsText: summarizeStatsForDisplay(outlineResult.stats),
         },
+        billing: serializeBilling(billing),
       });
     }
 
@@ -251,6 +294,15 @@ async function generateBookOutline(req, res) {
       chapterCount: safeChapterCount,
       genre: sanitizeInput(genre, 100) || "Nonfiction",
       audience: sanitizeInput(audience, 200) || "General readers",
+    });
+    const billing = await chargeGeneratedTokens({
+      req,
+      stats: outlineResult.stats,
+      reason: "outline_generation",
+      description: `Generated outline for "${safeTopic}"`,
+      provider: "gemini",
+      model: outlineResult.modelName,
+      metadata: { topic: safeTopic, chapterCount: safeChapterCount },
     });
 
     return res.status(200).json({
@@ -266,11 +318,14 @@ async function generateBookOutline(req, res) {
         stats: outlineResult.stats,
         statsText: summarizeStatsForDisplay(outlineResult.stats),
       },
+      billing: serializeBilling(billing),
     });
   } catch (error) {
     console.error("Error generating book outline:", error);
 
-    return res.status(500).json({ error: "Internal Server Error!" });
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.message || "Internal Server Error!" });
   }
 }
 
@@ -296,6 +351,8 @@ async function generateChapterContent(req, res) {
     const safeChapterDescription = sanitizeInput(chapterDescription, 600);
     const safeStyle = sanitizeInput(style, 50);
 
+    await assertHasCredits(req.user.id, 0.0001);
+
     if (selectedProvider === "groq") {
       const result = await generateGroqSection({
         chapterTitle: safeChapterTitle,
@@ -312,6 +369,15 @@ async function generateChapterContent(req, res) {
           error: "Generated content is too short or invalid!",
         });
       }
+      const billing = await chargeGeneratedTokens({
+        req,
+        stats: result.stats,
+        reason: "chapter_generation",
+        description: `Generated chapter "${safeChapterTitle}"`,
+        provider: "groq",
+        model: result.modelName,
+        metadata: { chapterTitle: safeChapterTitle },
+      });
 
       return res.status(200).json({
         message: "Groq chapter content generated successfully!",
@@ -319,6 +385,7 @@ async function generateChapterContent(req, res) {
         provider: "groq",
         model: result.modelName,
         stats: result.stats,
+        billing: serializeBilling(billing),
       });
     }
 
@@ -337,6 +404,15 @@ async function generateChapterContent(req, res) {
         error: "Generated content is too short or invalid!",
       });
     }
+    const billing = await chargeGeneratedTokens({
+      req,
+      stats: result.stats,
+      reason: "chapter_generation",
+      description: `Generated chapter "${safeChapterTitle}"`,
+      provider: "gemini",
+      model: result.modelName,
+      metadata: { chapterTitle: safeChapterTitle },
+    });
 
     return res.status(200).json({
       message: "Gemini chapter content generated successfully!",
@@ -344,11 +420,14 @@ async function generateChapterContent(req, res) {
       provider: "gemini",
       model: result.modelName,
       stats: result.stats,
+      billing: serializeBilling(billing),
     });
   } catch (error) {
     console.error("Error generating chapter content:", error);
 
-    return res.status(500).json({ error: "Internal Server Error!" });
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.message || "Internal Server Error!" });
   }
 }
 
@@ -411,11 +490,14 @@ async function generateFullBook(req, res) {
         .json({ error: "Title and author are required!" });
     }
 
+    await assertHasCredits(req.user.id, 0.0001);
+
     let outlineTree = Array.isArray(outline) ? outline : null;
     let chapters = Array.isArray(outline) && outline.length > 0
       ? normalizeOutlineChapters(outline)
       : normalizeOutlineChapters(book?.chapters || []);
     let totalStats = emptyStats(selectedProvider);
+    const billingCharges = [];
 
     if (chapters.length === 0) {
       const outlineResult = await generateStructureForProvider(
@@ -435,6 +517,16 @@ async function generateFullBook(req, res) {
       outlineTree = outlineResult.outlineTree;
       chapters = normalizeOutlineChapters(outlineResult.chapters);
       totalStats = addStats(totalStats, outlineResult.stats);
+      const outlineBilling = await chargeGeneratedTokens({
+        req,
+        stats: outlineResult.stats,
+        reason: "full_book_outline_generation",
+        description: `Generated full-book outline for "${workingTitle}"`,
+        provider: selectedProvider,
+        model: outlineResult.modelName,
+        metadata: { title: workingTitle },
+      });
+      billingCharges.push(serializeBilling(outlineBilling));
     }
 
     const bookContext = createBookContext({
@@ -460,6 +552,16 @@ async function generateFullBook(req, res) {
         });
 
         totalStats = addStats(totalStats, result.stats);
+        const chapterBilling = await chargeGeneratedTokens({
+          req,
+          stats: result.stats,
+          reason: "full_book_chapter_generation",
+          description: `Generated chapter "${chapter.title}"`,
+          provider: selectedProvider,
+          model: result.modelName,
+          metadata: { title: workingTitle, chapterTitle: chapter.title },
+        });
+        billingCharges.push(serializeBilling(chapterBilling));
         generatedChapters.push({
           ...chapter,
           content: result.content,
@@ -523,6 +625,7 @@ async function generateFullBook(req, res) {
       book,
       generation,
       failedCount,
+      billing: billingCharges,
     });
   } catch (error) {
     console.error("Error generating full book:", error);
@@ -535,6 +638,15 @@ async function generateFullBook(req, res) {
 
 async function createFullBookJob(req, res) {
   try {
+    const includesImages = isEnabled(
+      req.body.includeImages ?? req.body.generateImages
+    );
+    const includesCover = isEnabled(req.body.generateCover ?? req.body.includeCover);
+    await assertHasCredits(
+      req.user.id,
+      includesImages || includesCover ? CREDIT_CONFIG.imageCredits : 0.0001
+    );
+
     if (req.body.bookId) {
       const book = await Book.findById(req.body.bookId);
 
@@ -639,11 +751,25 @@ async function generateCoverImage(req, res) {
     const book = await findOwnedBook(bookId, req.user.id);
     const customPrompt = sanitizeInput(prompt, 4000);
     const finalPrompt = buildCoverPrompt({ book, customPrompt });
+    await assertHasCredits(req.user.id, CREDIT_CONFIG.imageCredits);
     const image = await generateGeminiImage({
       prompt: finalPrompt,
       model: normalizeImageModel(model),
       aspectRatio: normalizeAspectRatio(aspectRatio, "2:3"),
       imageSize: normalizeImageSize(imageSize),
+    });
+    const billing = await chargeImageUsage({
+      userId: req.user.id,
+      reason: "cover_image_generation",
+      description: `Generated cover image for "${book.title}"`,
+      provider: "gemini",
+      model: image.model,
+      usage: image.stats,
+      metadata: {
+        bookId: book._id.toString(),
+        aspectRatio: image.aspectRatio,
+        imageSize: image.imageSize,
+      },
     });
 
     if (book.coverImage) {
@@ -666,6 +792,7 @@ async function generateCoverImage(req, res) {
       message: "Cover image generated successfully!",
       image,
       book,
+      billing: serializeBilling(billing),
     });
   } catch (error) {
     console.error("Error generating cover image:", error);
@@ -706,11 +833,26 @@ async function generateChapterImage(req, res) {
       chapter,
       customPrompt,
     });
+    await assertHasCredits(req.user.id, CREDIT_CONFIG.imageCredits);
     const image = await generateGeminiImage({
       prompt: finalPrompt,
       model: normalizeImageModel(model),
       aspectRatio: normalizeAspectRatio(aspectRatio, "16:9"),
       imageSize: normalizeImageSize(imageSize),
+    });
+    const billing = await chargeImageUsage({
+      userId: req.user.id,
+      reason: "chapter_image_generation",
+      description: `Generated image for "${chapter.title}"`,
+      provider: "gemini",
+      model: image.model,
+      usage: image.stats,
+      metadata: {
+        bookId: book._id.toString(),
+        chapterIndex: safeChapterIndex,
+        aspectRatio: image.aspectRatio,
+        imageSize: image.imageSize,
+      },
     });
     const imageAlt =
       sanitizeInput(alt, 300) ||
@@ -748,6 +890,7 @@ async function generateChapterImage(req, res) {
       message: "Chapter image generated successfully!",
       image: imageAsset,
       book,
+      billing: serializeBilling(billing),
     });
   } catch (error) {
     console.error("Error generating chapter image:", error);
@@ -803,6 +946,8 @@ async function runQualityTool(req, res) {
       return res.status(400).json({ error: "Unsupported AI tool action!" });
     }
 
+    await assertHasCredits(req.user.id, 0.0001);
+
     const prompt = `You are a senior book editor helping improve an AI-generated book.
 
 Book: ${sanitizeInput(bookTitle, 200)}
@@ -831,17 +976,37 @@ ${safeContent}
         temperature: 0.25,
         maxCompletionTokens: Number(ENV.GROQ_SECTION_MAX_TOKENS || 9000),
       });
+      const stats = normalizeUsageStats(completion.usage, sectionModel);
+      const billing = await chargeGeneratedTokens({
+        req,
+        stats,
+        reason: "ai_tool_tokens",
+        description: `Ran AI tool: ${safeAction}`,
+        provider: "groq",
+        model: sectionModel,
+        metadata: { action: safeAction },
+      });
 
       return res.status(200).json({
         message: "AI tool completed successfully!",
         content: completion.choices?.[0]?.message?.content?.trim() || "",
         provider: "groq",
         model: sectionModel,
-        stats: normalizeUsageStats(completion.usage, sectionModel),
+        stats,
+        billing: serializeBilling(billing),
       });
     }
 
     const result = await runGeminiEditorialTask(prompt);
+    const billing = await chargeGeneratedTokens({
+      req,
+      stats: result.stats,
+      reason: "ai_tool_tokens",
+      description: `Ran AI tool: ${safeAction}`,
+      provider: "gemini",
+      model: result.modelName,
+      metadata: { action: safeAction },
+    });
 
     return res.status(200).json({
       message: "AI tool completed successfully!",
@@ -849,6 +1014,7 @@ ${safeContent}
       provider: "gemini",
       model: result.modelName,
       stats: result.stats,
+      billing: serializeBilling(billing),
     });
   } catch (error) {
     console.error("Error running AI quality tool:", error);

@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const fs = require("fs");
+const { ensureUserCredits, serializeCredits } = require("../utils/credits.service");
 const {
   assertUploadedImageFile,
   deleteUploadFile,
@@ -15,7 +16,7 @@ const {
  */
 async function getProfile(req, res) {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await ensureUserCredits(req.user.id);
 
     if (!user) {
       return res.status(404).json({ error: "User not found!" });
@@ -28,6 +29,7 @@ async function getProfile(req, res) {
         name: user.name,
         email: user.email,
         avatar: user.avatar,
+        credits: serializeCredits(user),
       },
     });
   } catch (error) {
@@ -85,6 +87,7 @@ async function updateProfile(req, res) {
         name: updatedUser.name,
         email: updatedUser.email,
         avatar: updatedUser.avatar,
+        credits: serializeCredits(updatedUser),
       },
     });
   } catch (error) {
@@ -134,6 +137,7 @@ async function updateAvatar(req, res) {
         name: updatedUser.name,
         email: updatedUser.email,
         avatar: updatedUser.avatar,
+        credits: serializeCredits(updatedUser),
       },
     });
   } catch (error) {
@@ -183,6 +187,7 @@ async function deleteAvatar(req, res) {
         name: updatedUser.name,
         email: updatedUser.email,
         avatar: updatedUser.avatar,
+        credits: serializeCredits(updatedUser),
       },
     });
   } catch (error) {
