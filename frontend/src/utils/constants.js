@@ -48,7 +48,7 @@ export const TESTIMONIALS = [
     username: "Sarah Lee",
     designation: "Self-published Author",
     quote:
-      "I've published two eBooks in half the time it usually takes me. The AI assist is a game changer.",
+      "I've published two books in half the time it usually takes me. The AI assist is a game changer.",
     avatarSrc: "/images/sarah-lee.jpg",
     rating: 5,
   },
@@ -113,4 +113,24 @@ export const WRITING_STYLES = [
   "Whitepaper",
   "Case Study",
   "SEO Optimized",
+];
+
+export const AI_PROVIDERS = [
+  { label: "Groq GPT-OSS Fast Book Engine", value: "groq" },
+  { label: "Gemini 3.5 Flash Book Engine", value: "gemini" },
+];
+
+export const BOOK_GENRES = [
+  "Nonfiction",
+  "How-to Guide",
+  "Business",
+  "Technical",
+  "Self-help",
+  "Academic",
+  "Fiction",
+  "Fantasy",
+  "Sci-Fi",
+  "Children's Book",
+  "Workbook",
+  "Course",
 ];

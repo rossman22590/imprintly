@@ -5,6 +5,7 @@ import axiosInstance from "../lib/axios";
 import DashboardLayout from "../layouts/DashboardLayout";
 import { Book } from "lucide-react";
 import { BookView } from "../components";
+import toast from "react-hot-toast";
 
 const BookViewSkeleton = () => (
   <div className="animate-pulse">
@@ -66,11 +67,11 @@ function BookPage() {
             </div>
 
             <h3 className="text-slate-900 text-lg font-medium mb-2">
-              eBook Not Found
+              Book Not Found
             </h3>
 
             <p className="max-w-md text-slate-500 text-sm mb-6">
-              The eBook you are looking for either does not exist or you do not
+              The book you are looking for either does not exist or you do not
               have permission to view it.
             </p>
           </section>

@@ -1,7 +1,18 @@
-import { Eye, Maximize2, Minimize2, Sparkles, TypeOutline } from "lucide-react";
+import {
+  Bot,
+  ChevronDown,
+  Eye,
+  Image as ImageIcon,
+  Maximize2,
+  Minimize2,
+  Sparkles,
+  TypeOutline,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import Button from "../ui/Button";
+import Dropdown, { DropdownItem } from "../ui/Dropdown";
 import Input from "../ui/Input";
+import Select from "../ui/Select";
 import SimpleMDEditor from "./SimpleMDEditor";
 import { formatMdContent } from "../../utils/helpers";
 
@@ -19,9 +30,20 @@ function ChapterEditorTab({
   onEditChapter = () => {},
   isGenerating,
   onGeneratingChapterContent = () => {},
+  isGeneratingImage = false,
+  onGenerateChapterImage = () => {},
+  onGenerateInlineImageCommand = () => {},
 }) {
   const [isInPreviewMode, setIsInPreviewMode] = useState(false);
   const [isInFullScreenMode, setIsInFullScreenMode] = useState(false);
+  const [isImagePanelOpen, setIsImagePanelOpen] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState("");
+  const [imagePromptChapterIndex, setImagePromptChapterIndex] = useState(null);
+  const [imageAspectRatio, setImageAspectRatio] = useState("16:9");
+  const [imageSize, setImageSize] = useState("1K");
+  const [imageModel, setImageModel] = useState(
+    "gemini-3.1-flash-image-preview"
+  );
 
   const mdEditorOptions = useMemo(
     () => ({
@@ -57,6 +79,65 @@ function ChapterEditorTab({
   }
 
   const currentChapter = book.chapters[selectedChapterIndex];
+  const chapterActionLabel = currentChapter.content?.trim()
+    ? "Regenerate"
+    : "Generate";
+
+  const buildSuggestedImagePrompt = () => {
+    const contentExcerpt = (currentChapter.content || "")
+      .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
+      .replace(/[#>*_`~|-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 700);
+
+    return [
+      `Create a relevant inline ebook illustration for "${currentChapter.title || `Chapter ${selectedChapterIndex + 1}`}" in "${book.title}".`,
+      `Genre: ${book.genre || "Nonfiction"}.`,
+      `Audience: ${book.audience || "General readers"}.`,
+      currentChapter.description
+        ? `Chapter brief: ${currentChapter.description}.`
+        : "",
+      contentExcerpt ? `Use this chapter excerpt for context: ${contentExcerpt}` : "",
+      "No text, captions, logos, or UI inside the image. Make it clear, polished, and useful inside the current chapter.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
+
+  const handleImagePanelToggle = () => {
+    const shouldOpen = !isImagePanelOpen;
+
+    if (
+      shouldOpen &&
+      (!imagePrompt.trim() || imagePromptChapterIndex !== selectedChapterIndex)
+    ) {
+      setImagePrompt(buildSuggestedImagePrompt());
+      setImagePromptChapterIndex(selectedChapterIndex);
+    }
+
+    setIsImagePanelOpen(shouldOpen);
+  };
+
+  const handleGenerateImage = async (event) => {
+    event.preventDefault();
+
+    await onGenerateChapterImage(selectedChapterIndex, {
+      prompt: imagePrompt,
+      aspectRatio: imageAspectRatio,
+      imageSize,
+      model: imageModel,
+    });
+  };
+
+  const handleGenerateInlineImageCommand = async (command) => {
+    await onGenerateInlineImageCommand(selectedChapterIndex, {
+      ...command,
+      aspectRatio: imageAspectRatio,
+      imageSize,
+      model: imageModel,
+    });
+  };
 
   return (
     <article
@@ -134,19 +215,146 @@ function ChapterEditorTab({
 
               <Button
                 type="button"
-                onClick={() => onGeneratingChapterContent(selectedChapterIndex)}
-                isLoading={isGenerating}
-                icon={Sparkles}
+                variant="secondary"
+                icon={ImageIcon}
                 size="sm"
+                isLoading={isGeneratingImage}
+                onClick={handleImagePanelToggle}
                 className="shadow-sm"
               >
-                <span className="hidden sm:inline">Generate with AI</span>
-                <span className="sm:hidden">AI</span>
+                <span className="hidden sm:inline">Images</span>
               </Button>
+
+              <Dropdown
+                trigger={
+                  <Button
+                    type="button"
+                    isLoading={isGenerating}
+                    icon={Sparkles}
+                    size="sm"
+                    className="shadow-sm"
+                  >
+                    <span className="hidden sm:inline-flex items-center gap-1">
+                      {chapterActionLabel} Chapter
+                      <ChevronDown className="size-4" />
+                    </span>
+
+                    <span className="sm:hidden inline-flex items-center">
+                      <ChevronDown className="size-4" />
+                    </span>
+                  </Button>
+                }
+              >
+                <DropdownItem
+                  disabled={isGenerating}
+                  onClick={() =>
+                    onGeneratingChapterContent(selectedChapterIndex, "gemini")
+                  }
+                >
+                  <Bot className="text-slate-500 size-4" />
+                  {chapterActionLabel} with Gemini
+                </DropdownItem>
+
+                <DropdownItem
+                  disabled={isGenerating}
+                  onClick={() =>
+                    onGeneratingChapterContent(selectedChapterIndex, "groq")
+                  }
+                >
+                  <Sparkles className="text-slate-500 size-4" />
+                  {chapterActionLabel} with Groq
+                </DropdownItem>
+              </Dropdown>
             </div>
           </div>
         </div>
       </header>
+
+      {isImagePanelOpen && (
+        <section className="bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 py-4">
+          <form
+            onSubmit={handleGenerateImage}
+            className="grid grid-cols-1 xl:grid-cols-[1fr,10rem,8rem,13rem,auto] gap-3 xl:items-end"
+          >
+            <div className="grid grid-cols-1 gap-2">
+              <label
+                htmlFor="chapter-image-prompt"
+                className="text-slate-700 text-sm font-medium"
+              >
+                Chapter Image
+              </label>
+              <textarea
+                id="chapter-image-prompt"
+                name="chapter-image-prompt"
+                value={imagePrompt}
+                onChange={(event) => setImagePrompt(event.target.value)}
+                rows={3}
+                maxLength={1200}
+                placeholder="Optional scene, style, palette, camera angle..."
+                className="w-full min-h-24 xl:min-h-11 bg-white text-gray-900 text-sm placeholder-gray-400 px-3 py-2 border border-gray-200 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 resize-none"
+              />
+            </div>
+
+            <Select
+              label="Shape"
+              name="chapterImageAspectRatio"
+              value={imageAspectRatio}
+              onChange={(event) => setImageAspectRatio(event.target.value)}
+              options={[
+                { label: "Wide", value: "16:9" },
+                { label: "Classic", value: "4:3" },
+                { label: "Landscape", value: "3:2" },
+                { label: "Square", value: "1:1" },
+                { label: "Portrait", value: "2:3" },
+              ]}
+            />
+
+            <Select
+              label="Size"
+              name="chapterImageSize"
+              value={imageSize}
+              onChange={(event) => setImageSize(event.target.value)}
+              options={[
+                { label: "1K", value: "1K" },
+                { label: "2K", value: "2K" },
+                { label: "4K", value: "4K" },
+              ]}
+            />
+
+            <Select
+              label="Model"
+              name="chapterImageModel"
+              value={imageModel}
+              onChange={(event) => setImageModel(event.target.value)}
+              options={[
+                {
+                  label: "Nano Banana 2",
+                  value: "gemini-3.1-flash-image-preview",
+                },
+                {
+                  label: "Nano Banana Pro",
+                  value: "gemini-3-pro-image-preview",
+                },
+                {
+                  label: "Nano Banana",
+                  value: "gemini-2.5-flash-image",
+                },
+              ]}
+            />
+
+            <Button
+              type="submit"
+              icon={Sparkles}
+              isLoading={isGeneratingImage}
+              disabled={isGenerating}
+              size="sm"
+              className="w-full xl:w-fit"
+            >
+              Insert Image
+            </Button>
+          </form>
+        </section>
+      )}
 
       {/* Content area */}
       <section className="flex-1 overflow-hidden">
@@ -198,6 +406,8 @@ function ChapterEditorTab({
                       value={currentChapter.content || ""}
                       onChange={(value) => onEditChapter("content", value)}
                       options={mdEditorOptions}
+                      isGeneratingImageCommand={isGeneratingImage}
+                      onGenerateImageCommand={handleGenerateInlineImageCommand}
                     />
                   </div>
                 )}

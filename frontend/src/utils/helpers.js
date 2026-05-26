@@ -1,3 +1,5 @@
+import { resolveImageUrl } from "./api-endpoints";
+
 function escapeHtml(text) {
   if (!text) return "";
 
@@ -7,6 +9,15 @@ function escapeHtml(text) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function renderImageMarkdown(match, alt = "", rawUrl = "") {
+  const url = rawUrl.trim().replace(/&amp;/g, "&");
+  const src = resolveImageUrl(url);
+
+  if (!src) return match;
+
+  return `<figure class="my-6 overflow-hidden rounded-lg border border-slate-200 bg-slate-50"><img src="${src}" alt="${alt}" class="w-full max-h-[520px] object-contain bg-white" loading="lazy" /><figcaption class="px-3 py-2 text-xs text-slate-500">${alt}</figcaption></figure>`;
 }
 
 export function validateName(name) {
@@ -75,6 +86,8 @@ export function formatMdContent(content) {
         /`([^`]+)`/g,
         '<code class="bg-slate-100 text-pink-600 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>'
       )
+      // Images
+      .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, renderImageMarkdown)
       // Headings
       .replace(
         /^### (.*$)/gm,
@@ -102,7 +115,7 @@ export function formatMdContent(content) {
       // 2. LIST LOGIC
       // Step A: Convert lines to items with unique markers (ul-item vs ol-item)
       .replace(
-        /^\- (.*$)/gm,
+        /^- (.*$)/gm,
         "<li class='ml-6 mb-2 text-slate-700 ul-item'>$1</li>"
       )
       .replace(

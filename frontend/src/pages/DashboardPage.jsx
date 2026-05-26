@@ -172,7 +172,7 @@ function DashboardPage() {
             icon={BookPlus}
             className="w-full sm:w-auto"
           >
-            Craft New Book
+            Create AI Book
           </Button>
         </header>
 

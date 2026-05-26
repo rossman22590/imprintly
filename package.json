@@ -1,7 +1,7 @@
 {
-  "name": "imprintly",
+  "name": "bookify",
   "version": "1.0.0",
-  "description": "AI-powered eBook creation platform",
+  "description": "AI-powered book creation platform",
   "main": "index.js",
   "scripts": {
     "build": "cd backend && pnpm install && cd ../frontend && pnpm install && pnpm run build",

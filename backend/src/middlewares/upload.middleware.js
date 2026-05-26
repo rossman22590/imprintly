@@ -1,10 +1,7 @@
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-
-// Path relative to where server.js runs (backend/src)
-// This will create backend/uploads
-const uploadsDirPath = path.join(__dirname, "../../uploads");
+const { uploadsDirPath } = require("../utils/upload-paths");
 
 // Ensure uploads directory exists
 if (!fs.existsSync(uploadsDirPath)) {

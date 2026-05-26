@@ -38,7 +38,7 @@ function DashboardLayout({ children }) {
             <LogoIcon className="size-4 md:size-5 text-white" />
           </span>
           <span className="text-gray-900 font-bold text-lg md:text-xl">
-            Imprintly
+            Bookify
           </span>
         </Link>
 

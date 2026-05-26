@@ -13,15 +13,28 @@
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.22.0",
   "dependencies": {
-    "@google/genai": "^1.29.1",
+    "@google/genai": "^1.52.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "docx": "^9.5.1",
-    "express": "^5.1.0",
-    "jsonwebtoken": "^9.0.2",
-    "markdown-it": "^14.1.0",
-    "mongoose": "^8.19.4",
-    "multer": "^2.0.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "jszip": "^3.10.1",
+    "markdown-it": "^14.2.0",
+    "mongoose": "^8.24.0",
+    "multer": "^2.1.1",
     "pdfkit": "^0.17.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "brace-expansion": "^2.0.3",
+      "glob": "^10.5.0",
+      "minimatch": "^9.0.7",
+      "path-to-regexp": "^8.4.0",
+      "qs": "^6.15.2",
+      "ws": "^8.20.1"
+    }
   }
 }

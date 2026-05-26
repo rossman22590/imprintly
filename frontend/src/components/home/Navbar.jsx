@@ -70,7 +70,7 @@ function Navbar() {
           </span>
 
           <span className="text-xl font-semibold text-gray-900 tracking-tight">
-            Imprintly
+            Bookify
           </span>
         </Link>
 

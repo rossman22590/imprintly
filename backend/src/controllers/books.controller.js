@@ -1,12 +1,140 @@
 const Book = require("../models/Book");
-const path = require("path");
 const fs = require("fs");
+const {
+  assertUploadedImageFile,
+  deleteUploadFile,
+} = require("../utils/upload-paths");
+const { uploadImageFileToStorage } = require("../utils/image-storage");
+const { buildEbookCoverPrompt } = require("../utils/book-image-prompts");
+const {
+  ensureChapterImageInContent,
+  normalizeChapterImages,
+  removeMissingUploadImageMarkdown,
+} = require("../utils/chapter-image-markdown");
+const {
+  generateGeminiImage,
+  normalizeAspectRatio,
+  normalizeImageModel,
+  normalizeImageSize,
+} = require("../utils/gemini-image.generator");
+const {
+  migrateBookImagesToStorage,
+  migrateChapterPayloadImagesToStorage,
+} = require("../utils/image-asset-migration");
+
+async function normalizeChapterPayloads(chapters = []) {
+  if (!Array.isArray(chapters)) return [];
+
+  return Promise.all(
+    chapters.map(async (chapter) => {
+      const migrated = await migrateChapterPayloadImagesToStorage(chapter);
+      const normalizedChapter = {
+        ...migrated.chapter,
+        images: normalizeChapterImages(migrated.chapter.images, {
+          requireExisting: true,
+        }),
+      };
+
+      normalizedChapter.content = removeMissingUploadImageMarkdown(
+        normalizedChapter.content || ""
+      );
+      normalizedChapter.content = ensureChapterImageInContent(normalizedChapter);
+
+      return normalizedChapter;
+    })
+  );
+}
+
+function isEnabled(value) {
+  return value === true || value === "true" || value === 1 || value === "1";
+}
+
+async function generateInitialCover(book, payload = {}) {
+  const finalPrompt = buildEbookCoverPrompt({
+    book,
+    customPrompt:
+      typeof payload.coverPrompt === "string" ? payload.coverPrompt.slice(0, 4000) : "",
+  });
+  const image = await generateGeminiImage({
+    prompt: finalPrompt,
+    model: normalizeImageModel(payload.coverModel),
+    aspectRatio: normalizeAspectRatio(payload.coverAspectRatio, "2:3"),
+    imageSize: normalizeImageSize(payload.coverImageSize),
+  });
+
+  book.coverImage = image.url;
+  book.coverGeneration = {
+    prompt: finalPrompt,
+    model: image.model,
+    aspectRatio: image.aspectRatio,
+    imageSize: image.imageSize,
+    source: "gemini",
+    createdAt: new Date(),
+  };
+
+  return image;
+}
+
+async function repairBookChapterImageMarkdown(book) {
+  let changed = await migrateBookImagesToStorage(book);
+
+  (book.chapters || []).forEach((chapter) => {
+    const previousImageUrls = (chapter.images || [])
+      .map((image) => image?.url)
+      .filter(Boolean)
+      .join("|");
+    const nextImages = normalizeChapterImages(chapter.images, {
+      requireExisting: true,
+    });
+    const nextImageUrls = nextImages
+      .map((image) => image?.url)
+      .filter(Boolean)
+      .join("|");
+    const nextContent = ensureChapterImageInContent({
+      title: chapter.title,
+      content: removeMissingUploadImageMarkdown(chapter.content || ""),
+      images: nextImages,
+    });
+
+    if (nextImageUrls !== previousImageUrls) {
+      chapter.images = nextImages;
+      changed = true;
+    }
+
+    if (nextContent !== (chapter.content || "")) {
+      chapter.content = nextContent;
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    book.markModified("coverImage");
+    book.markModified("chapters");
+    await book.save();
+  }
+
+  return book;
+}
+
+function deleteChapterImages(book) {
+  (book.chapters || []).forEach((chapter) => {
+    (chapter.images || []).forEach((image) => {
+      if (image?.url) {
+        deleteUploadFile(image.url);
+      }
+    });
+  });
+}
 
 async function getBooks(req, res) {
   try {
     const books = await Book.find({ userId: req.user.id }).sort({
       createdAt: -1,
     });
+
+    for (const book of books) {
+      await repairBookChapterImageMarkdown(book);
+    }
 
     return res.status(200).json({
       message: "User's books retrieved successfully!",
@@ -16,7 +144,11 @@ async function getBooks(req, res) {
   } catch (error) {
     console.error("Error getting books:", error);
 
-    return res.status(500).json({ error: "Internal Server Error!" });
+    return res
+      .status(error.statusCode || 500)
+      .json({
+        error: error.statusCode ? error.message : "Internal Server Error!",
+      });
   }
 }
 
@@ -37,6 +169,8 @@ async function getBookById(req, res) {
         .json({ error: "Forbidden: You don't have access to this book!" });
     }
 
+    await repairBookChapterImageMarkdown(book);
+
     return res.status(200).json({
       message: "Book retrieved successfully!",
       book,
@@ -49,13 +183,32 @@ async function getBookById(req, res) {
       return res.status(400).json({ error: "Invalid book ID format!" });
     }
 
-    return res.status(500).json({ error: "Internal Server Error!" });
+    return res
+      .status(error.statusCode || 500)
+      .json({
+        error: error.statusCode ? error.message : "Internal Server Error!",
+      });
   }
 }
 
 async function createBook(req, res) {
   try {
-    const { title, subtitle, author, chapters } = req.body;
+    const {
+      title,
+      subtitle,
+      author,
+      chapters,
+      genre,
+      audience,
+      language,
+      targetWordCount,
+      generation,
+      generateCover,
+      coverPrompt,
+      coverModel,
+      coverAspectRatio,
+      coverImageSize,
+    } = req.body;
 
     // Validate required fields
     if (!title || !author) {
@@ -67,12 +220,34 @@ async function createBook(req, res) {
       title,
       subtitle,
       author,
-      chapters: chapters || [],
+      genre,
+      audience,
+      language,
+      targetWordCount,
+      generation,
+      chapters: await normalizeChapterPayloads(chapters || []),
     });
+    let coverError = "";
+
+    if (isEnabled(generateCover)) {
+      try {
+        await generateInitialCover(book, {
+          coverPrompt,
+          coverModel,
+          coverAspectRatio,
+          coverImageSize,
+        });
+        await book.save();
+      } catch (error) {
+        coverError = error.message;
+        console.warn("Initial cover generation failed:", error);
+      }
+    }
 
     return res.status(201).json({
       message: "Book created successfully!",
       book,
+      ...(coverError && { coverError }),
     });
   } catch (error) {
     console.error("Error creating book:", error);
@@ -102,9 +277,16 @@ async function updateBookContent(req, res) {
       title: req.body.title,
       subtitle: req.body.subtitle,
       author: req.body.author,
-      chapters: req.body.chapters,
+      chapters:
+        req.body.chapters === undefined
+          ? undefined
+          : await normalizeChapterPayloads(req.body.chapters),
+      genre: req.body.genre,
+      audience: req.body.audience,
+      language: req.body.language,
+      targetWordCount: req.body.targetWordCount,
+      generation: req.body.generation,
       status: req.body.status,
-      coverImage: req.body.coverImage,
     };
 
     // remove undefined fields to avoid overwriting with undefined
@@ -152,6 +334,8 @@ async function updateBookCover(req, res) {
       return res.status(400).json({ error: "No image file provided!" });
     }
 
+    assertUploadedImageFile(req.file);
+
     const book = await Book.findById(bookId);
 
     if (!book) {
@@ -171,17 +355,22 @@ async function updateBookCover(req, res) {
         .json({ error: "Forbidden: You cannot update this book cover!" });
     }
 
-    // Delete old cover image if it exists
-    if (book.coverImage) {
-      const oldImagePath = path.join(__dirname, "../../", book.coverImage);
+    const storedCoverUrl = await uploadImageFileToStorage(
+      req.file.path,
+      req.file.filename,
+      req.file.mimetype
+    );
 
-      if (fs.existsSync(oldImagePath)) {
-        fs.unlinkSync(oldImagePath);
-      }
+    // Delete old local cover image if it exists. Remote Spaces assets stay public.
+    if (book.coverImage) {
+      deleteUploadFile(book.coverImage);
     }
 
-    // Save relative path from backend root
-    book.coverImage = `/uploads/${req.file.filename}`;
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    book.coverImage = storedCoverUrl;
     const updatedBook = await book.save();
 
     return res.status(200).json({
@@ -201,7 +390,11 @@ async function updateBookCover(req, res) {
       return res.status(400).json({ error: "Invalid book ID format!" });
     }
 
-    return res.status(500).json({ error: "Internal Server Error!" });
+    return res
+      .status(error.statusCode || 500)
+      .json({
+        error: error.statusCode ? error.message : "Internal Server Error!",
+      });
   }
 }
 
@@ -224,12 +417,10 @@ async function deleteBook(req, res) {
 
     // Delete cover image if it exists
     if (book.coverImage) {
-      const imagePath = path.join(__dirname, "../../", book.coverImage);
-
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
+      deleteUploadFile(book.coverImage);
     }
+
+    deleteChapterImages(book);
 
     await book.deleteOne();
 

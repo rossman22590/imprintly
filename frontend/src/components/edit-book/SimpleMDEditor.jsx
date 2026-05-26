@@ -1,10 +1,57 @@
 import { useState, useEffect } from "react";
-import { TypeOutline, Eye, EyeOff } from "lucide-react";
+import { Sparkles, TypeOutline } from "lucide-react";
 import MDEditor, { commands } from "@uiw/react-md-editor";
 import rehypeSanitize from "rehype-sanitize";
 
-function SimpleMDEditor({ value, onChange, options }) {
+function findImageCommandAtCursor(content = "", cursorPosition = 0) {
+  const safeCursor = Math.max(0, Math.min(cursorPosition, content.length));
+  const lineStart = content.lastIndexOf("\n", safeCursor - 1) + 1;
+  const nextLineBreak = content.indexOf("\n", safeCursor);
+  const lineEnd = nextLineBreak === -1 ? content.length : nextLineBreak;
+  const commandText = content.slice(lineStart, lineEnd);
+  const match = commandText.match(
+    /^\s*\/generate\s+image(?:\s+of)?\s+(.{2,})\s*$/i
+  );
+
+  if (!match) return null;
+
+  return {
+    commandText,
+    end: lineEnd,
+    prompt: match[1].trim(),
+    sourceContent: content,
+    start: lineStart,
+  };
+}
+
+function SimpleMDEditor({
+  value,
+  onChange,
+  options,
+  isGeneratingImageCommand = false,
+  onGenerateImageCommand,
+}) {
   const [isLargeScreen, setIsLargeScreen] = useState(false);
+  const [imageCommand, setImageCommand] = useState(null);
+  const { textareaProps: externalTextareaProps = {}, ...editorOptions } =
+    options || {};
+
+  const updateImageCommand = (event) => {
+    const textarea = event.currentTarget;
+    const nextCommand = findImageCommandAtCursor(
+      textarea.value,
+      textarea.selectionStart
+    );
+
+    setImageCommand(nextCommand);
+  };
+
+  const handleGenerateImageCommand = async () => {
+    if (!imageCommand || !onGenerateImageCommand) return;
+
+    await onGenerateImageCommand(imageCommand);
+    setImageCommand(null);
+  };
 
   // Listen for screen resize to handle responsive layout logic
   useEffect(() => {
@@ -24,6 +71,19 @@ function SimpleMDEditor({ value, onChange, options }) {
   // If small screen: Toggle between "preview" (full preview) and "edit" (full edit) based on button state
   const editorMode = isLargeScreen ? "live" : "edit";
 
+  const handleEditorChange = (nextValue) => {
+    onChange(nextValue);
+
+    setImageCommand((currentCommand) => {
+      if (!currentCommand) return null;
+
+      return nextValue.slice(currentCommand.start, currentCommand.end) ===
+        currentCommand.commandText
+        ? currentCommand
+        : null;
+    });
+  };
+
   return (
     <div
       className="border border-slate-200 rounded-lg shadow-sm overflow-hidden h-full flex flex-col"
@@ -36,9 +96,27 @@ function SimpleMDEditor({ value, onChange, options }) {
             <span className="font-medium">Markdown Editor</span>
           </div>
 
-          <span className="text-[10px] sm:text-xs text-slate-400">
-            Supports code highlighting
-          </span>
+          {imageCommand ? (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <span className="max-w-full sm:max-w-80 truncate text-[11px] sm:text-xs text-violet-700 font-medium">
+                {imageCommand.prompt}
+              </span>
+
+              <button
+                type="button"
+                onClick={handleGenerateImageCommand}
+                disabled={isGeneratingImageCommand}
+                className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-violet-600 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Sparkles className="size-3.5" />
+                {isGeneratingImageCommand ? "Generating" : "Generate"}
+              </button>
+            </div>
+          ) : (
+            <span className="text-[10px] sm:text-xs text-slate-400">
+              Type /generate image of ... to insert art here
+            </span>
+          )}
         </div>
       </header>
 
@@ -46,10 +124,10 @@ function SimpleMDEditor({ value, onChange, options }) {
       <div className="flex-1 overflow-hidden">
         <MDEditor
           value={value}
-          onChange={onChange}
+          onChange={handleEditorChange}
           height="100%"
           preview={editorMode}
-          {...options}
+          {...editorOptions}
           previewOptions={{
             rehypePlugins: [[rehypeSanitize]],
           }}
@@ -70,8 +148,21 @@ function SimpleMDEditor({ value, onChange, options }) {
             commands.checkedListCommand,
           ]}
           textareaProps={{
+            ...externalTextareaProps,
             placeholder:
               "Start writing your chapter content here...\n\nTip: Use ```language to create code blocks with syntax highlighting",
+            onClick: (event) => {
+              externalTextareaProps.onClick?.(event);
+              updateImageCommand(event);
+            },
+            onKeyUp: (event) => {
+              externalTextareaProps.onKeyUp?.(event);
+              updateImageCommand(event);
+            },
+            onSelect: (event) => {
+              externalTextareaProps.onSelect?.(event);
+              updateImageCommand(event);
+            },
           }}
         />
       </div>

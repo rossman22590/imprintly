@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Outlet } from "react-router";
 import {
   BookPage,
   DashboardPage,
@@ -15,6 +15,7 @@ import PublicRoute from "./PublicRoute";
 const router = createBrowserRouter([
   {
     path: "/",
+    element: <Outlet />,
     // root error boundary catches all errors
     errorElement: <ErrorPage />,
     children: [

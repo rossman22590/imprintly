@@ -8,8 +8,15 @@ const {
   ImageRun,
 } = require("docx");
 const MarkdownIt = require("markdown-it");
-const path = require("path");
 const fs = require("fs");
+const {
+  collectInlineImages,
+  getChapterMarkdownForExport,
+  inlineTextWithoutImages,
+  normalizeMarkdownForExport,
+  prepareExportImages,
+  resolveExportImagePath,
+} = require("./export-markdown");
 
 const md = new MarkdownIt();
 
@@ -38,8 +45,9 @@ const DOCX_CONFIG = {
     heading: "1a202c",
     body: "000000",
     code: "d63384",
-    codeBlock: "e2e8f0",
-    codeBg: "1e293b",
+    codeBlock: "0f172a",
+    codeBg: "f8fafc",
+    codeBorder: "cbd5e1",
     inlineCodeBg: "f1f5f9",
   },
   spacing: {
@@ -145,12 +153,52 @@ function processInlineContent(content) {
       ];
 }
 
+function createImageParagraph(src, alt = "", options = {}) {
+  const imagePath = resolveExportImagePath(src);
+
+  if (!imagePath) {
+    return alt
+      ? new Paragraph({
+          children: [
+            new TextRun({
+              text: `[Image unavailable: ${alt}]`,
+              font: DOCX_CONFIG.fonts.body,
+              size: 18,
+              italics: true,
+              color: "64748b",
+            }),
+          ],
+          spacing: { before: 100, after: 200 },
+        })
+      : null;
+  }
+
+  try {
+    return new Paragraph({
+      children: [
+        new ImageRun({
+          data: fs.readFileSync(imagePath),
+          transformation: {
+            width: options.width || 500,
+            height: options.height || 281,
+          },
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 200, after: 300 },
+    });
+  } catch (error) {
+    console.error(`Could not embed DOCX image: ${imagePath}`, error);
+    return null;
+  }
+}
+
 function processMdContent(mdContent) {
   if (!mdContent || mdContent.trim() === "") {
     return [];
   }
 
-  const tokens = md.parse(mdContent, {});
+  const tokens = md.parse(normalizeMarkdownForExport(mdContent), {});
   const paragraphs = [];
   let i = 0;
 
@@ -202,59 +250,66 @@ function processMdContent(mdContent) {
 
       // Handle code blocks
       if (token.type === "fence" || token.type === "code_block") {
-        // Add language label if present
-        if (token.info && token.info.trim()) {
-          paragraphs.push(
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: `Language: ${token.info.trim()}`,
-                  font: DOCX_CONFIG.fonts.body,
-                  size: 16,
-                  color: "64748b",
-                  italics: true,
-                }),
-              ],
-              spacing: { before: 100, after: 50 },
-            })
-          );
-        }
-
         const codeLines = token.content
-          .split("\n")
-          .filter((line) => line.trim());
+          .replace(/\n$/, "")
+          .split("\n");
+        const children = codeLines.map((line, index) => {
+          const runOptions = {
+            text: line || " ",
+            font: DOCX_CONFIG.fonts.code,
+            size: DOCX_CONFIG.sizes.code * 2,
+            color: DOCX_CONFIG.colors.codeBlock,
+          };
 
-        codeLines.forEach((line) => {
-          paragraphs.push(
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: line || " ",
-                  font: DOCX_CONFIG.fonts.code,
-                  size: DOCX_CONFIG.sizes.code * 2,
-                  color: DOCX_CONFIG.colors.codeBlock,
-                }),
-              ],
-              spacing: {
-                before: 50,
-                after: 50,
-                line: 276,
-              },
-              shading: {
-                fill: DOCX_CONFIG.colors.codeBg,
-                type: "clear",
-              },
-              indent: {
-                left: 360,
-              },
-            })
-          );
+          if (index > 0) {
+            runOptions.break = 1;
+          }
+
+          return new TextRun(runOptions);
         });
 
         paragraphs.push(
           new Paragraph({
-            text: "",
-            spacing: { after: 200 },
+            children,
+            spacing: {
+              before: 180,
+              after: 240,
+              line: 276,
+            },
+            shading: {
+              fill: DOCX_CONFIG.colors.codeBg,
+              type: "clear",
+            },
+            border: {
+              top: {
+                color: DOCX_CONFIG.colors.codeBorder,
+                space: 6,
+                style: "single",
+                size: 4,
+              },
+              bottom: {
+                color: DOCX_CONFIG.colors.codeBorder,
+                space: 6,
+                style: "single",
+                size: 4,
+              },
+              left: {
+                color: DOCX_CONFIG.colors.codeBorder,
+                space: 6,
+                style: "single",
+                size: 4,
+              },
+              right: {
+                color: DOCX_CONFIG.colors.codeBorder,
+                space: 6,
+                style: "single",
+                size: 4,
+              },
+            },
+            indent: {
+              left: 240,
+              right: 240,
+            },
           })
         );
 
@@ -266,8 +321,23 @@ function processMdContent(mdContent) {
       if (token.type === "paragraph_open") {
         const nextToken = tokens[i + 1];
 
-        if (nextToken && nextToken.type === "inline" && nextToken.content) {
-          const textRuns = processInlineContent(nextToken.content);
+        if (nextToken && nextToken.type === "inline") {
+          const images = collectInlineImages(nextToken);
+          const textContent = images.length
+            ? inlineTextWithoutImages(nextToken).trim()
+            : nextToken.content;
+
+          images.forEach((image) => {
+            const imageParagraph = createImageParagraph(image.src, image.alt);
+
+            if (imageParagraph) {
+              paragraphs.push(imageParagraph);
+            }
+          });
+
+          const textRuns = textContent
+            ? processInlineContent(textContent)
+            : [];
 
           if (textRuns.length > 0) {
             paragraphs.push(
@@ -306,7 +376,7 @@ function processMdContent(mdContent) {
                   new Paragraph({
                     children: [
                       new TextRun({
-                        text: "• ",
+                        text: "- ",
                         bold: true,
                         font: DOCX_CONFIG.fonts.body,
                         size: DOCX_CONFIG.sizes.body * 2,
@@ -383,15 +453,16 @@ function processMdContent(mdContent) {
 
 // GENERATE COMPLETE DOCX FILE
 async function generateDocx(book) {
+  await prepareExportImages(book);
+
   const sections = [];
 
   // COVER PAGE
   if (book.coverImage && !book.coverImage.includes("pravatar")) {
-    const rel = book.coverImage.replace(/^\//, "");
-    const imagePath = path.join(__dirname, "../../", rel);
+    const imagePath = resolveExportImagePath(book.coverImage);
 
     try {
-      if (fs.existsSync(imagePath)) {
+      if (imagePath) {
         const imageBuffer = fs.readFileSync(imagePath);
 
         sections.push(new Paragraph({ text: "", spacing: { before: 1000 } }));
@@ -419,10 +490,10 @@ async function generateDocx(book) {
           })
         );
       } else {
-        console.warn(`DOCX cover image not found at path: ${imagePath}`);
+        console.warn(`DOCX cover image not found: ${book.coverImage}`);
       }
     } catch (imgErr) {
-      console.error(`Could not embed cover image: ${imagePath}`, imgErr);
+      console.error(`Could not embed cover image: ${book.coverImage}`, imgErr);
     }
   }
 
@@ -521,7 +592,9 @@ async function generateDocx(book) {
         })
       );
 
-      const contentParagraphs = processMdContent(chapter.content || "");
+      const contentParagraphs = processMdContent(
+        getChapterMarkdownForExport(chapter)
+      );
       sections.push(...contentParagraphs);
     } catch (chapterErr) {
       console.error(`Error processing chapter ${index + 1}:`, chapterErr);

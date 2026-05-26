@@ -55,7 +55,7 @@ function Footer() {
               </span>
 
               <span className="text-lg sm:text-xl font-semibold tracking-tight">
-                Imprintly
+                Bookify
               </span>
             </a>
 
@@ -133,7 +133,7 @@ function Footer() {
         <div className="border-t border-white/10 py-6 sm:py-8">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-y-3 sm:gap-y-0">
             <p className="text-gray-400 text-xs sm:text-sm text-center sm:text-left">
-              &copy; {new Date().getFullYear()} Imprintly. All rights reserved.
+              &copy; {new Date().getFullYear()} Bookify. All rights reserved.
             </p>
 
             <p className="text-gray-500 text-xs sm:text-sm flex items-center gap-x-1.5">

@@ -2,6 +2,8 @@ const router = require("express").Router();
 const { authenticate } = require("../middlewares/auth.middleware");
 const {
   exportAsDocx,
+  exportAsEpub,
+  exportAsMarkdown,
   exportAsPdf,
 } = require("../controllers/exports.controller");
 
@@ -9,6 +11,8 @@ const {
 router.use(authenticate);
 
 router.get("/:bookId/docx", exportAsDocx);
+router.get("/:bookId/epub", exportAsEpub);
+router.get("/:bookId/markdown", exportAsMarkdown);
 router.get("/:bookId/pdf", exportAsPdf);
 
 module.exports = router;

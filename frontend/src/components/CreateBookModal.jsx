@@ -4,16 +4,20 @@ import Modal from "./ui/Modal";
 import Input from "./ui/Input";
 import {
   ArrowLeft,
+  Bot,
   BookOpen,
+  FileText,
   Hash,
+  Image as ImageIcon,
   Lightbulb,
   Palette,
   Plus,
   Sparkles,
   Trash2,
+  Users,
 } from "lucide-react";
 import Select from "./ui/Select";
-import { WRITING_STYLES } from "../utils/constants";
+import { AI_PROVIDERS, BOOK_GENRES, WRITING_STYLES } from "../utils/constants";
 import Button from "./ui/Button";
 import toast from "react-hot-toast";
 import axiosInstance from "../lib/axios";
@@ -26,21 +30,39 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   const [chapters, setChapters] = useState([]);
   const [topic, setTopic] = useState("");
   const [writingStyle, setWritingStyle] = useState(WRITING_STYLES[0]);
+  const [aiProvider, setAiProvider] = useState("groq");
+  const [bookGenre, setBookGenre] = useState(BOOK_GENRES[0]);
+  const [audience, setAudience] = useState("General readers");
+  const [generateCover, setGenerateCover] = useState(true);
+  const [includeImages, setIncludeImages] = useState(false);
+  const [generationStats, setGenerationStats] = useState(null);
+  const [generationJob, setGenerationJob] = useState(null);
   const [isGeneratingOutline, setIsGeneratingOutline] = useState(false);
+  const [isGeneratingFullBook, setIsGeneratingFullBook] = useState(false);
   const [isFinalisingBook, setIsFinalisingBook] = useState(false);
 
   const chaptersContainerRef = useRef(null);
+  const activePollRef = useRef(null);
 
   const { user } = useAuthContext();
 
   const resetModal = () => {
+    activePollRef.current = null;
     setStep(1);
     setBookTitle("");
     setChapterCount(5);
     setChapters([]);
     setTopic("");
     setWritingStyle(WRITING_STYLES[0]);
+    setAiProvider("groq");
+    setBookGenre(BOOK_GENRES[0]);
+    setAudience("General readers");
+    setGenerateCover(true);
+    setIncludeImages(false);
+    setGenerationStats(null);
+    setGenerationJob(null);
     setIsGeneratingOutline(false);
+    setIsGeneratingFullBook(false);
     setIsFinalisingBook(false);
   };
 
@@ -60,14 +82,18 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
 
     try {
       const {
-        data: { outline },
+        data: { outline, generation },
       } = await axiosInstance.post(API_ENDPOINTS.AI.GENERATE_OUTLINE, {
         topic: bookTitle,
         description: topic || "",
         style: writingStyle,
         chapterCount: validChapterCount,
+        provider: aiProvider,
+        genre: bookGenre,
+        audience,
       });
       setChapters(outline);
+      setGenerationStats(generation || null);
       setStep(2);
       toast.success("Outline generated! Review and edit chapters if needed.");
     } catch (error) {
@@ -112,24 +138,159 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setIsFinalisingBook(true);
 
     try {
-      const {
-        data: { book },
-      } = await axiosInstance.post(API_ENDPOINTS.BOOKS.CREATE, {
+      const { data } = await axiosInstance.post(API_ENDPOINTS.BOOKS.CREATE, {
         title: bookTitle,
         author: user?.name || "Unknown Author",
+        genre: bookGenre,
+        audience,
         chapters,
+        generation: {
+          provider: aiProvider,
+          status: "outline",
+          style: writingStyle,
+          ...(generationStats || {}),
+        },
+        generateCover,
       });
-      toast.success("eBook created successfully!");
+      const { book } = data;
+
+      toast.success(
+        book.coverImage
+          ? "Book draft and cover created successfully!"
+          : "Book draft created successfully!"
+      );
+      if (data.coverError) {
+        toast.error(`Cover generation failed: ${data.coverError}`);
+      }
       onBookCreate(book._id);
       onClose();
       resetModal();
     } catch (error) {
-      console.error("Error while creating eBook:", error);
-      toast.error(error.response?.data?.message || "Failed to create eBook!");
+      console.error("Error while creating book:", error);
+      toast.error(error.response?.data?.message || "Failed to create book!");
     } finally {
       setIsFinalisingBook(false);
     }
   };
+
+  const pollFullBookJob = async (jobId) => {
+    const pollKey = Symbol(jobId);
+    activePollRef.current = pollKey;
+
+    while (activePollRef.current === pollKey) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      if (activePollRef.current !== pollKey) return;
+
+      let response;
+
+      try {
+        response = await axiosInstance.get(
+          `${API_ENDPOINTS.AI.FULL_BOOK_JOBS}/${jobId}`
+        );
+      } catch (error) {
+        if (activePollRef.current !== pollKey) return;
+
+        setIsGeneratingFullBook(false);
+        activePollRef.current = null;
+        toast.error(
+          error.response?.status === 404
+            ? "Generation was interrupted. Start a new full-book generation."
+            : "Lost generation progress. Please try again."
+        );
+        return;
+      }
+
+      const {
+        data: { job, book },
+      } = response;
+
+      setGenerationJob(job);
+
+      if (["complete", "failed", "cancelled"].includes(job.status)) {
+        setIsGeneratingFullBook(false);
+        activePollRef.current = null;
+
+        if (book && job.status !== "cancelled") {
+          toast.success(
+            job.status === "complete"
+              ? "Full AI book generated!"
+              : "Book generated with failed chapters."
+          );
+          onBookCreate(book._id);
+          onClose();
+          resetModal();
+        } else if (job.status === "cancelled") {
+          toast("Generation cancelled.");
+        }
+
+        return;
+      }
+    }
+  };
+
+  const handleGenerateFullBook = async () => {
+    if (chapters.length === 0) {
+      toast.error("Generate or add at least one chapter first.", {
+        duration: 5000,
+      });
+
+      return;
+    }
+
+    setIsGeneratingFullBook(true);
+
+    try {
+      const {
+        data: { job },
+      } = await axiosInstance.post(
+        API_ENDPOINTS.AI.FULL_BOOK_JOBS,
+        {
+          title: bookTitle,
+          author: user?.name || "Unknown Author",
+          topic: bookTitle,
+          description: topic || "",
+          style: writingStyle,
+          chapterCount: chapters.length,
+          genre: bookGenre,
+          audience,
+          outline: chapters,
+          provider: aiProvider,
+          generateCover,
+          includeImages,
+        }
+      );
+
+      setGenerationJob(job);
+      toast.success("Generation job started.");
+      await pollFullBookJob(job.id);
+    } catch (error) {
+      console.error("Error generating full book:", error);
+      toast.error(
+        error.response?.data?.error || "Failed to generate the full book."
+      );
+      setIsGeneratingFullBook(false);
+    }
+  };
+
+  const handleCancelGeneration = async () => {
+    if (!generationJob?.id) return;
+
+    try {
+      const {
+        data: { job },
+      } = await axiosInstance.delete(
+        `${API_ENDPOINTS.AI.FULL_BOOK_JOBS}/${generationJob.id}`
+      );
+
+      setGenerationJob(job);
+    } catch (error) {
+      console.error("Error cancelling generation:", error);
+      toast.error("Failed to cancel generation.");
+    }
+  };
+
+  const outlineStats = generationStats?.stats;
 
   useEffect(() => {
     if (step === 2 && chaptersContainerRef.current) {
@@ -141,6 +302,12 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     }
   }, [step, chapters.length]);
 
+  useEffect(() => {
+    return () => {
+      activePollRef.current = null;
+    };
+  }, []);
+
   return (
     <Modal
       isOpen={isOpen}
@@ -148,7 +315,8 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
         onClose();
         resetModal();
       }}
-      title="Create New eBook"
+      sizeClassName="max-w-[min(64rem,calc(100vw-1rem))]"
+      title="Create AI Book"
     >
       {step === 1 && (
         <div className="space-y-4 md:space-y-5">
@@ -179,7 +347,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
             icon={BookOpen}
             label="Book Title"
             required
-            placeholder="What should we call your eBook?"
+            placeholder="What should we call your book?"
           />
 
           <Input
@@ -234,6 +402,106 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
             label="Writing Style"
           />
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Select
+              value={aiProvider}
+              onChange={(event) => setAiProvider(event.target.value)}
+              options={AI_PROVIDERS}
+              icon={Bot}
+              label="AI Provider"
+            />
+
+            <Select
+              value={bookGenre}
+              onChange={(event) => setBookGenre(event.target.value)}
+              options={BOOK_GENRES}
+              icon={FileText}
+              label="Book Type"
+            />
+          </div>
+
+          <Input
+            type="text"
+            value={audience}
+            onChange={(event) => setAudience(event.target.value)}
+            icon={Users}
+            label="Audience"
+            placeholder="General readers, founders, beginners..."
+          />
+
+          <label className="flex items-center justify-between gap-4 rounded-xl border border-violet-200 bg-violet-50/60 px-4 py-3 cursor-pointer">
+            <span className="flex items-start gap-3 min-w-0">
+              <span className="size-9 rounded-lg bg-white text-violet-700 flex items-center justify-center shrink-0 shadow-sm">
+                <Sparkles className="size-4" />
+              </span>
+
+              <span className="min-w-0">
+                <span className="block text-violet-950 text-sm font-semibold">
+                  Generate cover on creation
+                </span>
+                <span className="block text-violet-700 text-xs mt-1">
+                  Creates a durable ebook cover before opening the new book.
+                </span>
+              </span>
+            </span>
+
+            <input
+              type="checkbox"
+              checked={generateCover}
+              onChange={(event) => setGenerateCover(event.target.checked)}
+              className="sr-only"
+            />
+
+            <span
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                generateCover ? "bg-violet-600" : "bg-slate-200"
+              }`}
+            >
+              <span
+                className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+                  generateCover ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+          </label>
+
+          <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 cursor-pointer">
+            <span className="flex items-start gap-3 min-w-0">
+              <span className="size-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                <ImageIcon className="size-4" />
+              </span>
+
+              <span className="min-w-0">
+                <span className="block text-slate-900 text-sm font-semibold">
+                  Add chapter images
+                </span>
+                <span className="block text-slate-500 text-xs mt-1">
+                  When generating the full book, Bookify will create one
+                  relevant inline image per chapter.
+                </span>
+              </span>
+            </span>
+
+            <input
+              type="checkbox"
+              checked={includeImages}
+              onChange={(event) => setIncludeImages(event.target.checked)}
+              className="sr-only"
+            />
+
+            <span
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                includeImages ? "bg-violet-600" : "bg-slate-200"
+              }`}
+            >
+              <span
+                className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+                  includeImages ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+          </label>
+
           {/* Action button */}
           <div className="pt-3 md:pt-4 flex justify-end">
             <Button
@@ -280,10 +548,84 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
             </span>
           </section>
 
+          {outlineStats && (
+            <section className="grid grid-cols-3 gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <div>
+                <p className="text-[11px] uppercase text-slate-400 font-semibold">
+                  Speed
+                </p>
+                <p className="text-slate-900 text-sm font-semibold">
+                  {Number(outlineStats.outputTokensPerSecond || 0).toFixed(1)}{" "}
+                  T/s
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[11px] uppercase text-slate-400 font-semibold">
+                  Time
+                </p>
+                <p className="text-slate-900 text-sm font-semibold">
+                  {Number(outlineStats.totalTime || 0).toFixed(2)}s
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[11px] uppercase text-slate-400 font-semibold">
+                  Tokens
+                </p>
+                <p className="text-slate-900 text-sm font-semibold">
+                  {outlineStats.totalTokens || 0}
+                </p>
+              </div>
+            </section>
+          )}
+
+          {generationJob && (
+            <section className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-emerald-950 text-sm font-semibold capitalize">
+                    {generationJob.status}
+                  </p>
+                  <p className="text-emerald-800 text-xs">
+                    {generationJob.progress?.message || "Generating"}
+                  </p>
+                </div>
+
+                {isGeneratingFullBook && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleCancelGeneration}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+
+              <div className="mt-3 h-2 bg-white rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 transition-all"
+                  style={{
+                    width: `${
+                      generationJob.progress?.total
+                        ? ((generationJob.progress.completed +
+                            generationJob.progress.failed) /
+                            generationJob.progress.total) *
+                          100
+                        : 5
+                    }%`,
+                  }}
+                />
+              </div>
+            </section>
+          )}
+
           {/* Chapters list */}
           <div
             ref={chaptersContainerRef}
-            className="space-y-3 max-h-80 md:max-h-96 overflow-y-auto pr-1"
+            className="space-y-3 max-h-[min(20rem,34dvh)] md:max-h-[min(24rem,38dvh)] overflow-y-auto pr-1"
           >
             {chapters.length === 0 ? (
               <div className="bg-gray-50 text-center rounded-xl px-4 py-10 md:py-12">
@@ -347,8 +689,104 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
             )}
           </div>
 
+          <section className="border-t border-gray-100 pt-4 md:pt-5">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="border border-slate-200 rounded-xl p-4 md:p-5 bg-white flex flex-col gap-4 min-w-0">
+                <div className="flex items-start gap-3">
+                  <div className="size-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                    <FileText className="size-4" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <h4 className="text-slate-900 text-sm font-semibold">
+                      Start with an outline draft
+                    </h4>
+                    <p className="text-slate-500 text-xs mt-1 leading-relaxed">
+                      Saves the chapter plan so you can edit structure before
+                      writing chapter content.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 cursor-pointer">
+                  <span className="text-slate-800 text-sm font-medium">
+                    Generate cover
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={generateCover}
+                    onChange={(event) => setGenerateCover(event.target.checked)}
+                    className="size-4 accent-violet-600"
+                  />
+                </label>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleFinaliseBook}
+                  isLoading={isFinalisingBook}
+                  className="w-full"
+                >
+                  Create Outline Draft
+                </Button>
+              </div>
+
+              <div className="border border-violet-200 rounded-xl p-4 md:p-5 bg-violet-50/60 flex flex-col gap-4 min-w-0">
+                <div className="flex items-start gap-3">
+                  <div className="size-9 rounded-lg bg-white text-violet-700 flex items-center justify-center shrink-0 shadow-sm">
+                    <Sparkles className="size-4" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <h4 className="text-violet-950 text-sm font-semibold">
+                      Generate the full book now
+                    </h4>
+                    <p className="text-violet-700 text-xs mt-1 leading-relaxed">
+                      Fills every chapter with the selected provider and tracks
+                      progress while it runs.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg bg-white/70 border border-violet-100 px-3 py-2 cursor-pointer">
+                  <span className="text-violet-950 text-sm font-medium">
+                    Generate cover
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={generateCover}
+                    onChange={(event) => setGenerateCover(event.target.checked)}
+                    className="size-4 accent-violet-600"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg bg-white/70 border border-violet-100 px-3 py-2 cursor-pointer">
+                  <span className="text-violet-950 text-sm font-medium">
+                    Include chapter images
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={includeImages}
+                    onChange={(event) => setIncludeImages(event.target.checked)}
+                    className="size-4 accent-violet-600"
+                  />
+                </label>
+
+                <Button
+                  type="button"
+                  onClick={handleGenerateFullBook}
+                  isLoading={isGeneratingFullBook}
+                  icon={Sparkles}
+                  className="w-full"
+                >
+                  Generate Full Book
+                </Button>
+              </div>
+            </div>
+          </section>
+
           {/* Action buttons */}
-          <div className="border-t border-gray-100 pt-3 md:pt-4 flex flex-wrap justify-between items-center gap-2">
+          <div className="flex flex-wrap justify-between items-center gap-2">
             <Button
               variant="ghost"
               onClick={() => setStep(1)}
@@ -365,10 +803,6 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                 icon={Plus}
               >
                 Add Chapter
-              </Button>
-
-              <Button onClick={handleFinaliseBook} isLoading={isFinalisingBook}>
-                Create eBook
               </Button>
             </div>
           </div>

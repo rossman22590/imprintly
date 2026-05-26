@@ -45,7 +45,7 @@ function Hero() {
               <div className="bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden relative">
                 <img
                   src="/images/hero-image.png"
-                  alt="Imprintly AI eBook creation interface"
+                  alt="Bookify AI book creation interface"
                   className="w-full h-auto select-none"
                 />
               </div>
@@ -70,12 +70,12 @@ function Hero() {
             <h1 className="text-gray-900 text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight tracking-tight">
               Turn Ideas Into
               <br />
-              <span className="text-gradient">Published eBooks</span>
+              <span className="text-gradient">Published Books</span>
             </h1>
 
             {/* Subheadline */}
             <p className="text-base sm:text-lg text-gray-600 leading-relaxed">
-              Write, design, and export professional eBooks in minutes. Your
+              Write, design, and export professional books in minutes. Your
               personal publishing assistant that handles the heavy lifting.
             </p>
 
@@ -86,7 +86,7 @@ function Hero() {
                 className="bg-linear-to-r from-violet-600 to-purple-600 text-white font-semibold rounded-xl px-8 py-4 shadow-lg shadow-violet-500/30 inline-flex items-center gap-x-2 transition-all duration-200 hover:shadow-violet-500/50 hover:scale-101 focus-visible:shadow-violet-500/50 focus-visible:scale-101 group w-full sm:w-auto justify-center"
               >
                 <span>
-                  {isAuthenticated ? "Go to Dashboard" : "Make Your Imprint"}
+                  {isAuthenticated ? "Go to Dashboard" : "Create with Bookify"}
                 </span>
                 <ArrowRight className="size-5 transition-transform group-hover:translate-x-1 group-focus-visible:translate-x-1" />
               </Link>

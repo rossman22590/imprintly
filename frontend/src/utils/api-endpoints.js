@@ -2,6 +2,22 @@ export const API_BASE_URL = import.meta.env.PROD
   ? ""
   : import.meta.env.VITE_API_BASE_URL;
 
+export function resolveImageUrl(url = "") {
+  if (!url) return "";
+
+  const value = String(url).replace(/\\/g, "/");
+
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+
+  if (value.startsWith("/uploads/")) {
+    return `${API_BASE_URL || ""}${value}`;
+  }
+
+  return value;
+}
+
 export const API_ENDPOINTS = {
   AUTH: {
     REGISTER: "/api/auth/register",
@@ -24,9 +40,16 @@ export const API_ENDPOINTS = {
   AI: {
     GENERATE_OUTLINE: "/api/ai/generate-book-outline",
     GENERATE_CHAPTER_CONTENT: "/api/ai/generate-chapter-content",
+    GENERATE_COVER_IMAGE: "/api/ai/generate-cover-image",
+    GENERATE_CHAPTER_IMAGE: "/api/ai/generate-chapter-image",
+    GENERATE_FULL_BOOK: "/api/ai/generate-full-book",
+    FULL_BOOK_JOBS: "/api/ai/full-book-jobs",
+    QUALITY_TOOL: "/api/ai/quality-tool",
   },
   EXPORTS: {
     DOCX: "/api/exports",
+    EPUB: "/api/exports",
+    MARKDOWN: "/api/exports",
     PDF: "/api/exports",
   },
 };

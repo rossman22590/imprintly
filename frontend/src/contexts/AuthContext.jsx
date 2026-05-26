@@ -44,7 +44,11 @@ export function AuthContextProvider({ children }) {
       }
     } catch (error) {
       console.error("Error checking auth status:", error);
-      signOut();
+      localStorage.removeItem("token");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
+      setIsAuthenticated(false);
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
@@ -78,6 +82,7 @@ export function AuthContextProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuthContext() {
   const context = useContext(AuthContext);
 

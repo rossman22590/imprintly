@@ -40,13 +40,10 @@ function Features() {
         {/* Features grid */}
         <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
           {FEATURES.map(
-            ({
-              title,
-              icon: FeatIcon,
-              description,
-              bgGradientColors,
-              shadowColor,
-            }) => (
+            ({ title, icon, description, bgGradientColors, shadowColor }) => {
+              const FeatureIcon = icon;
+
+              return (
               <li
                 key={title}
                 className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-7 lg:p-8 transition-all duration-300 hover:border-violet-200 hover:shadow-xl hover:shadow-violet-500/10 hover:-translate-y-1 focus-within:border-violet-200 focus-within:shadow-xl focus-within:shadow-violet-500/10 focus-within:-translate-y-1 relative group"
@@ -58,7 +55,7 @@ function Features() {
                   <div
                     className={`size-12 sm:size-13 lg:size-14 bg-linear-to-br ${bgGradientColors} rounded-xl shadow-lg ${shadowColor} flex justify-center items-center transition-transform duration-300 group-hover:scale-105 group-focus-within:scale-105`}
                   >
-                    <FeatIcon className="size-6 sm:size-6.5 lg:size-7 text-white" />
+                    <FeatureIcon className="size-6 sm:size-6.5 lg:size-7 text-white" />
                   </div>
 
                   <div>
@@ -80,7 +77,8 @@ function Features() {
                   </Link>
                 </section>
               </li>
-            )
+              );
+            }
           )}
         </ul>
 

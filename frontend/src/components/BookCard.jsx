@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router";
-import { API_BASE_URL } from "../utils/api-endpoints";
+import { resolveImageUrl } from "../utils/api-endpoints";
 import { Edit, Trash2 } from "lucide-react";
 
 function BookCard({ book, onDelete }) {
@@ -8,7 +8,7 @@ function BookCard({ book, onDelete }) {
   const { _id, title, subtitle, coverImage } = book;
 
   const coverImageUrl = coverImage
-    ? `${API_BASE_URL}${coverImage}`.replace(/\\/g, "/")
+    ? resolveImageUrl(coverImage)
     : "/images/default-book-cover.png";
 
   return (

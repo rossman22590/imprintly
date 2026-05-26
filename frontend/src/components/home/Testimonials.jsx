@@ -43,7 +43,7 @@ const Testimonials = () => (
         </h2>
 
         <p className="max-w-2xl text-gray-600 text-sm sm:text-base lg:text-lg leading-relaxed mx-auto px-4">
-          Real authors, real results. See how Imprintly helped them go from
+          Real authors, real results. See how Bookify helped them go from
           aspiring to accomplished.
         </p>
       </header>
