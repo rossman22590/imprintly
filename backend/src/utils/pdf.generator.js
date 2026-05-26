@@ -216,6 +216,37 @@ function fitImage(doc, imagePath, maxWidth, maxHeight) {
   };
 }
 
+function getCoverImagePlacement(pageWidth, pageHeight, imageWidth, imageHeight) {
+  const scale = Math.max(pageWidth / imageWidth, pageHeight / imageHeight);
+  const width = imageWidth * scale;
+  const height = imageHeight * scale;
+
+  return {
+    x: (pageWidth - width) / 2,
+    y: (pageHeight - height) / 2,
+    width,
+    height,
+  };
+}
+
+function renderFullPageCover(doc, imagePath) {
+  const image = doc.openImage(imagePath);
+  const placement = getCoverImagePlacement(
+    doc.page.width,
+    doc.page.height,
+    image.width,
+    image.height
+  );
+
+  doc.save();
+  doc.rect(0, 0, doc.page.width, doc.page.height).clip();
+  doc.image(imagePath, placement.x, placement.y, {
+    width: placement.width,
+    height: placement.height,
+  });
+  doc.restore();
+}
+
 function renderImageBlock(doc, src, alt = "") {
   const imagePath = resolveExportImagePath(src);
   const availableWidth =
@@ -1853,12 +1884,7 @@ async function generatePdf(book, res) {
 
         try {
           if (imagePath) {
-            doc.image(imagePath, {
-              fit: [400, 550],
-              align: "center",
-              valign: "center",
-            });
-
+            renderFullPageCover(doc, imagePath);
             doc.addPage();
           } else {
             console.warn(`PDF cover image not found: ${book.coverImage}`);
@@ -1944,6 +1970,7 @@ async function generatePdf(book, res) {
 module.exports = {
   generatePdf,
   __private: {
+    getCoverImagePlacement,
     isDiagramCodeBlock,
     normalizeCodeTextForPdf,
     parseAsciiTableDiagram,

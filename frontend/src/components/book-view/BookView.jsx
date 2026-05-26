@@ -1,7 +1,34 @@
 import { useState } from "react";
 import BookViewSidebar from "./BookViewSidebar";
 import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
-import { formatMdContent } from "../../utils/helpers";
+import MDEditor from "@uiw/react-md-editor";
+import rehypeSanitize from "rehype-sanitize";
+import { resolveImageUrl } from "../../utils/api-endpoints";
+
+const markdownComponents = {
+  a({ href = "", children }) {
+    const isExternal = /^https?:\/\//i.test(href);
+
+    return (
+      <a
+        href={href}
+        target={isExternal ? "_blank" : undefined}
+        rel={isExternal ? "noreferrer" : undefined}
+      >
+        {children}
+      </a>
+    );
+  },
+  img({ src = "", alt = "" }) {
+    return (
+      <img
+        src={resolveImageUrl(src)}
+        alt={alt}
+        loading="lazy"
+      />
+    );
+  },
+};
 
 function BookView({ book }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -84,16 +111,19 @@ function BookView({ book }) {
         {/* Reading area */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl px-6 py-4 mx-auto">
-            <div
+            <MDEditor.Markdown
+              source={selectedChapter.content || ""}
+              rehypePlugins={[[rehypeSanitize]]}
+              components={markdownComponents}
+              wrapperElement={{ "data-color-mode": "light" }}
               style={{
+                backgroundColor: "transparent",
+                color: "inherit",
                 fontFamily: "Charter, Georgia, 'Times New Roman', serif",
                 fontSize,
                 lineHeight: 1.7,
               }}
               className="reading-content"
-              dangerouslySetInnerHTML={{
-                __html: formatMdContent(selectedChapter.content),
-              }}
             />
 
             {/* Navigation */}

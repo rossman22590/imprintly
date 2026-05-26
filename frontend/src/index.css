@@ -45,6 +45,22 @@
 
 @layer components {
   /* Book page reading content styles */
+  .reading-content.wmde-markdown {
+    @apply bg-transparent text-slate-800;
+  }
+
+  .reading-content.wmde-markdown h1 {
+    @apply text-3xl font-bold text-slate-950 mt-8 mb-6;
+  }
+
+  .reading-content.wmde-markdown h2 {
+    @apply text-2xl font-bold text-slate-950 mt-8 mb-4;
+  }
+
+  .reading-content.wmde-markdown h3 {
+    @apply text-xl font-bold text-slate-900 mt-6 mb-4;
+  }
+
   .reading-content p {
     @apply text-justify hyphens-auto mb-6;
   }
@@ -63,6 +79,64 @@
 
   .reading-content em {
     @apply italic;
+  }
+
+  .reading-content.wmde-markdown a {
+    @apply text-violet-700 underline underline-offset-4 decoration-violet-300;
+  }
+
+  .reading-content.wmde-markdown ul,
+  .reading-content.wmde-markdown ol {
+    @apply my-5 pl-8 text-slate-700;
+  }
+
+  .reading-content.wmde-markdown ul {
+    @apply list-disc;
+  }
+
+  .reading-content.wmde-markdown ol {
+    @apply list-decimal;
+  }
+
+  .reading-content.wmde-markdown li {
+    @apply mb-2 pl-1;
+  }
+
+  .reading-content.wmde-markdown blockquote {
+    @apply my-6 rounded-r-lg border-l-4 border-violet-500 bg-violet-50/70 px-4 py-3 text-slate-700 italic;
+  }
+
+  .reading-content.wmde-markdown hr {
+    @apply my-10 border-slate-200;
+  }
+
+  .reading-content.wmde-markdown img {
+    @apply my-6 block w-full max-h-[520px] rounded-lg border border-slate-200 bg-white object-contain;
+  }
+
+  .reading-content.wmde-markdown pre {
+    @apply my-6 overflow-x-auto rounded-lg bg-slate-950 p-4 text-left;
+  }
+
+  .reading-content.wmde-markdown pre code {
+    @apply bg-transparent p-0 text-sm text-slate-100;
+  }
+
+  .reading-content.wmde-markdown :not(pre) > code {
+    @apply rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-pink-600;
+  }
+
+  .reading-content.wmde-markdown table {
+    @apply my-6 w-full border-collapse text-left text-sm;
+  }
+
+  .reading-content.wmde-markdown th,
+  .reading-content.wmde-markdown td {
+    @apply border border-slate-200 px-3 py-2;
+  }
+
+  .reading-content.wmde-markdown th {
+    @apply bg-slate-50 font-semibold text-slate-900;
   }
 
   /* @uiw-react-md-editor component styles */

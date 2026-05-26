@@ -11,7 +11,17 @@ const {
   parseFlowDiagram,
   parseLinearFlowDiagram,
   parseStackDiagram,
+  getCoverImagePlacement,
 } = __private;
+
+test("scales cover images to fill the entire PDF page", () => {
+  const placement = getCoverImagePlacement(595.28, 841.89, 600, 800);
+
+  assert.equal(Math.round(placement.height), 842);
+  assert.ok(placement.width >= 595.28);
+  assert.ok(placement.x <= 0);
+  assert.ok(Math.abs(placement.y) < 0.001);
+});
 
 test("detects unicode box/tree diagrams as diagram code blocks", () => {
   const lines = [
