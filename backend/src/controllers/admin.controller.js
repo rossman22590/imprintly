@@ -13,6 +13,7 @@ const {
   ensureUserCredits,
   serializeCredits,
   serializeTransaction,
+  setMonthlyCreditAllowance,
 } = require("../utils/credits.service");
 
 function escapeRegex(value = "") {
@@ -235,9 +236,41 @@ async function adjustCredits(req, res) {
   }
 }
 
+async function updateMonthlyCredits(req, res) {
+  try {
+    const { userId } = req.params;
+    const { amount, preset, note } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: "Invalid user ID." });
+    }
+
+    const result = await setMonthlyCreditAllowance({
+      userId,
+      amount,
+      preset,
+      note: typeof note === "string" ? note.slice(0, 300) : "",
+      adminUserId: req.admin.id.toString(),
+    });
+
+    return res.status(200).json({
+      message: "Monthly credits updated.",
+      user: await serializeAdminUser(result.user),
+      transaction: serializeTransaction(result.transaction),
+    });
+  } catch (error) {
+    console.error("Error updating monthly credits:", error);
+
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.message || "Internal Server Error!" });
+  }
+}
+
 module.exports = {
   adjustCredits,
   getUserDetails,
   listUsers,
+  updateMonthlyCredits,
   updateUser,
 };

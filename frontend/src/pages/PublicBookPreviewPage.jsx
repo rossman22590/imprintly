@@ -8,6 +8,11 @@ import {
 } from "../utils/api-endpoints";
 import { markdownToPlainText } from "../utils/markdown-clipboard";
 import { getPublicShareTheme } from "../utils/public-share";
+import {
+  applyShareMeta,
+  compactMetaText,
+  getOwnerShareImage,
+} from "../utils/share-meta";
 import PdfFlipbook from "../components/PdfFlipbook";
 import {
   ArrowLeft,
@@ -92,6 +97,31 @@ function PublicBookPreviewPage() {
   );
   const socialUrl =
     typeof window === "undefined" ? "" : encodeURIComponent(window.location.href);
+  const ownerTitle =
+    book?.owner?.publicShareMetaTitle ||
+    book?.owner?.shelfPageName ||
+    book?.owner?.name ||
+    "Bookify";
+  const shareTitle = book?.title ? `${book.title} | ${ownerTitle}` : ownerTitle;
+  const shareDescription =
+    book?.owner?.publicShareMetaDescription ||
+    description ||
+    (book?.title
+      ? `Read the first chapter preview of ${book.title}.`
+      : "Read this first chapter preview.");
+  const shareImageUrl = getOwnerShareImage(book?.owner, book?.coverImage);
+
+  useEffect(() => {
+    if (!book) return;
+
+    applyShareMeta({
+      title: shareTitle,
+      description: compactMetaText(markdownToPlainText(shareDescription), 180),
+      image: resolveImageUrl(shareImageUrl),
+      author: book.author || book.owner?.name,
+      type: "book",
+    });
+  }, [book, shareDescription, shareImageUrl, shareTitle]);
 
   if (isLoading) {
     return (

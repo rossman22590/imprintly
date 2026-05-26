@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { Coins, Image, ReceiptText, Sparkles } from "lucide-react";
+import {
+  CalendarClock,
+  Coins,
+  Crown,
+  Gem,
+  Image,
+  ReceiptText,
+  Sparkles,
+} from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
 import axiosInstance from "../lib/axios";
 import { API_ENDPOINTS } from "../utils/api-endpoints";
@@ -18,6 +26,28 @@ function formatUsd(value) {
     currency: "USD",
     maximumFractionDigits: 6,
   }).format(Number(value || 0));
+}
+
+function formatDate(value) {
+  return value ? new Date(value).toLocaleString() : "Not scheduled";
+}
+
+function getMonthlyPlanLabel(credits = {}) {
+  const preset = String(credits?.monthlyPreset || "").toLowerCase();
+
+  if (preset === "premium") return "Premium";
+  if (preset === "ultra") return "Ultra";
+
+  return Number(credits?.monthlyAllowance || 0) > 0 ? "Custom" : "";
+}
+
+function getMonthlyPlanIcon(credits = {}) {
+  const preset = String(credits?.monthlyPreset || "").toLowerCase();
+
+  if (preset === "premium") return Crown;
+  if (preset === "ultra") return Gem;
+
+  return CalendarClock;
 }
 
 function formatReason(reason = "") {
@@ -66,6 +96,9 @@ function CreditsPage() {
   const credits = summary?.credits;
   const transactions = summary?.transactions || [];
   const historyDays = summary?.historyDays || 40;
+  const monthlyAllowance = Number(credits?.monthlyAllowance || 0);
+  const hasMonthlyPlan = monthlyAllowance > 0;
+  const MonthlyPlanIcon = getMonthlyPlanIcon(credits);
 
   return (
     <DashboardLayout>
@@ -83,6 +116,47 @@ function CreditsPage() {
           <div className="h-40 rounded-xl border border-slate-200 bg-white animate-pulse" />
         ) : (
           <div className="min-h-0 flex-1 flex flex-col">
+            {hasMonthlyPlan && (
+              <section className="mb-6 shrink-0 overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-4 p-5 bg-[radial-gradient(circle_at_15%_0%,rgba(139,92,246,0.16),transparent_18rem),linear-gradient(135deg,#ffffff,#f8f5ff)]">
+                  <div className="flex items-start gap-4">
+                    <div className="size-12 shrink-0 rounded-2xl bg-violet-600 text-white flex items-center justify-center shadow-lg shadow-violet-500/25">
+                      <MonthlyPlanIcon className="size-6" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-600">
+                        Monthly recurring plan
+                      </p>
+                      <h2 className="text-2xl font-black text-slate-950 mt-1">
+                        {getMonthlyPlanLabel(credits)}
+                      </h2>
+                      <p className="text-sm text-slate-500 mt-1">
+                        Your credits renew on the 1st of each month.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-violet-100 bg-white px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Monthly credits
+                    </p>
+                    <p className="text-xl font-black text-slate-950 tabular-nums mt-1">
+                      {formatCredits(monthlyAllowance)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-violet-100 bg-white px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Renewal date
+                    </p>
+                    <p className="text-sm font-black text-slate-950 mt-1">
+                      {formatDate(credits?.nextMonthlyResetAt)}
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
+
             <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 shrink-0">
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <div className="size-10 rounded-lg bg-violet-50 flex items-center justify-center mb-4">

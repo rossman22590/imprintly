@@ -59,6 +59,24 @@ const userSchema = new mongoose.Schema(
       trim: true,
       maxLength: [500, "Shelf photo URL cannot exceed 500 characters"],
     },
+    publicShareMetaTitle: {
+      type: String,
+      default: "",
+      trim: true,
+      maxLength: [80, "Share meta title cannot exceed 80 characters"],
+    },
+    publicShareMetaDescription: {
+      type: String,
+      default: "",
+      trim: true,
+      maxLength: [180, "Share meta description cannot exceed 180 characters"],
+    },
+    publicShareImageUrl: {
+      type: String,
+      default: "",
+      trim: true,
+      maxLength: [500, "Share image URL cannot exceed 500 characters"],
+    },
     publicShareTheme: {
       type: String,
       enum: [
@@ -95,6 +113,32 @@ const userSchema = new mongoose.Schema(
         type: Number,
         default: 0,
         min: [0, "Lifetime spent credits cannot be negative"],
+      },
+      monthlyAllowance: {
+        type: Number,
+        default: 0,
+        min: [0, "Monthly credit allowance cannot be negative"],
+      },
+      monthlyPreset: {
+        type: String,
+        enum: ["", "premium", "ultra", "custom"],
+        default: "",
+      },
+      monthlyResetDay: {
+        type: Number,
+        default: 1,
+        min: [1, "Monthly reset day must be at least 1"],
+        max: [1, "Monthly reset day is fixed to the 1st"],
+      },
+      monthlyResetKey: {
+        type: String,
+        default: "",
+        trim: true,
+        maxLength: [7, "Monthly reset key cannot exceed 7 characters"],
+      },
+      monthlyResetAt: {
+        type: Date,
+        default: null,
       },
       ledgerInitialized: {
         type: Boolean,

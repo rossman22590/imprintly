@@ -18,6 +18,10 @@ const publicRouter = require("./routes/public.route");
 const {
   recoverInterruptedGenerationJobs,
 } = require("./utils/book-generation.jobs");
+const {
+  getPublicShareMetaForPath,
+  injectPublicShareMeta,
+} = require("./utils/public-share-meta");
 
 const app = express();
 const configuredOrigins = [ENV.CLIENT_URL, ...ENV.CLIENT_URLS.split(",")]
@@ -93,6 +97,21 @@ app.get("/healthz", (_, res) => {
 const frontendDistPath = path.join(__dirname, "../../frontend/dist");
 const frontendIndexPath = path.join(frontendDistPath, "index.html");
 
+function getRequestOrigin(req) {
+  const forwardedProtocol = String(req.get("x-forwarded-proto") || "")
+    .split(",")[0]
+    .trim();
+  const forwardedHost = String(req.get("x-forwarded-host") || "")
+    .split(",")[0]
+    .trim();
+  const protocol = forwardedProtocol || req.protocol || "https";
+  const host = forwardedHost || req.get("host");
+
+  if (!host) return ENV.CLIENT_URL.replace(/\/$/, "");
+
+  return `${protocol}://${host}`;
+}
+
 // PRODUCTION: serve React frontend only when this service includes a built frontend.
 if (ENV.NODE_ENV === "production" && fs.existsSync(frontendIndexPath)) {
   // serve static files from the React build
@@ -100,7 +119,24 @@ if (ENV.NODE_ENV === "production" && fs.existsSync(frontendIndexPath)) {
 
   // catch-all route: for any route not matched above, serve index.html
   // this allows React Router to handle routing on the client side
-  app.get("/{*any}", (_, res) => {
+  app.get("/{*any}", async (req, res) => {
+    try {
+      const origin = getRequestOrigin(req);
+      const pageUrl = `${origin}${req.originalUrl || req.url}`;
+      const meta = await getPublicShareMetaForPath(req.path, {
+        origin,
+        pageUrl,
+      });
+
+      if (meta) {
+        const html = fs.readFileSync(frontendIndexPath, "utf8");
+        res.type("html").send(injectPublicShareMeta(html, meta));
+        return;
+      }
+    } catch (error) {
+      console.error("Error rendering public share meta:", error);
+    }
+
     res.sendFile(frontendIndexPath);
   });
 } else {

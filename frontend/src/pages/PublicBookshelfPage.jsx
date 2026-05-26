@@ -7,6 +7,11 @@ import {
   getPublicShareTheme,
 } from "../utils/public-share";
 import {
+  applyShareMeta,
+  compactMetaText,
+  getOwnerShareImage,
+} from "../utils/share-meta";
+import {
   BookOpen,
   Copy,
   ExternalLink,
@@ -82,10 +87,30 @@ function PublicBookshelfPage() {
   const shelfDisplayName =
     payload?.owner?.shelfPageName ||
     `${payload?.owner?.name || "Author"}'s bookshelf`;
+  const firstBookCover = books[0]?.coverImage || "";
   const shelfPhotoUrl =
     !shelfPhotoFailed && payload?.owner?.shelfPhotoUrl
       ? resolveImageUrl(payload.owner.shelfPhotoUrl)
       : "";
+  const shareImageUrl = getOwnerShareImage(payload?.owner, firstBookCover);
+
+  useEffect(() => {
+    if (!payload) return;
+
+    applyShareMeta({
+      title: payload.owner?.publicShareMetaTitle || shelfDisplayName,
+      description:
+        payload.owner?.publicShareMetaDescription ||
+        compactMetaText(
+          `Browse ${payload.owner?.name || "this author"}'s shared bookshelf with ${
+            books.length
+          } ${books.length === 1 ? "book" : "books"}.`
+        ),
+      image: resolveImageUrl(shareImageUrl),
+      author: payload.owner?.name,
+      type: "website",
+    });
+  }, [books.length, payload, shareImageUrl, shelfDisplayName]);
 
   if (isLoading) {
     return (

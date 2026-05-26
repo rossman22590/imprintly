@@ -41,6 +41,9 @@ function serializeProfileUser(user) {
     storeUrl: user.storeUrl || "",
     shelfPageName: user.shelfPageName || "",
     shelfPhotoUrl: user.shelfPhotoUrl || "",
+    publicShareMetaTitle: user.publicShareMetaTitle || "",
+    publicShareMetaDescription: user.publicShareMetaDescription || "",
+    publicShareImageUrl: user.publicShareImageUrl || "",
     publicShareTheme: user.publicShareTheme || "",
     role: user.role,
     credits: serializeCredits(user),
@@ -59,6 +62,10 @@ function normalizeStoreUrl(value = "") {
 }
 
 function normalizeShelfPhotoUrl(value = "") {
+  return normalizeOptionalHttpUrl(value);
+}
+
+function normalizePublicShareImageUrl(value = "") {
   return normalizeOptionalHttpUrl(value);
 }
 
@@ -85,11 +92,23 @@ function normalizeOptionalHttpUrl(value = "") {
 }
 
 function normalizeShelfPageName(value = "") {
+  return normalizeOptionalText(value, 80);
+}
+
+function normalizePublicShareMetaTitle(value = "") {
+  return normalizeOptionalText(value, 80);
+}
+
+function normalizePublicShareMetaDescription(value = "") {
+  return normalizeOptionalText(value, 180);
+}
+
+function normalizeOptionalText(value = "", maxLength = 80) {
   const trimmed = String(value || "").trim();
 
   if (!trimmed) return "";
 
-  return trimmed.length <= 80 ? trimmed : null;
+  return trimmed.length <= maxLength ? trimmed : null;
 }
 
 async function getUniqueBookshelfShareToken() {
@@ -138,15 +157,26 @@ async function getProfile(req, res) {
  */
 async function updateProfile(req, res) {
   try {
-    const { name, storeUrl, publicShareTheme, shelfPageName, shelfPhotoUrl } =
-      req.body;
+    const {
+      name,
+      storeUrl,
+      publicShareTheme,
+      shelfPageName,
+      shelfPhotoUrl,
+      publicShareMetaTitle,
+      publicShareMetaDescription,
+      publicShareImageUrl,
+    } = req.body;
 
     if (
       !name &&
       storeUrl === undefined &&
       publicShareTheme === undefined &&
       shelfPageName === undefined &&
-      shelfPhotoUrl === undefined
+      shelfPhotoUrl === undefined &&
+      publicShareMetaTitle === undefined &&
+      publicShareMetaDescription === undefined &&
+      publicShareImageUrl === undefined
     ) {
       return res.status(400).json({
         error: "Please provide profile details to update!",
@@ -210,6 +240,45 @@ async function updateProfile(req, res) {
       }
 
       user.shelfPhotoUrl = normalizedShelfPhotoUrl;
+    }
+
+    if (publicShareMetaTitle !== undefined) {
+      const normalizedMetaTitle =
+        normalizePublicShareMetaTitle(publicShareMetaTitle);
+
+      if (normalizedMetaTitle === null) {
+        return res.status(400).json({
+          error: "Share meta title cannot exceed 80 characters.",
+        });
+      }
+
+      user.publicShareMetaTitle = normalizedMetaTitle;
+    }
+
+    if (publicShareMetaDescription !== undefined) {
+      const normalizedMetaDescription =
+        normalizePublicShareMetaDescription(publicShareMetaDescription);
+
+      if (normalizedMetaDescription === null) {
+        return res.status(400).json({
+          error: "Share meta description cannot exceed 180 characters.",
+        });
+      }
+
+      user.publicShareMetaDescription = normalizedMetaDescription;
+    }
+
+    if (publicShareImageUrl !== undefined) {
+      const normalizedShareImageUrl =
+        normalizePublicShareImageUrl(publicShareImageUrl);
+
+      if (normalizedShareImageUrl === null) {
+        return res.status(400).json({
+          error: "Please enter a valid share image URL.",
+        });
+      }
+
+      user.publicShareImageUrl = normalizedShareImageUrl;
     }
 
     if (publicShareTheme !== undefined) {

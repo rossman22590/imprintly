@@ -67,6 +67,9 @@ function serializePublicPreview(book) {
       storeUrl: owner.storeUrl || "",
       shelfPageName: owner.shelfPageName || "",
       shelfPhotoUrl: owner.shelfPhotoUrl || "",
+      publicShareMetaTitle: owner.publicShareMetaTitle || "",
+      publicShareMetaDescription: owner.publicShareMetaDescription || "",
+      publicShareImageUrl: owner.publicShareImageUrl || "",
       publicShareTheme: owner.publicShareTheme || "",
     },
     sales: {
@@ -110,6 +113,9 @@ async function getPublicBookshelf(req, res) {
         storeUrl: user.storeUrl || "",
         shelfPageName: user.shelfPageName || "",
         shelfPhotoUrl: user.shelfPhotoUrl || "",
+        publicShareMetaTitle: user.publicShareMetaTitle || "",
+        publicShareMetaDescription: user.publicShareMetaDescription || "",
+        publicShareImageUrl: user.publicShareImageUrl || "",
         publicShareTheme: user.publicShareTheme || "",
       },
       bookshelfShare: {
@@ -131,7 +137,8 @@ async function getPublicBookPreview(req, res) {
     const { shareToken } = req.params;
     const book = await Book.findOne({ "previewShare.token": shareToken }).populate({
       path: "userId",
-      select: "name avatar storeUrl shelfPageName shelfPhotoUrl publicShareTheme",
+      select:
+        "name avatar storeUrl shelfPageName shelfPhotoUrl publicShareMetaTitle publicShareMetaDescription publicShareImageUrl publicShareTheme",
     });
 
     setPublicShareHeaders(res);

@@ -18,6 +18,10 @@ const CREDIT_CONFIG = {
 };
 
 const CREDIT_HISTORY_DAYS = 40;
+const MONTHLY_CREDIT_PRESETS = {
+  premium: 500,
+  ultra: 1000,
+};
 
 function roundMoney(value) {
   return Math.round(Number(value || 0) * 1_000_000) / 1_000_000;
@@ -38,6 +42,11 @@ function serializeCredits(user) {
     balance: roundCredits(credits.balance),
     lifetimeGranted: roundCredits(credits.lifetimeGranted),
     lifetimeSpent: roundCredits(credits.lifetimeSpent),
+    monthlyAllowance: roundCredits(credits.monthlyAllowance),
+    monthlyPreset: credits.monthlyPreset || "",
+    monthlyResetDay: credits.monthlyResetDay || 1,
+    monthlyResetAt: credits.monthlyResetAt || null,
+    nextMonthlyResetAt: getNextMonthlyResetAt().toISOString(),
     startingCredits: CREDIT_CONFIG.startingCredits,
     usdPerCredit: CREDIT_CONFIG.usdPerCredit,
     imageCredits: CREDIT_CONFIG.imageCredits,
@@ -81,6 +90,19 @@ function serializeBilling(result) {
     credits: result.credits || null,
     transaction: serializeTransaction(result.transaction),
   };
+}
+
+function getMonthlyResetKey(date = new Date()) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+
+  return `${year}-${month}`;
+}
+
+function getNextMonthlyResetAt(date = new Date()) {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1, 0, 0, 0, 0)
+  );
 }
 
 function getCreditHistorySince(days = CREDIT_HISTORY_DAYS, now = new Date()) {
@@ -127,7 +149,7 @@ async function ensureUserCredits(userId) {
   const credits = user.credits || {};
 
   if (credits.ledgerInitialized) {
-    return user;
+    return resetMonthlyCreditsIfDue(user);
   }
 
   const startingBalance =
@@ -139,6 +161,11 @@ async function ensureUserCredits(userId) {
     balance: roundCredits(startingBalance),
     lifetimeGranted: roundCredits(startingBalance),
     lifetimeSpent: roundCredits(credits.lifetimeSpent || 0),
+    monthlyAllowance: roundCredits(credits.monthlyAllowance || 0),
+    monthlyPreset: credits.monthlyPreset || "",
+    monthlyResetDay: credits.monthlyResetDay || 1,
+    monthlyResetKey: credits.monthlyResetKey || getMonthlyResetKey(),
+    monthlyResetAt: credits.monthlyResetAt || null,
     ledgerInitialized: true,
     initializedAt: credits.initializedAt || new Date(),
   };
@@ -156,7 +183,66 @@ async function ensureUserCredits(userId) {
     markupMultiplier: 1,
   });
 
-  return user;
+  return resetMonthlyCreditsIfDue(user);
+}
+
+async function resetMonthlyCreditsIfDue(user, now = new Date()) {
+  const allowance = roundCredits(user?.credits?.monthlyAllowance || 0);
+  const currentResetKey = getMonthlyResetKey(now);
+
+  if (!user || allowance <= 0) return user;
+
+  if (user.credits?.monthlyResetKey === currentResetKey) {
+    return user;
+  }
+
+  const currentBalance = roundCredits(user.credits?.balance);
+  const nextBalance = allowance;
+  const delta = roundCredits(nextBalance - currentBalance);
+  const update = {
+    $set: {
+      "credits.balance": nextBalance,
+      "credits.monthlyResetKey": currentResetKey,
+      "credits.monthlyResetAt": now,
+      "credits.monthlyResetDay": 1,
+    },
+  };
+
+  if (delta > 0) {
+    update.$inc = {
+      "credits.lifetimeGranted": delta,
+    };
+  }
+
+  const updatedUser = await User.findByIdAndUpdate(user._id, update, {
+    new: true,
+  });
+  const transactionAmount = roundCredits(Math.abs(nextBalance - currentBalance));
+
+  await CreditTransaction.create({
+    userId: user._id,
+    type: "adjustment",
+    amount: transactionAmount,
+    balanceAfter: nextBalance,
+    reason: "monthly_credit_reset",
+    description: `Monthly credit balance reset to ${nextBalance} credits.`,
+    creditRateUsd: CREDIT_CONFIG.usdPerCredit,
+    markupMultiplier: 1,
+    metadata: {
+      action: "monthly_reset",
+      direction:
+        nextBalance < currentBalance
+          ? "remove"
+          : nextBalance > currentBalance
+            ? "add"
+            : "none",
+      previousBalance: currentBalance,
+      monthlyAllowance: allowance,
+      resetKey: currentResetKey,
+    },
+  });
+
+  return updatedUser;
 }
 
 async function getCreditSummary(userId, options = {}) {
@@ -471,9 +557,83 @@ async function adjustUserCredits({
   };
 }
 
+async function setMonthlyCreditAllowance({
+  userId,
+  amount,
+  preset = "",
+  adminUserId,
+  note = "",
+}) {
+  const rawAmount = Number(amount);
+  const numericAmount = roundCredits(rawAmount);
+  const normalizedPreset = ["premium", "ultra", "custom", ""].includes(preset)
+    ? preset
+    : "custom";
+
+  if (!Number.isFinite(rawAmount) || rawAmount < 0) {
+    const error = new Error("Monthly credit amount must be zero or greater.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    normalizedPreset &&
+    normalizedPreset !== "custom" &&
+    MONTHLY_CREDIT_PRESETS[normalizedPreset] !== numericAmount
+  ) {
+    const error = new Error("Monthly credit preset amount does not match.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const user = await ensureUserCredits(userId);
+  const currentBalance = roundCredits(user.credits?.balance);
+  const nextPreset = numericAmount > 0 ? normalizedPreset || "custom" : "";
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    {
+      $set: {
+        "credits.monthlyAllowance": numericAmount,
+        "credits.monthlyPreset": nextPreset,
+        "credits.monthlyResetDay": 1,
+        "credits.monthlyResetKey": getMonthlyResetKey(),
+      },
+    },
+    { new: true }
+  );
+  const transaction = await CreditTransaction.create({
+    userId,
+    type: "adjustment",
+    amount: 0,
+    balanceAfter: currentBalance,
+    reason: "admin_monthly_credit_allowance",
+    description:
+      numericAmount > 0
+        ? `Admin set monthly credit reset to ${numericAmount} credits.`
+        : "Admin disabled monthly credit reset.",
+    creditRateUsd: CREDIT_CONFIG.usdPerCredit,
+    markupMultiplier: 1,
+    metadata: {
+      action: "set_monthly_allowance",
+      direction: "none",
+      monthlyAllowance: numericAmount,
+      preset: nextPreset,
+      adminUserId,
+      note,
+    },
+  });
+
+  return {
+    user: updatedUser,
+    credits: serializeCredits(updatedUser),
+    transaction,
+  };
+}
+
 module.exports = {
   CREDIT_HISTORY_DAYS,
   CREDIT_CONFIG,
+  MONTHLY_CREDIT_PRESETS,
   adjustUserCredits,
   assertHasCredits,
   buildCreditHistoryQuery,
@@ -482,8 +642,11 @@ module.exports = {
   chargeTokenUsage,
   ensureUserCredits,
   getCreditHistorySince,
+  getMonthlyResetKey,
+  getNextMonthlyResetAt,
   getCreditSummary,
   serializeBilling,
   serializeCredits,
   serializeTransaction,
+  setMonthlyCreditAllowance,
 };

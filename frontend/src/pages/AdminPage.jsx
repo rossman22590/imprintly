@@ -2,7 +2,10 @@ import { createElement, useCallback, useEffect, useMemo, useState } from "react"
 import toast from "react-hot-toast";
 import {
   BadgeDollarSign,
+  CalendarClock,
   Coins,
+  Crown,
+  Gem,
   History,
   Mail,
   Minus,
@@ -29,6 +32,20 @@ function formatCredits(value) {
     maximumFractionDigits: 4,
     minimumFractionDigits: Number(value) % 1 ? 2 : 0,
   }).format(Number(value || 0));
+}
+
+const MONTHLY_CREDIT_PRESETS = [
+  { id: "premium", label: "Premium", amount: 500, icon: Crown },
+  { id: "ultra", label: "Ultra", amount: 1000, icon: Gem },
+];
+
+function getMonthlyPresetForAmount(amount) {
+  const numericAmount = Number(amount || 0);
+  const preset = MONTHLY_CREDIT_PRESETS.find(
+    (option) => option.amount === numericAmount
+  );
+
+  return numericAmount > 0 ? preset?.id || "custom" : "";
 }
 
 function formatDate(value) {
@@ -114,18 +131,29 @@ function UserDetailsModal({
   setEditDraft,
   creditForm,
   setCreditForm,
+  monthlyCreditForm,
+  setMonthlyCreditForm,
   creditPreview,
   canSaveUser,
   canApplyCredits,
+  canSaveMonthlyCredits,
   creditWarning,
   isDetailsLoading,
   isSavingUser,
   isAdjustingCredits,
+  isSavingMonthlyCredits,
   transactionHistoryDays,
   onSaveUser,
   onAdjustCredits,
+  onSaveMonthlyCredits,
 }) {
   const currentBalance = Number(user?.credits?.balance || 0);
+  const monthlyAllowance = Number(user?.credits?.monthlyAllowance || 0);
+  const monthlyDraftAmount = Number(monthlyCreditForm.amount || 0);
+  const monthlyRenewalDate =
+    monthlyDraftAmount > 0
+      ? formatDate(user?.credits?.nextMonthlyResetAt)
+      : "Not scheduled";
 
   return (
     <Modal
@@ -194,6 +222,22 @@ function UserDetailsModal({
               <DetailRow
                 label="Starting credits"
                 value={formatCredits(user.credits?.startingCredits)}
+              />
+              <DetailRow
+                label="Monthly reset"
+                value={
+                  monthlyAllowance > 0
+                    ? `${formatCredits(monthlyAllowance)} credits on the 1st`
+                    : "Disabled"
+                }
+              />
+              <DetailRow
+                label="Next monthly reset"
+                value={
+                  monthlyAllowance > 0
+                    ? formatDate(user.credits?.nextMonthlyResetAt)
+                    : "Not scheduled"
+                }
               />
             </div>
 
@@ -310,6 +354,89 @@ function UserDetailsModal({
                 </Button>
               </div>
             </section>
+
+            <form
+              onSubmit={onSaveMonthlyCredits}
+              className="rounded-xl border border-violet-200 bg-violet-50/40 p-4"
+            >
+              <h3 className="text-slate-950 text-sm font-semibold mb-1 flex items-center gap-2">
+                <CalendarClock className="size-4 text-violet-600" />
+                Monthly credit reset
+              </h3>
+              <p className="text-xs text-slate-500 mb-3">
+                Resets this user&apos;s balance to the saved amount on the 1st.
+              </p>
+
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {MONTHLY_CREDIT_PRESETS.map((preset) => (
+                  <CreditActionButton
+                    key={preset.id}
+                    active={monthlyCreditForm.preset === preset.id}
+                    icon={preset.icon}
+                    onClick={() =>
+                      setMonthlyCreditForm({
+                        amount: String(preset.amount),
+                        preset: preset.id,
+                      })
+                    }
+                  >
+                    {preset.label}
+                  </CreditActionButton>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <Input
+                  label="Monthly amount"
+                  name="monthly-credit-amount"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={monthlyCreditForm.amount}
+                  onChange={(event) => {
+                    const amount = event.target.value;
+
+                    setMonthlyCreditForm({
+                      amount,
+                      preset: getMonthlyPresetForAmount(amount),
+                    });
+                  }}
+                  helperText="Set to 0 to disable monthly resets."
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-violet-100 bg-white px-3 py-2">
+                    <p className="text-xs font-semibold text-violet-700">
+                      Plan preview
+                    </p>
+                    <p className="text-lg font-bold text-violet-950 tabular-nums">
+                      {monthlyDraftAmount > 0
+                        ? `${formatCredits(monthlyDraftAmount)} monthly`
+                        : "Disabled"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border border-violet-100 bg-white px-3 py-2">
+                    <p className="text-xs font-semibold text-violet-700">
+                      Renewal date
+                    </p>
+                    <p className="text-sm font-bold text-violet-950 leading-6">
+                      {monthlyRenewalDate}
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  isLoading={isSavingMonthlyCredits}
+                  disabled={!canSaveMonthlyCredits}
+                  size="sm"
+                  className="w-full"
+                >
+                  Save monthly reset
+                </Button>
+              </div>
+            </form>
 
             <form
               onSubmit={onAdjustCredits}
@@ -446,11 +573,16 @@ function AdminPage() {
     amount: "",
     note: "",
   });
+  const [monthlyCreditForm, setMonthlyCreditForm] = useState({
+    amount: "",
+    preset: "",
+  });
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [isSavingUser, setIsSavingUser] = useState(false);
   const [isAdjustingCredits, setIsAdjustingCredits] = useState(false);
+  const [isSavingMonthlyCredits, setIsSavingMonthlyCredits] = useState(false);
 
   const isAdmin = user?.role === "admin";
 
@@ -474,6 +606,14 @@ function AdminPage() {
       setEditDraft({
         name: data.user?.name || "",
         role: data.user?.role || "user",
+      });
+      setMonthlyCreditForm({
+        amount: data.user?.credits?.monthlyAllowance
+          ? String(data.user.credits.monthlyAllowance)
+          : "",
+        preset:
+          data.user?.credits?.monthlyPreset ||
+          getMonthlyPresetForAmount(data.user?.credits?.monthlyAllowance || 0),
       });
       setCreditForm({ action: "add", amount: "", note: "" });
     } catch (error) {
@@ -522,6 +662,7 @@ function AdminPage() {
 
   const selectedBalance = selectedUser?.credits?.balance || 0;
   const numericCreditAmount = Number(creditForm.amount || 0);
+  const numericMonthlyCreditAmount = Number(monthlyCreditForm.amount || 0);
   const creditPreview = useMemo(() => {
     if (!Number.isFinite(numericCreditAmount) || numericCreditAmount < 0) {
       return selectedBalance;
@@ -553,6 +694,17 @@ function AdminPage() {
     selectedUser &&
     (editDraft.name.trim() !== selectedUser.name ||
       editDraft.role !== selectedUser.role);
+  const hasValidMonthlyCreditAmount =
+    Number.isFinite(numericMonthlyCreditAmount) && numericMonthlyCreditAmount >= 0;
+  const normalizedMonthlyPreset = getMonthlyPresetForAmount(
+    numericMonthlyCreditAmount
+  );
+  const canSaveMonthlyCredits =
+    selectedUser &&
+    hasValidMonthlyCreditAmount &&
+    (numericMonthlyCreditAmount !==
+      Number(selectedUser.credits?.monthlyAllowance || 0) ||
+      normalizedMonthlyPreset !== (selectedUser.credits?.monthlyPreset || ""));
 
   const updateSelectedUserInList = (nextUser) => {
     setUsersList((current) =>
@@ -612,6 +764,45 @@ function AdminPage() {
       toast.error(error.response?.data?.error || "Failed to adjust credits.");
     } finally {
       setIsAdjustingCredits(false);
+    }
+  };
+
+  const handleSaveMonthlyCredits = async (event) => {
+    event.preventDefault();
+
+    if (!selectedUser) return;
+
+    setIsSavingMonthlyCredits(true);
+
+    try {
+      const { data } = await axiosInstance.put(
+        `${API_ENDPOINTS.ADMIN.USERS}/${selectedUser._id}/credits/monthly`,
+        {
+          amount: numericMonthlyCreditAmount,
+          preset: normalizedMonthlyPreset,
+        }
+      );
+
+      setSelectedUser(data.user);
+      updateSelectedUserInList(data.user);
+      setMonthlyCreditForm({
+        amount: data.user?.credits?.monthlyAllowance
+          ? String(data.user.credits.monthlyAllowance)
+          : "",
+        preset: data.user?.credits?.monthlyPreset || "",
+      });
+      setTransactions((current) =>
+        data.transaction ? [data.transaction, ...current] : current
+      );
+      toast.success("Monthly credits updated.");
+      window.dispatchEvent(new Event("credits:refresh"));
+    } catch (error) {
+      console.error("Error saving monthly credits:", error);
+      toast.error(
+        error.response?.data?.error || "Failed to save monthly credits."
+      );
+    } finally {
+      setIsSavingMonthlyCredits(false);
     }
   };
 
@@ -846,16 +1037,21 @@ function AdminPage() {
         setEditDraft={setEditDraft}
         creditForm={creditForm}
         setCreditForm={setCreditForm}
+        monthlyCreditForm={monthlyCreditForm}
+        setMonthlyCreditForm={setMonthlyCreditForm}
         creditPreview={creditPreview}
         canSaveUser={canSaveUser}
         canApplyCredits={canApplyCredits}
+        canSaveMonthlyCredits={canSaveMonthlyCredits}
         creditWarning={creditWarning}
         isDetailsLoading={isDetailsLoading}
         isSavingUser={isSavingUser}
         isAdjustingCredits={isAdjustingCredits}
+        isSavingMonthlyCredits={isSavingMonthlyCredits}
         transactionHistoryDays={transactionHistoryDays}
         onSaveUser={handleSaveUser}
         onAdjustCredits={handleAdjustCredits}
+        onSaveMonthlyCredits={handleSaveMonthlyCredits}
       />
     </DashboardLayout>
   );

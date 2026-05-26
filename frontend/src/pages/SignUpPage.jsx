@@ -12,6 +12,8 @@ import {
   validatePassword,
 } from "../utils/helpers";
 
+const DASHBOARD_VIEW_STORAGE_KEY = "bookify-dashboard-view";
+
 function SignUpPage() {
   const [formData, setFormData] = useState({
     name: "",
@@ -90,6 +92,7 @@ function SignUpPage() {
 
       // update auth context
       authenticateUser(token, profileInfo.user);
+      localStorage.setItem(DASHBOARD_VIEW_STORAGE_KEY, "flat");
 
       toast.success("Welcome aboard, Author!");
 

@@ -5,6 +5,8 @@ const {
   CREDIT_CONFIG,
   CREDIT_HISTORY_DAYS,
   getCreditHistorySince,
+  getMonthlyResetKey,
+  getNextMonthlyResetAt,
 } = require("./credits.service");
 
 test("new users default to 50 starting credits", () => {
@@ -29,4 +31,23 @@ test("credit history query returns all transactions inside the 40 day window", (
       $gte: new Date("2026-04-16T12:00:00.000Z"),
     },
   });
+});
+
+test("monthly credit reset keys use UTC calendar months", () => {
+  assert.equal(
+    getMonthlyResetKey(new Date("2026-05-31T23:59:59.000Z")),
+    "2026-05"
+  );
+  assert.equal(
+    getMonthlyResetKey(new Date("2026-06-01T00:00:00.000Z")),
+    "2026-06"
+  );
+});
+
+test("next monthly credit reset is the first of the next UTC month", () => {
+  const nextReset = getNextMonthlyResetAt(
+    new Date("2026-05-26T12:00:00.000Z")
+  );
+
+  assert.equal(nextReset.toISOString(), "2026-06-01T00:00:00.000Z");
 });
