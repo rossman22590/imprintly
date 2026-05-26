@@ -63,6 +63,23 @@ function normalizeDiagramText(text = "") {
     );
 }
 
+function getNormalizedDiagramLines(lines = []) {
+  const output = [];
+
+  lines
+    .map((line) => normalizeDiagramText(line).replace(/\s+$/g, ""))
+    .filter((line) => line.trim())
+    .forEach((line) => {
+      const current = line.trim();
+      const previous = output[output.length - 1]?.trim();
+
+      if (current && current === previous) return;
+      output.push(line);
+    });
+
+  return output;
+}
+
 function isFenceLine(line = "") {
   return /^\s*(```|~~~)/.test(line);
 }
@@ -184,7 +201,7 @@ function hasConnectorLine(lines = []) {
 }
 
 function parseFlowDiagram(lines = []) {
-  const normalizedLines = lines.map(normalizeDiagramText);
+  const normalizedLines = getNormalizedDiagramLines(lines);
   const nodeRows = normalizedLines
     .map((line, index) => ({
       index,
@@ -254,7 +271,7 @@ function parseFlowDiagram(lines = []) {
 }
 
 function parseStackDiagram(lines = []) {
-  const nonEmptyLines = lines.map(normalizeDiagramText).filter((line) => line.trim());
+  const nonEmptyLines = getNormalizedDiagramLines(lines);
   const borderCount = nonEmptyLines.filter(isBoxBorderLine).length;
 
   if (borderCount < 2) return null;
@@ -332,7 +349,7 @@ function splitTableLine(line = "") {
 }
 
 function parseTableDiagram(lines = []) {
-  const nonEmptyLines = lines.map(normalizeDiagramText).filter((line) => line.trim());
+  const nonEmptyLines = getNormalizedDiagramLines(lines);
   const borderLines = nonEmptyLines.filter(isBoxBorderLine);
 
   if (borderLines.length < 2) return null;
@@ -401,7 +418,7 @@ function parseTableDiagram(lines = []) {
 }
 
 function parseLinearFlowDiagram(lines = []) {
-  const nonEmptyLines = lines.map(normalizeDiagramText).filter((line) => line.trim());
+  const nonEmptyLines = getNormalizedDiagramLines(lines);
   const arrowPattern = /(-->|<-->|<--|->|<-|=>|<==>|<==|==>|===|<=>)/;
   const hasArrow = nonEmptyLines.some((line) => arrowPattern.test(line));
 
@@ -445,26 +462,157 @@ function parseLinearFlowDiagram(lines = []) {
   };
 }
 
+function isConnectorOnlyLine(line = "") {
+  const trimmed = String(line || "").trim();
+
+  return /^[|v^<>+\-/\\\s]+$/.test(trimmed) && /[|v^<>+\-/\\]/.test(trimmed);
+}
+
+function cleanConnectorLabel(value = "") {
+  return String(value || "")
+    .replace(/^\|?\s*/, "")
+    .replace(/^\((.*)\)$/, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseProcessBoxLine(line = "") {
+  const trimmed = String(line || "").trim();
+
+  if (!trimmed.startsWith("|")) return null;
+
+  const content = trimmed.replace(/^\|\s*/, "").replace(/\s*\|$/, "").trim();
+
+  if (!content || isConnectorOnlyLine(content)) return null;
+  if (/^\(.*/.test(content)) {
+    return {
+      connector: cleanConnectorLabel(content),
+    };
+  }
+
+  const [labelPart, ...rest] = content.split("|");
+  const label = labelPart.trim();
+  const detail = rest
+    .join("|")
+    .replace(/^\s*[-=]*>\s*/, "")
+    .trim();
+
+  if (!label) return null;
+
+  return {
+    label,
+    detail,
+  };
+}
+
+function parseProcessDiagram(lines = []) {
+  const nonEmptyLines = getNormalizedDiagramLines(lines);
+
+  if (nonEmptyLines.length < 5) return null;
+
+  const hasVerticalConnectors = nonEmptyLines.filter(isConnectorOnlyLine).length >= 2;
+  const hasBoxLines = nonEmptyLines.some((line) => line.trim().startsWith("|"));
+
+  if (!hasVerticalConnectors || !hasBoxLines) return null;
+
+  const nodes = [];
+  const connectors = [];
+  let pendingConnector = "";
+
+  const addNode = (label, detail = "") => {
+    const cleanLabel = String(label || "")
+      .replace(/^\[|\]$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const cleanDetail = String(detail || "").replace(/\s+/g, " ").trim();
+
+    if (!cleanLabel || /^[-+=]+$/.test(cleanLabel)) return;
+
+    if (nodes.length > 0 && pendingConnector) {
+      connectors[nodes.length - 1] = pendingConnector;
+      pendingConnector = "";
+    }
+
+    nodes.push({
+      label: cleanLabel,
+      detail: cleanDetail,
+    });
+  };
+
+  nonEmptyLines.forEach((line) => {
+    const trimmed = line.trim();
+
+    if (isBoxBorderLine(trimmed) || isConnectorOnlyLine(trimmed)) return;
+
+    const boxed = parseProcessBoxLine(trimmed);
+
+    if (boxed?.connector) {
+      pendingConnector = [pendingConnector, boxed.connector].filter(Boolean).join(" ");
+      return;
+    }
+
+    if (boxed?.label) {
+      addNode(boxed.label, boxed.detail);
+      return;
+    }
+
+    const bracketNode = trimmed.match(/^\[([^\]]{2,})\]$/);
+
+    if (bracketNode) {
+      addNode(bracketNode[1]);
+      return;
+    }
+
+    if (/^\(.*/.test(trimmed) || pendingConnector) {
+      pendingConnector = [pendingConnector, cleanConnectorLabel(trimmed)]
+        .filter(Boolean)
+        .join(" ");
+      return;
+    }
+
+    if (nodes.length === 0 || /:/.test(trimmed)) {
+      addNode(trimmed);
+      return;
+    }
+
+    nodes[nodes.length - 1].detail = [nodes[nodes.length - 1].detail, trimmed]
+      .filter(Boolean)
+      .join(" ");
+  });
+
+  if (nodes.length < 3) return null;
+
+  return {
+    type: "process",
+    nodes,
+    connectors,
+  };
+}
+
 function parseReaderDiagram(lines = []) {
   return (
-    parseBadgeBlock(lines) ||
     parseTableDiagram(lines) ||
     parseStackDiagram(lines) ||
+    parseProcessDiagram(lines) ||
     parseFlowDiagram(lines) ||
-    parseLinearFlowDiagram(lines)
+    parseLinearFlowDiagram(lines) ||
+    parseBadgeBlock(lines)
   );
 }
 
 function parseBadgeBlock(lines = []) {
-  const nonEmptyLines = lines.map(normalizeDiagramText).filter((line) => line.trim());
+  const nonEmptyLines = getNormalizedDiagramLines(lines);
   const title = nonEmptyLines[0]?.trim().match(/^\[([^\]]{8,})\]$/)?.[1] || "";
 
   if (!title || nonEmptyLines.length < 2) return null;
+  if (!/(verified|clearance|certificate|badge|compliance|safety|id)/i.test(title)) {
+    return null;
+  }
 
   const items = nonEmptyLines
     .slice(1)
     .map((line) => line.replace(/^\s*[-*]\s*/, "").trim())
-    .filter(Boolean)
+    .filter((line) => /^[^:]{2,60}:\s+/.test(line))
     .map((line) => {
       const [label, ...valueParts] = line.split(":");
 
@@ -474,7 +622,7 @@ function parseBadgeBlock(lines = []) {
       };
     });
 
-  if (items.length < 2) return null;
+  if (items.length < 2 || items.length < nonEmptyLines.length - 2) return null;
 
   return {
     type: "badge",
@@ -615,6 +763,40 @@ function LinearDiagram({ diagram }) {
   );
 }
 
+function ProcessDiagram({ diagram }) {
+  return (
+    <DiagramShell title="Process Flow">
+      <div className="mx-auto max-w-2xl space-y-3">
+        {diagram.nodes.map((node, index) => (
+          <React.Fragment key={`${node.label}-${index}`}>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+              <p className="text-sm font-bold leading-snug text-slate-950">
+                {node.label}
+              </p>
+              {node.detail ? (
+                <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                  {node.detail}
+                </p>
+              ) : null}
+            </div>
+            {index < diagram.nodes.length - 1 ? (
+              <div className="flex flex-col items-center gap-1 text-[10px] font-bold uppercase tracking-[0.2em] text-violet-500">
+                <span className="h-5 w-px bg-violet-300" />
+                {diagram.connectors[index] ? (
+                  <span className="max-w-sm rounded-full bg-violet-50 px-3 py-1 text-center text-violet-700">
+                    {diagram.connectors[index]}
+                  </span>
+                ) : null}
+                <span className="text-base leading-none">v</span>
+              </div>
+            ) : null}
+          </React.Fragment>
+        ))}
+      </div>
+    </DiagramShell>
+  );
+}
+
 function BadgeBlock({ diagram }) {
   return (
     <figure className="not-prose my-8 overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/60 shadow-sm">
@@ -685,6 +867,7 @@ export function ReaderCodeBlock({ children, className = "", inline = false }) {
 
   if (diagram?.type === "table") return <TableDiagram diagram={diagram} />;
   if (diagram?.type === "stack") return <StackDiagram diagram={diagram} />;
+  if (diagram?.type === "process") return <ProcessDiagram diagram={diagram} />;
   if (diagram?.type === "flow") return <FlowDiagram diagram={diagram} />;
   if (diagram?.type === "linear") return <LinearDiagram diagram={diagram} />;
   if (diagram?.type === "badge") return <BadgeBlock diagram={diagram} />;
