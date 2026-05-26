@@ -5,18 +5,74 @@ import axiosInstance from "../lib/axios";
 import { API_ENDPOINTS, resolveImageUrl } from "../utils/api-endpoints";
 import DashboardLayout from "../layouts/DashboardLayout";
 import { Button, Input } from "../components";
-import { Mail, User2, Camera, Trash2 } from "lucide-react";
+import {
+  Mail,
+  User2,
+  Camera,
+  Trash2,
+  Store,
+  BookOpen,
+  Image as ImageIcon,
+} from "lucide-react";
 import toast from "react-hot-toast";
+
+function validateOptionalUrl(value = "", label = "link") {
+  const trimmed = String(value || "").trim();
+
+  if (!trimmed) return "";
+
+  const normalized = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(normalized);
+
+    return ["http:", "https:"].includes(parsed.protocol)
+      ? ""
+      : `${label} must start with http:// or https://`;
+  } catch {
+    return `Please enter a valid ${label}`;
+  }
+}
+
+function validateStoreUrl(value = "") {
+  return validateOptionalUrl(value, "store link");
+}
+
+function validateShelfPhotoUrl(value = "") {
+  return validateOptionalUrl(value, "shelf photo URL");
+}
+
+function validateShelfPageName(value = "") {
+  return String(value || "").trim().length <= 80
+    ? ""
+    : "Shelf page name cannot exceed 80 characters";
+}
 
 function ProfilePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isDeletingAvatar, setIsDeletingAvatar] = useState(false);
-  const [errors, setErrors] = useState({ name: "" });
-  const [formData, setFormData] = useState({ name: "", email: "" });
+  const [errors, setErrors] = useState({
+    name: "",
+    storeUrl: "",
+    shelfPageName: "",
+    shelfPhotoUrl: "",
+  });
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    storeUrl: "",
+    shelfPageName: "",
+    shelfPhotoUrl: "",
+  });
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [selectedAvatarFile, setSelectedAvatarFile] = useState(null);
   const [hasNameChanged, setHasNameChanged] = useState(false);
+  const [hasStoreUrlChanged, setHasStoreUrlChanged] = useState(false);
+  const [hasShelfPageNameChanged, setHasShelfPageNameChanged] = useState(false);
+  const [hasShelfPhotoUrlChanged, setHasShelfPhotoUrlChanged] = useState(false);
   const [hasAvatarChanged, setHasAvatarChanged] = useState(false);
 
   const fileInputRef = useRef(null);
@@ -25,7 +81,14 @@ function ProfilePage() {
   // Fetch user whenever user changes
   useEffect(() => {
     if (user) {
-      setFormData((prev) => ({ ...prev, name: user.name, email: user.email }));
+      setFormData((prev) => ({
+        ...prev,
+        name: user.name,
+        email: user.email,
+        storeUrl: user.storeUrl || "",
+        shelfPageName: user.shelfPageName || "",
+        shelfPhotoUrl: user.shelfPhotoUrl || "",
+      }));
       setAvatarPreview(user.avatar ? resolveImageUrl(user.avatar) : null);
     }
   }, [user]);
@@ -41,6 +104,20 @@ function ProfilePage() {
     // Check if name has changed from original
     if (name === "name") {
       setHasNameChanged(value.trim() !== user?.name);
+    }
+
+    if (name === "storeUrl") {
+      setHasStoreUrlChanged(value.trim() !== (user?.storeUrl || ""));
+    }
+
+    if (name === "shelfPageName") {
+      setHasShelfPageNameChanged(
+        value.trim() !== (user?.shelfPageName || "")
+      );
+    }
+
+    if (name === "shelfPhotoUrl") {
+      setHasShelfPhotoUrlChanged(value.trim() !== (user?.shelfPhotoUrl || ""));
     }
 
     // clear error for this field when user starts typing
@@ -127,12 +204,27 @@ function ProfilePage() {
 
   const validateForm = (trimmedData) => {
     const nameError = validateName(trimmedData.name);
+    const storeUrlError = validateStoreUrl(trimmedData.storeUrl);
+    const shelfPageNameError = validateShelfPageName(
+      trimmedData.shelfPageName
+    );
+    const shelfPhotoUrlError = validateShelfPhotoUrl(
+      trimmedData.shelfPhotoUrl
+    );
 
     setErrors({
       name: nameError,
+      storeUrl: storeUrlError,
+      shelfPageName: shelfPageNameError,
+      shelfPhotoUrl: shelfPhotoUrlError,
     });
 
-    return !nameError;
+    return (
+      !nameError &&
+      !storeUrlError &&
+      !shelfPageNameError &&
+      !shelfPhotoUrlError
+    );
   };
 
   const handleSubmit = async (event) => {
@@ -141,6 +233,9 @@ function ProfilePage() {
     const trimmedData = {
       name: formData.name.trim(),
       email: formData.email.trim(),
+      storeUrl: formData.storeUrl.trim(),
+      shelfPageName: formData.shelfPageName.trim(),
+      shelfPhotoUrl: formData.shelfPhotoUrl.trim(),
     };
 
     // upload avatar first if there's a new file
@@ -191,10 +286,16 @@ function ProfilePage() {
     try {
       const { data } = await axiosInstance.put(API_ENDPOINTS.PROFILE.EDIT, {
         name: trimmedData.name,
+        storeUrl: trimmedData.storeUrl,
+        shelfPageName: trimmedData.shelfPageName,
+        shelfPhotoUrl: trimmedData.shelfPhotoUrl,
       });
 
       updateUser(data.user);
       setHasNameChanged(false);
+      setHasStoreUrlChanged(false);
+      setHasShelfPageNameChanged(false);
+      setHasShelfPhotoUrlChanged(false);
 
       toast.success("Your profile has been updated successfully!", {
         duration: 5000,
@@ -209,16 +310,30 @@ function ProfilePage() {
 
       toast.error(errorMessage, { duration: 5000 });
 
+      const lowerErrorMessage = errorMessage.toLowerCase();
+      const errorField = lowerErrorMessage.includes("store")
+        ? "storeUrl"
+        : lowerErrorMessage.includes("photo")
+          ? "shelfPhotoUrl"
+          : lowerErrorMessage.includes("shelf")
+            ? "shelfPageName"
+            : "name";
+
       setErrors((prev) => ({
         ...prev,
-        name: errorMessage,
+        [errorField]: errorMessage,
       }));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const isSaveDisabled = !hasNameChanged && !hasAvatarChanged;
+  const isSaveDisabled =
+    !hasNameChanged &&
+    !hasStoreUrlChanged &&
+    !hasShelfPageNameChanged &&
+    !hasShelfPhotoUrlChanged &&
+    !hasAvatarChanged;
 
   return (
     <DashboardLayout>
@@ -325,6 +440,45 @@ function ProfilePage() {
                 icon={Mail}
                 disabled
                 helperText="Registered email cannot be modified."
+              />
+
+              <Input
+                type="text"
+                label="Store Link"
+                name="storeUrl"
+                value={formData.storeUrl}
+                onChange={handleChange}
+                icon={Store}
+                inputMode="url"
+                placeholder="https://amazon.com/author/your-page"
+                error={errors.storeUrl}
+                helperText="Optional. This appears as the store button on public preview pages."
+              />
+
+              <Input
+                type="text"
+                label="Shelf Page Name"
+                name="shelfPageName"
+                value={formData.shelfPageName}
+                onChange={handleChange}
+                icon={BookOpen}
+                maxLength={80}
+                placeholder="Ross's Featured Books"
+                error={errors.shelfPageName}
+                helperText="Optional. This overrides the public shelf title."
+              />
+
+              <Input
+                type="text"
+                label="Shelf Photo URL"
+                name="shelfPhotoUrl"
+                value={formData.shelfPhotoUrl}
+                onChange={handleChange}
+                icon={ImageIcon}
+                inputMode="url"
+                placeholder="https://example.com/shelf.png"
+                error={errors.shelfPhotoUrl}
+                helperText="Optional. A PNG, JPG, or WebP link shown at the top of your shared shelf."
               />
             </div>
 

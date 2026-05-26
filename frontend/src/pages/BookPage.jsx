@@ -7,6 +7,8 @@ import { Book } from "lucide-react";
 import { BookView } from "../components";
 import toast from "react-hot-toast";
 
+const SKELETON_LINE_WIDTHS = [92, 84, 97, 78, 88, 95, 81, 90, 76, 93, 86, 99];
+
 const BookViewSkeleton = () => (
   <div className="h-screen bg-[#faf8f4] flex">
     {/* Sidebar skeleton */}
@@ -38,7 +40,7 @@ const BookViewSkeleton = () => (
             <div
               key={i}
               className="h-4 bg-[#ddd5c4] rounded"
-              style={{ width: `${75 + Math.random() * 25}%` }}
+              style={{ width: `${SKELETON_LINE_WIDTHS[i]}%` }}
             />
           ))}
         </div>

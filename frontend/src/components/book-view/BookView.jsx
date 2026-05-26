@@ -106,7 +106,10 @@ function BookView({ book }) {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ top: 0, behavior: "instant" });
     }
-    setReadingProgress(0);
+
+    const frame = requestAnimationFrame(() => setReadingProgress(0));
+
+    return () => cancelAnimationFrame(frame);
   }, [selectedChapterIndex]);
 
   // ── reading progress via scroll ──────────────────────────────────────────

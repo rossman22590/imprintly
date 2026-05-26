@@ -2,11 +2,106 @@ const User = require("../models/User");
 const fs = require("fs");
 const { syncUserAdminRole } = require("../utils/admin.service");
 const { ensureUserCredits, serializeCredits } = require("../utils/credits.service");
+const { generateShareToken } = require("../utils/share-token");
 const {
   assertUploadedImageFile,
   deleteUploadFile,
   normalizeUploadUrl,
 } = require("../utils/upload-paths");
+
+const PUBLIC_SHARE_THEMES = new Set([
+  "",
+  "violet-pink",
+  "indigo-sky",
+  "teal-lime",
+  "coral-pop",
+  "ocean-mint",
+  "minimal-white",
+  "soft-gray",
+  "graphite-black",
+]);
+
+function serializeBookshelfShare(user) {
+  const token = user?.bookshelfShare?.token || "";
+
+  if (!token) return null;
+
+  return {
+    token,
+    enabledAt: user.bookshelfShare.enabledAt,
+  };
+}
+
+function serializeProfileUser(user) {
+  return {
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    avatar: user.avatar,
+    storeUrl: user.storeUrl || "",
+    shelfPageName: user.shelfPageName || "",
+    shelfPhotoUrl: user.shelfPhotoUrl || "",
+    publicShareTheme: user.publicShareTheme || "",
+    role: user.role,
+    credits: serializeCredits(user),
+    bookshelfShare: serializeBookshelfShare(user),
+  };
+}
+
+function normalizePublicShareTheme(value = "") {
+  const theme = String(value || "").trim();
+
+  return PUBLIC_SHARE_THEMES.has(theme) ? theme : null;
+}
+
+function normalizeStoreUrl(value = "") {
+  return normalizeOptionalHttpUrl(value);
+}
+
+function normalizeShelfPhotoUrl(value = "") {
+  return normalizeOptionalHttpUrl(value);
+}
+
+function normalizeOptionalHttpUrl(value = "") {
+  const trimmed = String(value || "").trim();
+
+  if (!trimmed) return "";
+
+  const normalized = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(normalized);
+
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return null;
+    }
+
+    return parsed.href.length <= 500 ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeShelfPageName(value = "") {
+  const trimmed = String(value || "").trim();
+
+  if (!trimmed) return "";
+
+  return trimmed.length <= 80 ? trimmed : null;
+}
+
+async function getUniqueBookshelfShareToken() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const token = generateShareToken("shelf");
+    const tokenExists = await User.exists({ "bookshelfShare.token": token });
+
+    if (!tokenExists) return token;
+  }
+
+  throw new Error("Could not create a unique bookshelf link.");
+}
 
 /**
  * Get user profile
@@ -26,14 +121,7 @@ async function getProfile(req, res) {
 
     return res.status(200).json({
       message: "User profile found!",
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        avatar: user.avatar,
-        role: user.role,
-        credits: serializeCredits(user),
-      },
+      user: serializeProfileUser(user),
     });
   } catch (error) {
     console.error("Error getting user profile:", error);
@@ -50,11 +138,18 @@ async function getProfile(req, res) {
  */
 async function updateProfile(req, res) {
   try {
-    const { name } = req.body;
+    const { name, storeUrl, publicShareTheme, shelfPageName, shelfPhotoUrl } =
+      req.body;
 
-    if (!name) {
+    if (
+      !name &&
+      storeUrl === undefined &&
+      publicShareTheme === undefined &&
+      shelfPageName === undefined &&
+      shelfPhotoUrl === undefined
+    ) {
       return res.status(400).json({
-        error: "Please provide a name to update!",
+        error: "Please provide profile details to update!",
       });
     }
 
@@ -81,18 +176,59 @@ async function updateProfile(req, res) {
       user.name = name.trim();
     }
 
+    if (storeUrl !== undefined) {
+      const normalizedStoreUrl = normalizeStoreUrl(storeUrl);
+
+      if (normalizedStoreUrl === null) {
+        return res.status(400).json({
+          error: "Please enter a valid store URL.",
+        });
+      }
+
+      user.storeUrl = normalizedStoreUrl;
+    }
+
+    if (shelfPageName !== undefined) {
+      const normalizedShelfPageName = normalizeShelfPageName(shelfPageName);
+
+      if (normalizedShelfPageName === null) {
+        return res.status(400).json({
+          error: "Shelf page name cannot exceed 80 characters.",
+        });
+      }
+
+      user.shelfPageName = normalizedShelfPageName;
+    }
+
+    if (shelfPhotoUrl !== undefined) {
+      const normalizedShelfPhotoUrl = normalizeShelfPhotoUrl(shelfPhotoUrl);
+
+      if (normalizedShelfPhotoUrl === null) {
+        return res.status(400).json({
+          error: "Please enter a valid shelf photo URL.",
+        });
+      }
+
+      user.shelfPhotoUrl = normalizedShelfPhotoUrl;
+    }
+
+    if (publicShareTheme !== undefined) {
+      const normalizedTheme = normalizePublicShareTheme(publicShareTheme);
+
+      if (normalizedTheme === null) {
+        return res.status(400).json({
+          error: "Please choose a valid share page color.",
+        });
+      }
+
+      user.publicShareTheme = normalizedTheme;
+    }
+
     const updatedUser = await user.save();
 
     return res.status(200).json({
       message: "User profile updated successfully!",
-      user: {
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        avatar: updatedUser.avatar,
-        role: updatedUser.role,
-        credits: serializeCredits(updatedUser),
-      },
+      user: serializeProfileUser(updatedUser),
     });
   } catch (error) {
     console.error("Error updating user profile:", error);
@@ -136,14 +272,7 @@ async function updateAvatar(req, res) {
 
     return res.status(200).json({
       message: "Avatar updated successfully!",
-      user: {
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        avatar: updatedUser.avatar,
-        role: updatedUser.role,
-        credits: serializeCredits(updatedUser),
-      },
+      user: serializeProfileUser(updatedUser),
     });
   } catch (error) {
     console.error("Error updating avatar:", error);
@@ -187,14 +316,7 @@ async function deleteAvatar(req, res) {
 
     return res.status(200).json({
       message: "Avatar deleted successfully!",
-      user: {
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        avatar: updatedUser.avatar,
-        role: updatedUser.role,
-        credits: serializeCredits(updatedUser),
-      },
+      user: serializeProfileUser(updatedUser),
     });
   } catch (error) {
     console.error("Error deleting avatar:", error);
@@ -203,4 +325,65 @@ async function deleteAvatar(req, res) {
   }
 }
 
-module.exports = { getProfile, updateProfile, updateAvatar, deleteAvatar };
+async function enableBookshelfShare(req, res) {
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found!" });
+    }
+
+    if (!user.bookshelfShare?.token) {
+      user.bookshelfShare = {
+        token: await getUniqueBookshelfShareToken(),
+        enabledAt: new Date(),
+      };
+      await user.save();
+    }
+
+    return res.status(200).json({
+      message: "Bookshelf share link is active.",
+      user: serializeProfileUser(user),
+      bookshelfShare: serializeBookshelfShare(user),
+    });
+  } catch (error) {
+    console.error("Error enabling bookshelf share:", error);
+
+    return res.status(500).json({ error: "Internal Server Error!" });
+  }
+}
+
+async function disableBookshelfShare(req, res) {
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found!" });
+    }
+
+    user.bookshelfShare = {
+      token: "",
+      enabledAt: null,
+    };
+    await user.save();
+
+    return res.status(200).json({
+      message: "Bookshelf share link was revoked.",
+      user: serializeProfileUser(user),
+      bookshelfShare: null,
+    });
+  } catch (error) {
+    console.error("Error disabling bookshelf share:", error);
+
+    return res.status(500).json({ error: "Internal Server Error!" });
+  }
+}
+
+module.exports = {
+  getProfile,
+  updateProfile,
+  updateAvatar,
+  deleteAvatar,
+  enableBookshelfShare,
+  disableBookshelfShare,
+};

@@ -365,6 +365,18 @@ const bookSchema = new mongoose.Schema(
       },
       default: "draft",
     },
+    previewShare: {
+      token: {
+        type: String,
+        default: "",
+        trim: true,
+        maxLength: [80, "Preview share token cannot exceed 80 characters"],
+      },
+      enabledAt: {
+        type: Date,
+        default: null,
+      },
+    },
   },
   {
     timestamps: true,
@@ -374,6 +386,13 @@ const bookSchema = new mongoose.Schema(
 // Index for faster queries
 bookSchema.index({ userId: 1, status: 1 });
 bookSchema.index({ title: "text" }); // Enable text search on title
+bookSchema.index(
+  { "previewShare.token": 1 },
+  {
+    unique: true,
+    partialFilterExpression: { "previewShare.token": { $gt: "" } },
+  }
+);
 
 const Book = mongoose.model("Book", bookSchema);
 

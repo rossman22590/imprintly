@@ -9,6 +9,9 @@ import {
   KDPStudioPage,
   LandingPage,
   ProfilePage,
+  PublicBookshelfPage,
+  PublicBookPreviewPage,
+  PublicSharePage,
   SignInPage,
   SignUpPage,
 } from "../pages";
@@ -41,6 +44,18 @@ const router = createBrowserRouter([
             <SignInPage />
           </PublicRoute>
         ),
+      },
+      {
+        path: "shelf/:shareToken",
+        element: <PublicBookshelfPage />,
+      },
+      {
+        path: "preview/:shareToken",
+        element: <PublicBookPreviewPage />,
+      },
+      {
+        path: ":profileSlug/:shareToken",
+        element: <PublicSharePage />,
       },
       {
         path: "dashboard",

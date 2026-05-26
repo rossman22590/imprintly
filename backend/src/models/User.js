@@ -41,6 +41,39 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    storeUrl: {
+      type: String,
+      default: "",
+      trim: true,
+      maxLength: [500, "Store URL cannot exceed 500 characters"],
+    },
+    shelfPageName: {
+      type: String,
+      default: "",
+      trim: true,
+      maxLength: [80, "Shelf page name cannot exceed 80 characters"],
+    },
+    shelfPhotoUrl: {
+      type: String,
+      default: "",
+      trim: true,
+      maxLength: [500, "Shelf photo URL cannot exceed 500 characters"],
+    },
+    publicShareTheme: {
+      type: String,
+      enum: [
+        "",
+        "violet-pink",
+        "indigo-sky",
+        "teal-lime",
+        "coral-pop",
+        "ocean-mint",
+        "minimal-white",
+        "soft-gray",
+        "graphite-black",
+      ],
+      default: "",
+    },
     role: {
       type: String,
       enum: ["user", "admin"],
@@ -72,9 +105,29 @@ const userSchema = new mongoose.Schema(
         default: null,
       },
     },
+    bookshelfShare: {
+      token: {
+        type: String,
+        default: "",
+        trim: true,
+        maxLength: [80, "Bookshelf share token cannot exceed 80 characters"],
+      },
+      enabledAt: {
+        type: Date,
+        default: null,
+      },
+    },
   },
   {
     timestamps: true,
+  }
+);
+
+userSchema.index(
+  { "bookshelfShare.token": 1 },
+  {
+    unique: true,
+    partialFilterExpression: { "bookshelfShare.token": { $gt: "" } },
   }
 );
 

@@ -4,9 +4,13 @@ import toast from "react-hot-toast";
 import axiosInstance from "../lib/axios";
 import { API_BASE_URL, API_ENDPOINTS } from "../utils/api-endpoints";
 import { normalizeBook } from "../utils/api-shapes";
+import { useAuthContext } from "../contexts/AuthContext";
+import { getPublicShareUrl } from "../utils/public-share";
 import {
   ChevronDown,
+  Copy,
   Edit,
+  ExternalLink,
   FileCode,
   FileArchive,
   FileDown,
@@ -15,8 +19,10 @@ import {
   Menu,
   NotebookText,
   Save,
+  Share2,
   Sparkles,
   Store,
+  Unlink,
   WandSparkles,
   X,
 } from "lucide-react";
@@ -50,6 +56,17 @@ function buildImageMarkdown({ image, prompt }) {
     .trim();
 
   return `![${alt}](${url})`;
+}
+
+async function copyToClipboard(value = "") {
+  if (!value) return false;
+
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function replaceImageCommand(content = "", command, imageMarkdown = "") {
@@ -241,6 +258,7 @@ function EditBookPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingCover, setIsGeneratingCover] = useState(false);
+  const [isPreviewShareSaving, setIsPreviewShareSaving] = useState(false);
   const [isGeneratingChapterImage, setIsGeneratingChapterImage] =
     useState(false);
   const [pendingAiToolReview, setPendingAiToolReview] = useState(null);
@@ -251,6 +269,7 @@ function EditBookPage() {
 
   const { bookId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuthContext();
   const fileInputRef = useRef(null);
 
   // Fetch book on mount
@@ -339,11 +358,15 @@ function EditBookPage() {
       if (showToast) {
         toast.success("Changes saved successfully!");
       }
+
+      return true;
     } catch (error) {
       console.error("Error saving chapter content:", error);
       toast.error("Failed to save changes! Please try again.", {
         duration: 5000,
       });
+
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -856,6 +879,79 @@ function EditBookPage() {
     }
   };
 
+  const handleCreatePreviewShare = async () => {
+    setIsPreviewShareSaving(true);
+
+    try {
+      const saved = await handleSaveChanges(book, false);
+
+      if (!saved) return;
+
+      const { data } = await axiosInstance.post(
+        `${API_ENDPOINTS.BOOKS.PREVIEW_SHARE}/${bookId}/preview-share`
+      );
+      const nextBook = normalizeBook(data?.book);
+
+      if (nextBook) {
+        setBook(nextBook);
+      }
+
+      const shareUrl = getPublicShareUrl(data?.previewShare?.token, user?.name);
+
+      if (shareUrl && (await copyToClipboard(shareUrl))) {
+        toast.success("Preview link created and copied.");
+      } else {
+        toast.success("Preview link created.");
+      }
+    } catch (error) {
+      console.error("Error creating preview share:", error);
+      toast.error("Failed to create preview link.");
+    } finally {
+      setIsPreviewShareSaving(false);
+    }
+  };
+
+  const handleCopyPreviewShare = async () => {
+    const token = book?.previewShare?.token || "";
+    const shareUrl = getPublicShareUrl(token, user?.name);
+
+    if (shareUrl && (await copyToClipboard(shareUrl))) {
+      toast.success("Preview link copied.");
+    } else {
+      toast.error("Could not copy the preview link.");
+    }
+  };
+
+  const handleOpenPreviewShare = () => {
+    const shareUrl = getPublicShareUrl(book?.previewShare?.token, user?.name);
+
+    if (shareUrl) {
+      window.open(shareUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const handleRevokePreviewShare = async () => {
+    setIsPreviewShareSaving(true);
+
+    try {
+      const { data } = await axiosInstance.delete(
+        `${API_ENDPOINTS.BOOKS.PREVIEW_SHARE}/${bookId}/preview-share`
+      );
+      const nextBook = normalizeBook(data?.book);
+
+      if (nextBook) {
+        setBook(nextBook);
+      }
+
+      toast.success("Preview link revoked.");
+    } catch (error) {
+      console.error("Error revoking preview share:", error);
+      toast.error("Failed to revoke preview link.");
+    } finally {
+      setIsPreviewShareSaving(false);
+    }
+  };
+
   const handleAiTool = async (action, tone = "") => {
     const currentChapter = book.chapters[selectedChapterIndex];
 
@@ -1117,6 +1213,49 @@ function EditBookPage() {
               <span className="hidden lg:inline">KDP Studio</span>
               <span className="lg:hidden">KDP</span>
             </Button>
+
+            <Dropdown
+              trigger={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  icon={Share2}
+                  size="sm"
+                  isLoading={isPreviewShareSaving}
+                >
+                  <span className="hidden sm:inline-flex items-center gap-1">
+                    Preview
+                    <ChevronDown className="size-4" />
+                  </span>
+
+                  <span className="sm:hidden">
+                    <ChevronDown className="size-4" />
+                  </span>
+                </Button>
+              }
+            >
+              {book?.previewShare?.token ? (
+                <>
+                  <DropdownItem onClick={handleCopyPreviewShare}>
+                    <Copy className="text-slate-500 size-4" />
+                    Copy preview link
+                  </DropdownItem>
+                  <DropdownItem onClick={handleOpenPreviewShare}>
+                    <ExternalLink className="text-slate-500 size-4" />
+                    Open preview page
+                  </DropdownItem>
+                  <DropdownItem onClick={handleRevokePreviewShare}>
+                    <Unlink className="text-red-500 size-4" />
+                    Revoke preview link
+                  </DropdownItem>
+                </>
+              ) : (
+                <DropdownItem onClick={handleCreatePreviewShare}>
+                  <Share2 className="text-slate-500 size-4" />
+                  Create preview link
+                </DropdownItem>
+              )}
+            </Dropdown>
 
             <Dropdown
               trigger={

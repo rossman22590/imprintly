@@ -29,6 +29,7 @@ export const API_ENDPOINTS = {
     EDIT: "/api/profile",
     UPLOAD_AVATAR: "/api/profile/avatar",
     DELETE_AVATAR: "/api/profile/avatar",
+    BOOKSHELF_SHARE: "/api/profile/bookshelf-share",
   },
   CREDITS: {
     GET: "/api/credits",
@@ -43,6 +44,7 @@ export const API_ENDPOINTS = {
     UPDATE_CONTENT: "/api/books",
     UPDATE_COVER: "/api/books",
     UPDATE_KDP: "/api/books",
+    PREVIEW_SHARE: "/api/books",
     DELETE: "/api/books",
   },
   AI: {
@@ -59,5 +61,9 @@ export const API_ENDPOINTS = {
     EPUB: "/api/exports",
     MARKDOWN: "/api/exports",
     PDF: "/api/exports",
+  },
+  PUBLIC: {
+    BOOKSHELF: "/api/public/bookshelves",
+    BOOK_PREVIEW: "/api/public/book-previews",
   },
 };

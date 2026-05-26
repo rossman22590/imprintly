@@ -6,9 +6,36 @@ import { normalizeBooks } from "../utils/api-shapes";
 import toast from "react-hot-toast";
 import DashboardLayout from "../layouts/DashboardLayout";
 import { BookCard, Button, CreateBookModal } from "../components";
-import { Book, BookOpen, BookPlus, LayoutGrid, PencilLine } from "lucide-react";
+import { useAuthContext } from "../contexts/AuthContext";
+import {
+  getPublicShareUrl,
+  normalizePublicShareTheme,
+  PUBLIC_SHARE_THEME_OPTIONS,
+} from "../utils/public-share";
+import {
+  Book,
+  BookOpen,
+  BookPlus,
+  Copy,
+  ExternalLink,
+  LayoutGrid,
+  PencilLine,
+  Share2,
+  Unlink,
+} from "lucide-react";
 
 const BOOKS_PER_ROW = 5;
+
+const copyToClipboard = async (value = "") => {
+  if (!value) return false;
+
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 // ---------------------------------------------------------------------------
 // Skeleton loaders
@@ -264,6 +291,181 @@ const DeleteConfirmationModal = ({
   );
 };
 
+const BookshelfShareModal = ({
+  isOpen,
+  onClose,
+  onCreate,
+  onRevoke,
+  onThemeChange,
+  share,
+  profileName,
+  selectedTheme,
+  isSaving,
+}) => {
+  const shareUrl = getPublicShareUrl(share?.token, profileName);
+
+  const handleCopy = async () => {
+    const copied = await copyToClipboard(shareUrl);
+
+    if (copied) {
+      toast.success("Bookshelf link copied.");
+    } else {
+      toast.error("Could not copy the link.");
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="min-h-screen px-4 flex justify-center items-center">
+        <div
+          onClick={!isSaving ? onClose : undefined}
+          className="bg-black/50 backdrop-blur-sm fixed inset-0 animate-in fade-in duration-200"
+          aria-hidden="true"
+        />
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bookshelf-share-title"
+          className="max-w-lg w-full bg-white rounded-xl p-5 md:p-6 shadow-xl relative animate-in zoom-in-95 duration-200"
+        >
+          <div className="flex items-start gap-3 mb-5">
+            <div className="size-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0">
+              <Share2 className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <h3
+                id="bookshelf-share-title"
+                className="text-gray-900 text-base md:text-lg font-semibold"
+              >
+                Share your bookshelf
+              </h3>
+              <p className="text-gray-600 text-sm mt-1">
+                One public bookshelf link can be active at a time. Revoking it
+                immediately kills the old URL.
+              </p>
+            </div>
+          </div>
+
+          {shareUrl ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                <p className="text-xs font-semibold uppercase text-gray-500 mb-2">
+                  Active link
+                </p>
+                <p className="text-sm text-gray-900 font-mono break-all">
+                  {shareUrl}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleCopy}
+                  icon={Copy}
+                  disabled={isSaving}
+                >
+                  Copy
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    window.open(shareUrl, "_blank", "noopener,noreferrer")
+                  }
+                  icon={ExternalLink}
+                  disabled={isSaving}
+                >
+                  Open
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={onRevoke}
+                  icon={Unlink}
+                  isLoading={isSaving}
+                >
+                  Revoke
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-5 text-center">
+              <p className="text-gray-700 text-sm mb-4">
+                Create a unique URL for this bookshelf when you are ready to
+                share it.
+              </p>
+              <Button
+                type="button"
+                onClick={onCreate}
+                icon={Share2}
+                isLoading={isSaving}
+              >
+                Create Link
+              </Button>
+            </div>
+          )}
+
+          <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <p className="text-xs font-semibold uppercase text-gray-500 mb-3">
+              Share page colors
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {PUBLIC_SHARE_THEME_OPTIONS.map((option) => {
+                const isSelected = selectedTheme === option.id;
+
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => onThemeChange(option.id)}
+                    disabled={isSaving}
+                    aria-pressed={isSelected}
+                    className={`rounded-xl border bg-white p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                      isSelected
+                        ? "border-violet-500 shadow-sm"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5 mb-2">
+                      {option.swatches.map((color) => (
+                        <span
+                          key={color}
+                          className="size-4 rounded-full border border-black/10"
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </span>
+                    <span className="block text-sm font-semibold text-gray-900">
+                      {option.label}
+                    </span>
+                    <span className="block text-xs text-gray-500 mt-1">
+                      {option.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-5 flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              disabled={isSaving}
+            >
+              Close
+            </Button>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+};
+
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
@@ -271,6 +473,8 @@ function DashboardPage() {
   const [books, setBooks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateBookModalOpen, setIsCreateBookModalOpen] = useState(false);
+  const [isBookshelfShareOpen, setIsBookshelfShareOpen] = useState(false);
+  const [isBookshelfShareSaving, setIsBookshelfShareSaving] = useState(false);
   const [bookToDeleteId, setBookToDeleteId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [bookViewMode, setBookViewMode] = useState(() => {
@@ -283,7 +487,10 @@ function DashboardPage() {
   });
 
   const navigate = useNavigate();
+  const { user, updateUser } = useAuthContext();
   const isShelfView = bookViewMode === "shelf";
+  const bookshelfShare = user?.bookshelfShare || null;
+  const publicShareTheme = normalizePublicShareTheme(user?.publicShareTheme);
 
   useEffect(() => {
     const fetchBooks = async () => {
@@ -333,6 +540,78 @@ function DashboardPage() {
     setBookToDeleteId(bookId);
   };
 
+  const handleCreateBookshelfShare = async () => {
+    setIsBookshelfShareSaving(true);
+
+    try {
+      const { data } = await axiosInstance.post(
+        API_ENDPOINTS.PROFILE.BOOKSHELF_SHARE
+      );
+
+      if (data?.user) {
+        updateUser(data.user);
+      }
+
+      const nextToken = data?.bookshelfShare?.token;
+      const shareUrl = getPublicShareUrl(nextToken, data?.user?.name || user?.name);
+
+      if (shareUrl && (await copyToClipboard(shareUrl))) {
+        toast.success("Bookshelf link created and copied.");
+      } else {
+        toast.success("Bookshelf link created.");
+      }
+    } catch (error) {
+      console.error("Error creating bookshelf share:", error);
+      toast.error("Failed to create bookshelf link.");
+    } finally {
+      setIsBookshelfShareSaving(false);
+    }
+  };
+
+  const handleRevokeBookshelfShare = async () => {
+    setIsBookshelfShareSaving(true);
+
+    try {
+      const { data } = await axiosInstance.delete(
+        API_ENDPOINTS.PROFILE.BOOKSHELF_SHARE
+      );
+
+      if (data?.user) {
+        updateUser(data.user);
+      }
+
+      toast.success("Bookshelf link revoked.");
+    } catch (error) {
+      console.error("Error revoking bookshelf share:", error);
+      toast.error("Failed to revoke bookshelf link.");
+    } finally {
+      setIsBookshelfShareSaving(false);
+    }
+  };
+
+  const handleUpdatePublicShareTheme = async (themeId) => {
+    setIsBookshelfShareSaving(true);
+
+    try {
+      const { data } = await axiosInstance.put(API_ENDPOINTS.PROFILE.EDIT, {
+        name: user?.name || "",
+        storeUrl: user?.storeUrl || "",
+        publicShareTheme: themeId,
+      });
+
+      if (data?.user) {
+        updateUser(data.user);
+      }
+
+      toast.success("Share page colors updated.");
+    } catch (error) {
+      console.error("Error updating share page colors:", error);
+      toast.error("Failed to update share page colors.");
+    } finally {
+      setIsBookshelfShareSaving(false);
+    }
+  };
+
   // Chunk books into rows of BOOKS_PER_ROW for the multi-plank shelf
   const shelfRows = useMemo(() => {
     const rows = [];
@@ -368,6 +647,17 @@ function DashboardPage() {
         onClose={() => setIsCreateBookModalOpen(false)}
         onBookCreate={handleCreateBook}
       />
+      <BookshelfShareModal
+        isOpen={isBookshelfShareOpen}
+        onClose={() => setIsBookshelfShareOpen(false)}
+        onCreate={handleCreateBookshelfShare}
+        onRevoke={handleRevokeBookshelfShare}
+        onThemeChange={handleUpdatePublicShareTheme}
+        share={bookshelfShare}
+        profileName={user?.name || ""}
+        selectedTheme={publicShareTheme}
+        isSaving={isBookshelfShareSaving}
+      />
     </>
   );
 
@@ -388,6 +678,15 @@ function DashboardPage() {
               </p>
             </div>
             <div className="w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setIsBookshelfShareOpen(true)}
+                icon={Share2}
+                className="w-full sm:w-auto"
+              >
+                Share Shelf
+              </Button>
               <ViewModeToggle isShelfView={isShelfView} onChange={setBookViewMode} />
               <Button
                 type="button"
@@ -526,6 +825,15 @@ function DashboardPage() {
             {/* Right — controls */}
             <div className="flex items-center gap-2.5 w-full sm:w-auto">
               <ViewModeToggle isShelfView={isShelfView} onChange={setBookViewMode} theme="shelf" />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setIsBookshelfShareOpen(true)}
+                icon={Share2}
+                className="flex-1 sm:flex-none"
+              >
+                Share
+              </Button>
               <Button
                 type="button"
                 onClick={() => setIsCreateBookModalOpen(true)}

@@ -7,6 +7,8 @@ const {
   updateBookContent,
   updateBookCover,
   updateBookKdp,
+  enableBookPreviewShare,
+  disableBookPreviewShare,
   deleteBook,
 } = require("../controllers/books.controller");
 const { uploadBookCoverImage } = require("../middlewares/upload.middleware");
@@ -32,5 +34,11 @@ router.route("/:bookId/cover").put(uploadBookCoverImage, updateBookCover);
 
 // PATCH /api/books/:bookId/kdp - Save KDP Studio settings and generated assets
 router.route("/:bookId/kdp").patch(updateBookKdp);
+
+// POST/DELETE /api/books/:bookId/preview-share - Create or revoke public chapter preview link
+router
+  .route("/:bookId/preview-share")
+  .post(enableBookPreviewShare)
+  .delete(disableBookPreviewShare);
 
 module.exports = router;
