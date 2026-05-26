@@ -131,6 +131,14 @@ function shouldUseGoogleSearch(provider, payload = {}) {
   );
 }
 
+function shouldIncludeTextGraphics(payload = {}) {
+  return isEnabled(
+    payload.includeTextGraphics ??
+      payload.includeGraphics ??
+      payload.allowTextGraphics
+  );
+}
+
 function normalizeOutlineChapters(outline = []) {
   return outline
     .filter((chapter) => chapter && chapter.title)
@@ -425,6 +433,7 @@ async function generateChapterContent(req, res) {
 
     const selectedProvider = normalizeProvider(provider);
     const useGoogleSearch = shouldUseGoogleSearch(selectedProvider, req.body);
+    const includeTextGraphics = shouldIncludeTextGraphics(req.body);
     const safeChapterTitle = sanitizeInput(chapterTitle, 300);
     const safeChapterDescription = sanitizeInput(chapterDescription, 600);
     const safeStyle = sanitizeInput(style, 50);
@@ -440,6 +449,7 @@ async function generateChapterContent(req, res) {
       audience: sanitizeInput(audience, 200) || "General readers",
       bookContext: sanitizeInput(bookContext, 3000),
       useGoogleSearch,
+      includeTextGraphics,
     });
     const content = assertGeneratedChapterContent(result, {
       provider: selectedProvider,
@@ -497,6 +507,7 @@ async function generateFullBook(req, res) {
 
     const selectedProvider = normalizeProvider(provider);
     const useGoogleSearch = shouldUseGoogleSearch(selectedProvider, req.body);
+    const includeTextGraphics = shouldIncludeTextGraphics(req.body);
 
     let book = null;
 
@@ -558,6 +569,7 @@ async function generateFullBook(req, res) {
           genre: safeGenre,
           audience: safeAudience,
           useGoogleSearch,
+          includeTextGraphics,
         }
       );
 
@@ -599,6 +611,7 @@ async function generateFullBook(req, res) {
           audience: safeAudience,
           bookContext,
           useGoogleSearch,
+          includeTextGraphics,
         });
         const content = assertGeneratedChapterContent(result, {
           provider: selectedProvider,
@@ -648,6 +661,7 @@ async function generateFullBook(req, res) {
       sectionModel,
       outlineTree,
       useGoogleSearch,
+      includeTextGraphics,
       grounding: outlineGrounding,
       stats: totalStats,
       statsText: summarizeStatsForDisplay(totalStats),

@@ -17,6 +17,8 @@ const CREDIT_CONFIG = {
   fallbackUsdPerMillion: numberFromEnv(ENV.GEMINI_FALLBACK_USD_PER_MILLION, 1),
 };
 
+const CREDIT_HISTORY_DAYS = 40;
+
 function roundMoney(value) {
   return Math.round(Number(value || 0) * 1_000_000) / 1_000_000;
 }
@@ -81,6 +83,27 @@ function serializeBilling(result) {
   };
 }
 
+function getCreditHistorySince(days = CREDIT_HISTORY_DAYS, now = new Date()) {
+  const numericDays = Math.max(
+    Number.parseInt(days, 10) || CREDIT_HISTORY_DAYS,
+    1
+  );
+  const since = new Date(now);
+
+  since.setDate(since.getDate() - numericDays);
+
+  return since;
+}
+
+function buildCreditHistoryQuery(userId, options = {}) {
+  return {
+    userId,
+    createdAt: {
+      $gte: getCreditHistorySince(options.days, options.now),
+    },
+  };
+}
+
 function buildInsufficientCreditsError(balance, required) {
   const error = new Error(
     `Not enough credits. Required ${roundCredits(required)} credits, available ${roundCredits(balance)}.`
@@ -136,16 +159,19 @@ async function ensureUserCredits(userId) {
   return user;
 }
 
-async function getCreditSummary(userId, limit = 20) {
+async function getCreditSummary(userId, options = {}) {
   const user = await ensureUserCredits(userId);
-  const transactions = await CreditTransaction.find({ userId })
-    .sort({ createdAt: -1 })
-    .limit(Math.min(Math.max(Number(limit) || 20, 1), 100))
-    .lean();
+  const includeTransactions = options.includeTransactions !== false;
+  const transactions = includeTransactions
+    ? await CreditTransaction.find(buildCreditHistoryQuery(userId))
+        .sort({ createdAt: -1 })
+        .lean()
+    : [];
 
   return {
     credits: serializeCredits(user),
     transactions,
+    historyDays: CREDIT_HISTORY_DAYS,
   };
 }
 
@@ -446,13 +472,16 @@ async function adjustUserCredits({
 }
 
 module.exports = {
+  CREDIT_HISTORY_DAYS,
   CREDIT_CONFIG,
   adjustUserCredits,
   assertHasCredits,
+  buildCreditHistoryQuery,
   calculateTokenCharge,
   chargeImageUsage,
   chargeTokenUsage,
   ensureUserCredits,
+  getCreditHistorySince,
   getCreditSummary,
   serializeBilling,
   serializeCredits,

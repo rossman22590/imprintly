@@ -37,6 +37,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   const [useGoogleSearch, setUseGoogleSearch] = useState(false);
   const [generateCover, setGenerateCover] = useState(true);
   const [includeImages, setIncludeImages] = useState(false);
+  const [includeTextGraphics, setIncludeTextGraphics] = useState(false);
   const [generationStats, setGenerationStats] = useState(null);
   const [generationJob, setGenerationJob] = useState(null);
   const [isGeneratingOutline, setIsGeneratingOutline] = useState(false);
@@ -62,6 +63,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setUseGoogleSearch(false);
     setGenerateCover(true);
     setIncludeImages(false);
+    setIncludeTextGraphics(false);
     setGenerationStats(null);
     setGenerationJob(null);
     setIsGeneratingOutline(false);
@@ -163,6 +165,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           status: "outline",
           style: writingStyle,
           useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
+          includeTextGraphics,
           ...(generationStats || {}),
         },
         generateCover,
@@ -288,6 +291,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           provider: aiProvider,
           generateCover,
           includeImages,
+          includeTextGraphics,
           useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
         }
       );
@@ -587,6 +591,43 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
             </span>
           </label>
 
+          <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 cursor-pointer">
+            <span className="flex items-start gap-3 min-w-0">
+              <span className="size-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                <Palette className="size-4" />
+              </span>
+
+              <span className="min-w-0">
+                <span className="block text-slate-900 text-sm font-semibold">
+                  Include text graphics
+                </span>
+                <span className="block text-slate-500 text-xs mt-1">
+                  Allows charts, diagrams, and visual explainers in the written
+                  chapters. Off means the AI is prompted for no graphs.
+                </span>
+              </span>
+            </span>
+
+            <input
+              type="checkbox"
+              checked={includeTextGraphics}
+              onChange={(event) => setIncludeTextGraphics(event.target.checked)}
+              className="sr-only"
+            />
+
+            <span
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                includeTextGraphics ? "bg-violet-600" : "bg-slate-200"
+              }`}
+            >
+              <span
+                className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+                  includeTextGraphics ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+          </label>
+
           {/* Action button */}
           <div className="pt-3 md:pt-4 flex justify-end">
             <Button
@@ -871,6 +912,25 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                     checked={includeImages}
                     onChange={(event) => setIncludeImages(event.target.checked)}
                     className="size-4 accent-violet-600"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg bg-white/70 border border-violet-100 px-3 py-2 cursor-pointer">
+                  <span className="min-w-0">
+                    <span className="block text-violet-950 text-sm font-medium">
+                      Include text graphics
+                    </span>
+                    <span className="block text-violet-700 text-[11px] leading-relaxed">
+                      Allows charts, diagrams, and visual explainers in chapter text.
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={includeTextGraphics}
+                    onChange={(event) =>
+                      setIncludeTextGraphics(event.target.checked)
+                    }
+                    className="size-4 shrink-0 accent-violet-600"
                   />
                 </label>
 

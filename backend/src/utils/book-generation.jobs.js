@@ -78,6 +78,14 @@ function isEnabled(value) {
   return value === true || value === "true" || value === "yes" || value === 1;
 }
 
+function shouldIncludeTextGraphics(payload = {}) {
+  return isEnabled(
+    payload.includeTextGraphics ??
+      payload.includeGraphics ??
+      payload.allowTextGraphics
+  );
+}
+
 function excerptContent(content = "", maxLength = 1200) {
   return String(content)
     .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
@@ -320,6 +328,7 @@ async function resolveBookForJob(job) {
       useGoogleSearch:
         job.provider === "gemini" &&
         isEnabled(payload.useGoogleSearch ?? payload.googleSearch),
+      includeTextGraphics: shouldIncludeTextGraphics(payload),
       progress: job.progress,
     },
   });
@@ -360,6 +369,7 @@ async function runGenerationJob(jobId) {
     const includeChapterImages = isEnabled(
       payload.includeImages ?? payload.generateImages
     );
+    const includeTextGraphics = shouldIncludeTextGraphics(payload);
     const includeCover = isEnabled(payload.generateCover ?? payload.includeCover);
     const useGoogleSearch =
       provider === "gemini" &&
@@ -386,6 +396,7 @@ async function runGenerationJob(jobId) {
       style: safeStyle,
       sourcePrompt: sanitizeInput(payload.topic || book.title, 300),
       useGoogleSearch,
+      includeTextGraphics,
     });
 
     if (!job.retryFailedOnly && chapters.length === 0) {
@@ -401,6 +412,7 @@ async function runGenerationJob(jobId) {
         genre: safeGenre,
         audience: safeAudience,
         useGoogleSearch,
+        includeTextGraphics,
       });
 
       chapters = normalizeOutlineChapters(outlineResult.chapters);
@@ -539,6 +551,7 @@ async function runGenerationJob(jobId) {
           audience: safeAudience,
           bookContext,
           useGoogleSearch,
+          includeTextGraphics,
         });
         let chapterContent = assertGeneratedChapterContent(result, {
           provider,
@@ -676,6 +689,7 @@ async function runGenerationJob(jobId) {
       sectionModel,
       outlineTree,
       useGoogleSearch,
+      includeTextGraphics,
       grounding: outlineGrounding,
       stats: totalStats,
       statsText: summarizeStatsForDisplay(totalStats),

@@ -8,6 +8,8 @@ const {
 } = require("../utils/admin.service");
 const {
   adjustUserCredits,
+  buildCreditHistoryQuery,
+  CREDIT_HISTORY_DAYS,
   ensureUserCredits,
   serializeCredits,
   serializeTransaction,
@@ -130,13 +132,16 @@ async function getUserDetails(req, res) {
 
     const [serializedUser, transactions] = await Promise.all([
       serializeAdminUser(user),
-      CreditTransaction.find({ userId }).sort({ createdAt: -1 }).limit(50),
+      CreditTransaction.find(buildCreditHistoryQuery(userId))
+        .sort({ createdAt: -1 })
+        .lean(),
     ]);
 
     return res.status(200).json({
       message: "Admin user details retrieved.",
       user: serializedUser,
       transactions: transactions.map(serializeTransaction),
+      historyDays: CREDIT_HISTORY_DAYS,
     });
   } catch (error) {
     console.error("Error getting admin user details:", error);

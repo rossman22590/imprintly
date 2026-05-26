@@ -65,6 +65,7 @@ function CreditsPage() {
 
   const credits = summary?.credits;
   const transactions = summary?.transactions || [];
+  const historyDays = summary?.historyDays || 40;
 
   return (
     <DashboardLayout>
@@ -120,17 +121,23 @@ function CreditsPage() {
 
             <section className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-0 flex flex-1 flex-col">
               <div className="px-4 sm:px-5 py-4 border-b border-slate-200 flex shrink-0 items-center justify-between gap-3">
-                <h2 className="text-slate-950 font-semibold">
-                  Transaction history
-                </h2>
-                <span className="text-slate-500 text-xs">
+                <div>
+                  <h2 className="text-slate-950 font-semibold">
+                    Transaction history
+                  </h2>
+                  <p className="text-slate-500 text-xs mt-1">
+                    Last {historyDays} days · all {transactions.length}{" "}
+                    transactions
+                  </p>
+                </div>
+                <span className="text-slate-500 text-xs text-right">
                   1 credit = {formatUsd(credits?.usdPerCredit)}
                 </span>
               </div>
 
               {transactions.length === 0 ? (
                 <p className="px-5 py-10 text-slate-500 text-sm">
-                  No transactions yet.
+                  No transactions in the last {historyDays} days.
                 </p>
               ) : (
                 <ul className="divide-y divide-slate-100 overflow-y-auto min-h-0 flex-1 overscroll-contain">

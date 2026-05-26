@@ -121,6 +121,7 @@ function UserDetailsModal({
   isDetailsLoading,
   isSavingUser,
   isAdjustingCredits,
+  transactionHistoryDays,
   onSaveUser,
   onAdjustCredits,
 }) {
@@ -203,7 +204,7 @@ function UserDetailsModal({
                   Credit history
                 </h3>
                 <span className="text-xs text-slate-500">
-                  Latest {transactions.length}
+                  Last {transactionHistoryDays} days · all {transactions.length}
                 </span>
               </header>
 
@@ -211,7 +212,7 @@ function UserDetailsModal({
                 <p className="px-4 py-10 text-sm text-slate-500">Loading...</p>
               ) : transactions.length === 0 ? (
                 <p className="px-4 py-10 text-sm text-slate-500">
-                  No credit history yet.
+                  No credit transactions in the last {transactionHistoryDays} days.
                 </p>
               ) : (
                 <div className="max-h-80 overflow-auto">
@@ -433,6 +434,7 @@ function AdminPage() {
   const [usersList, setUsersList] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [transactionHistoryDays, setTransactionHistoryDays] = useState(40);
   const [summary, setSummary] = useState(null);
   const [pagination, setPagination] = useState(null);
   const [search, setSearch] = useState("");
@@ -468,6 +470,7 @@ function AdminPage() {
 
       setSelectedUser(data.user);
       setTransactions(data.transactions || []);
+      setTransactionHistoryDays(data.historyDays || 40);
       setEditDraft({
         name: data.user?.name || "",
         role: data.user?.role || "user",
@@ -850,6 +853,7 @@ function AdminPage() {
         isDetailsLoading={isDetailsLoading}
         isSavingUser={isSavingUser}
         isAdjustingCredits={isAdjustingCredits}
+        transactionHistoryDays={transactionHistoryDays}
         onSaveUser={handleSaveUser}
         onAdjustCredits={handleAdjustCredits}
       />

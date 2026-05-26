@@ -407,6 +407,7 @@ function EditBookPage() {
         provider,
         useGoogleSearch:
           provider === "gemini" && Boolean(book.generation?.useGoogleSearch),
+        includeTextGraphics: Boolean(book.generation?.includeTextGraphics),
         bookTitle: book.title,
         genre: book.genre || "Nonfiction",
         audience: book.audience || "General readers",
@@ -647,6 +648,7 @@ function EditBookPage() {
           useGoogleSearch:
             book.generation?.provider === "gemini" &&
             Boolean(book.generation?.useGoogleSearch),
+          includeTextGraphics: Boolean(book.generation?.includeTextGraphics),
         }
       );
 

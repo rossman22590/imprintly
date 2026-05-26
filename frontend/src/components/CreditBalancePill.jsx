@@ -23,7 +23,9 @@ function CreditBalancePill({ compact = false }) {
     setIsLoading(true);
 
     try {
-      const { data } = await axiosInstance.get(API_ENDPOINTS.CREDITS.GET);
+      const { data } = await axiosInstance.get(API_ENDPOINTS.CREDITS.GET, {
+        params: { summaryOnly: true },
+      });
       setCredits(data.credits);
     } catch (error) {
       console.error("Error loading credits:", error);
