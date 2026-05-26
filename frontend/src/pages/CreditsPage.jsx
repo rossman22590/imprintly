@@ -113,8 +113,7 @@ function CreditsPage() {
                   Image: {formatCredits(credits?.imageCredits)} credits
                 </p>
                 <p className="text-slate-500 text-xs mt-1">
-                  Tokens: API cost plus {credits?.tokenMarkupMultiplier || 1}x
-                  markup
+                  Tokens: API cost as per model 
                 </p>
               </div>
             </section>
