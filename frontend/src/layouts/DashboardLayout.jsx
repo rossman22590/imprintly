@@ -2,12 +2,36 @@ import { useEffect, useState } from "react";
 import { useAuthContext } from "../contexts/AuthContext";
 import { Link, useNavigate } from "react-router";
 import { CreditBalancePill, LogoIcon, ProfileMenu } from "../components";
+import axiosInstance from "../lib/axios";
+import { API_ENDPOINTS } from "../utils/api-endpoints";
 
 function DashboardLayout({ children }) {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
-  const { user, unauthenticateUser } = useAuthContext();
+  const { user, unauthenticateUser, updateUser } = useAuthContext();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const refreshProfile = async () => {
+      try {
+        const { data } = await axiosInstance.get(API_ENDPOINTS.PROFILE.GET);
+
+        if (isMounted && data?.user) {
+          updateUser(data.user);
+        }
+      } catch (error) {
+        console.error("Error refreshing profile:", error);
+      }
+    };
+
+    refreshProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [updateUser]);
 
   // Close profile dropdown menu when clicked outside
   useEffect(() => {
@@ -55,6 +79,7 @@ function DashboardLayout({ children }) {
             avatarUrl={user?.avatar || ""}
             username={user?.name || ""}
             email={user?.email || ""}
+            role={user?.role || "user"}
             signoutCallback={handleSignout}
           />
         </div>

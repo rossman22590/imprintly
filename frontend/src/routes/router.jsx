@@ -1,5 +1,6 @@
 import { createBrowserRouter, Outlet } from "react-router";
 import {
+  AdminPage,
   BookPage,
   CreditsPage,
   DashboardPage,
@@ -61,6 +62,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <EditBookPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "admin",
+        element: (
+          <ProtectedRoute>
+            <AdminPage />
           </ProtectedRoute>
         ),
       },

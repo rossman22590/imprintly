@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useCallback, useContext, useState, useEffect } from "react";
 
 const AuthContext = createContext(null);
 
@@ -8,14 +8,14 @@ export function AuthContextProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
 
-  const authenticateUser = (jwt, userInfo) => {
+  const authenticateUser = useCallback((jwt, userInfo) => {
     localStorage.setItem("token", jwt);
     localStorage.setItem("user", JSON.stringify(userInfo));
     setIsAuthenticated(true);
     setUser(userInfo);
-  };
+  }, []);
 
-  const unauthenticateUser = (callback) => {
+  const unauthenticateUser = useCallback((callback) => {
     localStorage.removeItem("token");
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
@@ -24,9 +24,9 @@ export function AuthContextProvider({ children }) {
 
     // consumers can pass this callback to handle navigation
     callback?.();
-  };
+  }, []);
 
-  const checkAuthStatus = () => {
+  const checkAuthStatus = useCallback(() => {
     setIsLoading(true);
 
     try {
@@ -52,18 +52,20 @@ export function AuthContextProvider({ children }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const updateUser = (updatedUserInfo) => {
-    const newUserInfo = { ...user, ...updatedUserInfo };
-    localStorage.setItem("user", JSON.stringify(newUserInfo));
-    setUser(newUserInfo);
-  };
+  const updateUser = useCallback((updatedUserInfo) => {
+    setUser((currentUser) => {
+      const newUserInfo = { ...(currentUser || {}), ...updatedUserInfo };
+      localStorage.setItem("user", JSON.stringify(newUserInfo));
+      return newUserInfo;
+    });
+  }, []);
 
   // check auth status on mount
   useEffect(() => {
     checkAuthStatus();
-  }, []);
+  }, [checkAuthStatus]);
 
   return (
     <AuthContext.Provider

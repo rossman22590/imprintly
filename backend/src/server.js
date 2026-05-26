@@ -6,6 +6,7 @@ const multer = require("multer");
 const path = require("path");
 const ENV = require("./configs/env");
 const { connectToDB } = require("./configs/db");
+const adminRouter = require("./routes/admin.route");
 const authRouter = require("./routes/auth.route");
 const creditsRouter = require("./routes/credits.route");
 const profileRouter = require("./routes/profile.route");
@@ -50,6 +51,7 @@ app.use("/api", apiLimiter);
 
 // Routes
 app.use("/api/auth", authLimiter, authRouter);
+app.use("/api/admin", adminRouter);
 app.use("/api/credits", creditsRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/books", booksRouter);

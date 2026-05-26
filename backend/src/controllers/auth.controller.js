@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const ENV = require("../configs/env");
 const User = require("../models/User");
+const { syncUserAdminRole } = require("../utils/admin.service");
 const { ensureUserCredits, serializeCredits } = require("../utils/credits.service");
 
 function generateToken(userId) {
@@ -25,6 +26,7 @@ async function registerUser(req, res) {
 
     const user = await User.create({ name, email, password });
     await ensureUserCredits(user._id);
+    await syncUserAdminRole(user);
 
     return res.status(201).json({
       message: "User registered successfully!",
@@ -32,6 +34,7 @@ async function registerUser(req, res) {
         _id: user._id,
         name: user.name,
         email: user.email,
+        role: user.role,
         credits: serializeCredits(user),
       },
       token: generateToken(user._id),
@@ -58,6 +61,7 @@ async function signInUser(req, res) {
     }
 
     await ensureUserCredits(user._id);
+    await syncUserAdminRole(user);
 
     return res.status(200).json({
       message: "User signed in successfully!",
@@ -66,6 +70,7 @@ async function signInUser(req, res) {
         name: user.name,
         email: user.email,
         avatar: user.avatar,
+        role: user.role,
         credits: serializeCredits(user),
       },
       token: generateToken(user._id),

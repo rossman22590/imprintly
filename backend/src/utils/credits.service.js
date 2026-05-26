@@ -340,8 +340,114 @@ async function chargeImageUsage({
   });
 }
 
+async function adjustUserCredits({
+  userId,
+  action,
+  amount,
+  adminUserId,
+  note = "",
+}) {
+  const numericAmount = roundCredits(amount);
+
+  if (!["add", "remove", "set"].includes(action)) {
+    const error = new Error("Unsupported credit adjustment action.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!Number.isFinite(numericAmount) || numericAmount < 0) {
+    const error = new Error("Credit amount must be a positive number.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const user = await ensureUserCredits(userId);
+  const currentBalance = roundCredits(user.credits?.balance);
+  let delta = 0;
+  let reason = "";
+  let description = "";
+
+  if (action === "add") {
+    if (numericAmount <= 0) {
+      const error = new Error("Add amount must be greater than zero.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    delta = numericAmount;
+    reason = "admin_credit_add";
+    description = `Admin added ${numericAmount} credits.`;
+  }
+
+  if (action === "remove") {
+    if (numericAmount <= 0) {
+      const error = new Error("Remove amount must be greater than zero.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    delta = -numericAmount;
+    reason = "admin_credit_remove";
+    description = `Admin removed ${numericAmount} credits.`;
+  }
+
+  if (action === "set") {
+    delta = numericAmount - currentBalance;
+    reason = "admin_credit_set";
+    description = `Admin set balance to ${numericAmount} credits.`;
+  }
+
+  const nextBalance = roundCredits(currentBalance + delta);
+
+  if (nextBalance < 0) {
+    throw buildInsufficientCreditsError(currentBalance, Math.abs(delta));
+  }
+
+  const update = {
+    $set: {
+      "credits.balance": nextBalance,
+    },
+  };
+
+  if (delta > 0) {
+    update.$inc = {
+      "credits.lifetimeGranted": roundCredits(delta),
+    };
+  }
+
+  const updatedUser = await User.findByIdAndUpdate(userId, update, {
+    new: true,
+  });
+
+  const transaction = await CreditTransaction.create({
+    userId,
+    type: "adjustment",
+    amount: roundCredits(Math.abs(delta)),
+    balanceAfter: nextBalance,
+    reason,
+    description: note ? `${description} ${note}` : description,
+    creditRateUsd: CREDIT_CONFIG.usdPerCredit,
+    markupMultiplier: 1,
+    metadata: {
+      action,
+      direction: delta < 0 ? "remove" : delta > 0 ? "add" : "none",
+      previousBalance: currentBalance,
+      requestedAmount: numericAmount,
+      adminUserId,
+      note,
+    },
+  });
+
+  return {
+    user: updatedUser,
+    credits: serializeCredits(updatedUser),
+    transaction,
+  };
+}
+
 module.exports = {
   CREDIT_CONFIG,
+  adjustUserCredits,
   assertHasCredits,
   calculateTokenCharge,
   chargeImageUsage,

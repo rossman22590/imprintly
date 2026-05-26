@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "../utils/api-endpoints";
-import { ChevronDown, ChevronUp, LogOut, User2 } from "lucide-react";
+import { ChevronDown, ChevronUp, LogOut, ShieldCheck, User2 } from "lucide-react";
 import { Link } from "react-router";
 
 const ProfileMenu = ({
@@ -8,6 +8,7 @@ const ProfileMenu = ({
   avatarUrl,
   username,
   email,
+  role = "user",
   signoutCallback,
 }) => (
   <nav onClick={(event) => event.stopPropagation()} className="relative">
@@ -58,6 +59,16 @@ const ProfileMenu = ({
 
         {/* Menu items */}
         <div className="py-1">
+          {role === "admin" && (
+            <Link
+              to="/admin"
+              className="flex items-center gap-x-2 w-full text-sm text-gray-700 px-3 py-2 transition-colors duration-200 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none"
+            >
+              <ShieldCheck className="size-4 text-violet-500" />
+              <span>Admin Panel</span>
+            </Link>
+          )}
+
           <Link
             to="/profile"
             className="flex items-center gap-x-2 w-full text-sm text-gray-700 px-3 py-2 transition-colors duration-200 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none"

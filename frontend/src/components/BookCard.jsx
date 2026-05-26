@@ -9,7 +9,7 @@ function BookCard({ book, onDelete }) {
 
   const coverImageUrl = coverImage
     ? resolveImageUrl(coverImage)
-    : "/images/default-book-cover.png";
+    : "/images/default-book-cover.jpg";
 
   return (
     <li
@@ -30,7 +30,7 @@ function BookCard({ book, onDelete }) {
           src={coverImageUrl}
           alt={`${title} cover`}
           onError={(event) => {
-            event.target.src = "/images/default-book-cover.png";
+            event.target.src = "/images/default-book-cover.jpg";
           }}
           className="w-full aspect-16/25 object-cover transition-transform duration-500 group-hover:scale-105 group-focus-within:scale-105"
         />

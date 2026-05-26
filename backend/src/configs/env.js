@@ -36,6 +36,10 @@ const ENV = {
     process.env.GEMINI_OUTPUT_USD_PER_MILLION ?? "1",
   GEMINI_FALLBACK_USD_PER_MILLION:
     process.env.GEMINI_FALLBACK_USD_PER_MILLION ?? "1",
+  ADMIN_EMAILS: process.env.ADMIN_EMAILS ?? "rcohen@mytsi.org",
+  BOOTSTRAP_FIRST_ADMIN:
+    process.env.BOOTSTRAP_FIRST_ADMIN ??
+    (process.env.NODE_ENV === "production" ? "false" : "true"),
   PUBLIC_API_URL: process.env.PUBLIC_API_URL ?? "",
   CLIENT_URL: process.env.CLIENT_URL ?? "",
 };

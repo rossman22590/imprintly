@@ -34,6 +34,13 @@ function transactionIcon(type, reason) {
   return Sparkles;
 }
 
+function transactionIsNegative(transaction) {
+  return (
+    transaction?.type === "debit" ||
+    transaction?.metadata?.direction === "remove"
+  );
+}
+
 function CreditsPage() {
   const [summary, setSummary] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -132,7 +139,7 @@ function CreditsPage() {
                       transaction.type,
                       transaction.reason
                     );
-                    const isDebit = transaction.type === "debit";
+                    const isDebit = transactionIsNegative(transaction);
 
                     return (
                       <li
