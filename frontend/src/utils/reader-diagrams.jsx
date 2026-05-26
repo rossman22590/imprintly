@@ -1740,17 +1740,22 @@ const readerMarkdownComponents = {
   },
 };
 
-export function ReaderMarkdownContent({ source = "", fontSize = 18 }) {
+export function ReaderMarkdownContent({
+  source = "",
+  fontSize = 18,
+  colorMode = "light",
+  fontFamily = "Georgia, Cambria, 'Times New Roman', serif",
+}) {
   return (
     <MDEditor.Markdown
       source={normalizeReaderMarkdown(source)}
       rehypePlugins={[[rehypeSanitize]]}
       components={readerMarkdownComponents}
-      wrapperElement={{ "data-color-mode": "light" }}
+      wrapperElement={{ "data-color-mode": colorMode }}
       style={{
         backgroundColor: "transparent",
         color: "inherit",
-        fontFamily: "Charter, Georgia, 'Times New Roman', serif",
+        fontFamily,
         fontSize,
         lineHeight: 1.7,
       }}

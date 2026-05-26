@@ -3,23 +3,45 @@ import { useEffect, useState } from "react";
 import { API_ENDPOINTS } from "../utils/api-endpoints";
 import { normalizeBook } from "../utils/api-shapes";
 import axiosInstance from "../lib/axios";
-import DashboardLayout from "../layouts/DashboardLayout";
 import { Book } from "lucide-react";
 import { BookView } from "../components";
 import toast from "react-hot-toast";
 
 const BookViewSkeleton = () => (
-  <div className="animate-pulse">
-    <div className="w-1/2 h-8 bg-slate-200 rounded mb-4" />
-    <div className="w-1/2 h-8 bg-slate-200 rounded mb-4" />
-
-    <div className="flex items-center gap-8">
-      <div className="w-1/4">
-        <div className="h-96 bg-slate-200 rounded-lg" />
+  <div className="h-screen bg-[#faf8f4] flex">
+    {/* Sidebar skeleton */}
+    <div className="w-72 h-full bg-[#f3efe8] border-r border-[#e8e0d0] flex-shrink-0 animate-pulse">
+      <div className="p-6 border-b border-[#e8e0d0]">
+        <div className="h-4 bg-[#ddd5c4] rounded mb-3 w-3/4" />
+        <div className="h-3 bg-[#ddd5c4] rounded w-1/2" />
       </div>
+      <div className="p-4 space-y-2">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="h-10 bg-[#ddd5c4] rounded-lg" />
+        ))}
+      </div>
+    </div>
 
-      <div className="w-3/4">
-        <div className="h-full bg-slate-200 rounded-lg" />
+    {/* Main content skeleton */}
+    <div className="flex-1 flex flex-col animate-pulse">
+      <div className="h-14 border-b border-[#e8e0d0] bg-[#faf8f4] px-6 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="h-4 bg-[#ddd5c4] rounded w-24" />
+          <div className="h-4 bg-[#ddd5c4] rounded w-48" />
+        </div>
+        <div className="h-4 bg-[#ddd5c4] rounded w-20" />
+      </div>
+      <div className="flex-1 p-8 max-w-2xl mx-auto w-full">
+        <div className="h-8 bg-[#ddd5c4] rounded mb-8 w-2/3" />
+        <div className="space-y-3">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-4 bg-[#ddd5c4] rounded"
+              style={{ width: `${75 + Math.random() * 25}%` }}
+            />
+          ))}
+        </div>
       </div>
     </div>
   </div>
@@ -32,7 +54,6 @@ function BookPage() {
   const [book, setBook] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch book on mount
   useEffect(() => {
     const fetchBook = async () => {
       try {
@@ -52,34 +73,28 @@ function BookPage() {
     fetchBook();
   }, [bookId, navigate]);
 
-  return (
-    <DashboardLayout>
-      {isLoading ? (
-        <div className="container max-w-7xl p-4 md:p-6 mx-auto">
-          <BookViewSkeleton />
-        </div>
-      ) : book ? (
-        <BookView book={book} />
-      ) : (
-        <div className="h-full px-4 flex justify-center items-center">
-          <section className="text-center border-2 border-dashed border-slate-200 rounded-xl px-4 py-12">
-            <div className="size-16 bg-slate-100 rounded-full mb-4 mx-auto flex justify-center items-center">
-              <Book className="size-8 text-slate-400" />
-            </div>
+  if (isLoading) return <BookViewSkeleton />;
 
-            <h3 className="text-slate-900 text-lg font-medium mb-2">
-              Book Not Found
-            </h3>
+  if (!book) {
+    return (
+      <div className="h-screen bg-[#faf8f4] flex justify-center items-center">
+        <section className="text-center border-2 border-dashed border-[#ddd5c4] rounded-xl px-8 py-14">
+          <div className="size-16 bg-[#f3efe8] rounded-full mb-4 mx-auto flex justify-center items-center">
+            <Book className="size-8 text-[#b8a98a]" />
+          </div>
+          <h3 className="text-[#2c2416] text-lg font-semibold mb-2">
+            Book Not Found
+          </h3>
+          <p className="max-w-md text-[#8c7a62] text-sm">
+            The book you are looking for either does not exist or you do not
+            have permission to view it.
+          </p>
+        </section>
+      </div>
+    );
+  }
 
-            <p className="max-w-md text-slate-500 text-sm mb-6">
-              The book you are looking for either does not exist or you do not
-              have permission to view it.
-            </p>
-          </section>
-        </div>
-      )}
-    </DashboardLayout>
-  );
+  return <BookView book={book} />;
 }
 
 export default BookPage;

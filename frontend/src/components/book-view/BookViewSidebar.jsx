@@ -1,4 +1,4 @@
-import { BookOpen, ChevronLeft } from "lucide-react";
+import { BookOpen, X } from "lucide-react";
 
 function BookViewSidebar({
   isOpen,
@@ -8,77 +8,208 @@ function BookViewSidebar({
   onClose,
 }) {
   const chapters = Array.isArray(book?.chapters) ? book.chapters : [];
+  const completedCount = selectedChapterIndex;
+  const progressPercent =
+    chapters.length > 1
+      ? Math.round((selectedChapterIndex / (chapters.length - 1)) * 100)
+      : 100;
 
   return (
-    <>
-      {/* Mobile overlay */}
-      {isOpen && (
+    <aside
+      className={`
+        h-full flex flex-col shrink-0 border-r overflow-hidden
+        fixed lg:relative left-0 top-0 z-40
+        transition-[width,transform] duration-300 ease-in-out
+        ${isOpen ? "w-72 translate-x-0" : "w-0 -translate-x-full lg:w-0 lg:translate-x-0"}
+      `}
+      style={{
+        background: "var(--reader-bg-sidebar)",
+        borderColor: "var(--reader-border)",
+      }}
+      aria-label="Table of contents"
+      aria-hidden={!isOpen}
+    >
+      {/* Inner wrapper prevents content flash during close animation */}
+      <div className="w-72 h-full flex flex-col overflow-hidden">
+        {/* ── sidebar header ─────────────────────────────────────────── */}
         <div
-          onClick={onClose}
-          className="bg-black/20 backdrop-blur-sm fixed inset-0 z-40 lg:hidden"
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={`w-80 h-full bg-white border-r border-gray-100 fixed lg:relative left-0 top-0 transform transition-transform duration-300 ease-in-out z-50 ${
-          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
-      >
-        <div className="border-b border-gray-100 p-6">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <BookOpen className="size-5 text-violet-600" />
-              <span className="text-gray-900 font-medium">Chapters</span>
+          className="shrink-0 px-5 pt-5 pb-4 border-b"
+          style={{ borderColor: "var(--reader-border)" }}
+        >
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div
+                className="shrink-0 size-8 rounded-lg flex items-center justify-center"
+                style={{ background: "var(--reader-accent-soft)" }}
+              >
+                <BookOpen
+                  className="size-4"
+                  style={{ color: "var(--reader-accent)" }}
+                />
+              </div>
+              <div className="min-w-0">
+                <p
+                  className="text-xs font-semibold uppercase tracking-wider"
+                  style={{ color: "var(--reader-accent)" }}
+                >
+                  Contents
+                </p>
+              </div>
             </div>
 
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close sidebar"
-              title="Close sidebar"
-              className="lg:hidden rounded-full p-1 transition-colors duration-150 hover:bg-gray-100 focus-visible:bg-gray-100"
+              aria-label="Close table of contents"
+              className="shrink-0 size-7 rounded-lg flex items-center justify-center transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2"
+              style={{
+                color: "var(--reader-text-muted)",
+                "--tw-ring-color": "var(--reader-accent)",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "var(--reader-hover)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "transparent")
+              }
             >
-              <ChevronLeft className="size-4" />
+              <X className="size-3.5" />
             </button>
+          </div>
+
+          {/* Book info */}
+          <div>
+            <h2
+              className="text-sm font-bold leading-snug truncate mb-0.5"
+              style={{ color: "var(--reader-text)" }}
+              title={book?.title}
+            >
+              {book?.title}
+            </h2>
+            <p
+              className="text-xs truncate"
+              style={{ color: "var(--reader-text-muted)" }}
+            >
+              by {book?.author}
+            </p>
+          </div>
+
+          {/* Reading progress */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <span
+                className="text-xs"
+                style={{ color: "var(--reader-text-subtle)" }}
+              >
+                {completedCount === 0
+                  ? "Not started"
+                  : completedCount === chapters.length - 1
+                  ? "Complete"
+                  : `Chapter ${selectedChapterIndex + 1} of ${chapters.length}`}
+              </span>
+              <span
+                className="text-xs font-semibold tabular-nums"
+                style={{ color: "var(--reader-accent)" }}
+              >
+                {progressPercent}%
+              </span>
+            </div>
+            <div
+              className="h-1 rounded-full overflow-hidden"
+              style={{ background: "var(--reader-border)" }}
+            >
+              <div
+                className="h-full rounded-full transition-[width] duration-500 ease-out"
+                style={{
+                  width: `${progressPercent}%`,
+                  background: `linear-gradient(to right, var(--reader-accent), var(--reader-accent-border))`,
+                }}
+              />
+            </div>
           </div>
         </div>
 
-        <ul className="h-full pb-20 overflow-y-auto">
-          {chapters.map((chapter, index) => (
-            <li key={index} className="border-b last:border-b-0 border-gray-50">
-              <button
-                type="button"
-                onClick={() => {
-                  onSelectChapter(index);
-                  onClose();
-                }}
-                className={`w-full text-left p-4 flex flex-col gap-1 hover:bg-gray-50 transition-colors duration-200 ${
-                  selectedChapterIndex === index
-                    ? "bg-violet-50 border-l-4 border-l-violet-600 rounded-l-lg"
-                    : ""
-                }`}
-              >
-                <span
-                  title={chapter.title}
-                  className={`text-sm font-medium truncate ${
-                    selectedChapterIndex === index
-                      ? "text-violet-900"
-                      : "text-gray-900"
-                  }`}
-                >
-                  {chapter.title}
-                </span>
+        {/* ── chapter list ───────────────────────────────────────────── */}
+        <ul
+          className="flex-1 overflow-y-auto reader-scroll-area py-2"
+          role="list"
+        >
+          {chapters.map((chapter, index) => {
+            const isActive = selectedChapterIndex === index;
+            const isRead = index < selectedChapterIndex;
 
-                <span className="text-gray-500 text-xs">
-                  Chapter {index + 1}
-                </span>
-              </button>
-            </li>
-          ))}
+            return (
+              <li key={index} role="listitem">
+                <button
+                  type="button"
+                  onClick={() => onSelectChapter(index)}
+                  aria-current={isActive ? "true" : undefined}
+                  title={chapter.title}
+                  className="w-full text-left px-4 py-3 flex items-start gap-3 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-inset focus-visible:ring-2"
+                  style={{
+                    background: isActive
+                      ? "var(--reader-chapter-active-bg)"
+                      : "transparent",
+                    borderLeft: isActive
+                      ? "3px solid var(--reader-chapter-active-border)"
+                      : "3px solid transparent",
+                    "--tw-ring-color": "var(--reader-accent)",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive)
+                      e.currentTarget.style.background =
+                        "var(--reader-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = isActive
+                      ? "var(--reader-chapter-active-bg)"
+                      : "transparent";
+                  }}
+                >
+                  {/* Chapter number badge */}
+                  <span
+                    className="shrink-0 size-6 rounded-md flex items-center justify-center text-[10px] font-bold tabular-nums mt-0.5"
+                    style={{
+                      background: isActive
+                        ? "var(--reader-accent)"
+                        : isRead
+                        ? "var(--reader-accent-soft)"
+                        : "var(--reader-hover)",
+                      color: isActive
+                        ? "#fff"
+                        : isRead
+                        ? "var(--reader-accent)"
+                        : "var(--reader-text-subtle)",
+                    }}
+                  >
+                    {isRead && !isActive ? "✓" : index + 1}
+                  </span>
+
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className="block text-sm font-medium leading-snug truncate"
+                      style={{
+                        color: isActive
+                          ? "var(--reader-accent)"
+                          : "var(--reader-text)",
+                      }}
+                    >
+                      {chapter.title}
+                    </span>
+                    <span
+                      className="block text-xs mt-0.5"
+                      style={{ color: "var(--reader-text-subtle)" }}
+                    >
+                      Chapter {index + 1}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
-      </aside>
-    </>
+      </div>
+    </aside>
   );
 }
 

@@ -43,26 +43,121 @@
   }
 }
 
+/* ── Reader theme tokens ─────────────────────────────────────────────── */
+[data-reader-theme="paper"] {
+  --reader-bg: #faf8f4;
+  --reader-bg-sidebar: #f3efe8;
+  --reader-bg-header: #faf8f4;
+  --reader-border: #e4ddd0;
+  --reader-text: #2c2416;
+  --reader-text-muted: #8c7a62;
+  --reader-text-subtle: #b8a98a;
+  --reader-accent: #a0703a;
+  --reader-accent-soft: #f0e8d8;
+  --reader-accent-border: #c89660;
+  --reader-scrollbar: #d4c8b4;
+  --reader-hover: #ede7dc;
+  --reader-active: #e8dece;
+  --reader-chapter-active-bg: #f0e8d8;
+  --reader-chapter-active-border: #a0703a;
+  --reader-code-bg: #1c1510;
+  --reader-code-inline-bg: #ede7dc;
+  --reader-code-inline-text: #8b3a1a;
+  --reader-blockquote-border: #c89660;
+  --reader-blockquote-bg: #f7f2ea;
+  --reader-hr: #ddd5c4;
+}
+
+[data-reader-theme="night"] {
+  --reader-bg: #161513;
+  --reader-bg-sidebar: #1e1c19;
+  --reader-bg-header: #161513;
+  --reader-border: #2e2b26;
+  --reader-text: #e2d9c8;
+  --reader-text-muted: #9a8f7e;
+  --reader-text-subtle: #5c5548;
+  --reader-accent: #c9924a;
+  --reader-accent-soft: #2a2218;
+  --reader-accent-border: #8c6232;
+  --reader-scrollbar: #3a342c;
+  --reader-hover: #201e1b;
+  --reader-active: #272420;
+  --reader-chapter-active-bg: #2a2218;
+  --reader-chapter-active-border: #c9924a;
+  --reader-code-bg: #0d0c0a;
+  --reader-code-inline-bg: #2a2218;
+  --reader-code-inline-text: #e8924a;
+  --reader-blockquote-border: #8c6232;
+  --reader-blockquote-bg: #1e1c18;
+  --reader-hr: #2e2b26;
+}
+
+[data-reader-theme="white"] {
+  --reader-bg: #ffffff;
+  --reader-bg-sidebar: #f8f9fa;
+  --reader-bg-header: #ffffff;
+  --reader-border: #e2e8f0;
+  --reader-text: #111827;
+  --reader-text-muted: #6b7280;
+  --reader-text-subtle: #9ca3af;
+  --reader-accent: #4f46e5;
+  --reader-accent-soft: #eef2ff;
+  --reader-accent-border: #818cf8;
+  --reader-scrollbar: #cbd5e1;
+  --reader-hover: #f1f5f9;
+  --reader-active: #e2e8f0;
+  --reader-chapter-active-bg: #eef2ff;
+  --reader-chapter-active-border: #4f46e5;
+  --reader-code-bg: #0f172a;
+  --reader-code-inline-bg: #f1f5f9;
+  --reader-code-inline-text: #be185d;
+  --reader-blockquote-border: #818cf8;
+  --reader-blockquote-bg: #f5f3ff;
+  --reader-hr: #e2e8f0;
+}
+
+/* ── Reader scrollbar ────────────────────────────────────────────────── */
+.reader-scroll-area::-webkit-scrollbar {
+  width: 5px;
+  background: transparent;
+}
+
+.reader-scroll-area::-webkit-scrollbar-thumb {
+  background: var(--reader-scrollbar);
+  border-radius: 99px;
+}
+
+.reader-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: var(--reader-scrollbar) transparent;
+}
+
 @layer components {
   /* Book page reading content styles */
   .reading-content.wmde-markdown {
-    @apply bg-transparent text-slate-800;
+    background: transparent !important;
+    color: var(--reader-text, #2c2416);
   }
 
   .reading-content.wmde-markdown h1 {
-    @apply text-3xl font-bold text-slate-950 mt-8 mb-6;
+    @apply mt-10 mb-6 text-3xl font-bold leading-tight;
+    color: var(--reader-text, #2c2416);
+    letter-spacing: -0.02em;
   }
 
   .reading-content.wmde-markdown h2 {
-    @apply text-2xl font-bold text-slate-950 mt-8 mb-4;
+    @apply mt-10 mb-4 text-2xl font-bold leading-snug;
+    color: var(--reader-text, #2c2416);
+    letter-spacing: -0.015em;
   }
 
   .reading-content.wmde-markdown h3 {
-    @apply text-xl font-bold text-slate-900 mt-6 mb-4;
+    @apply mt-8 mb-3 text-xl font-semibold leading-snug;
+    color: var(--reader-text, #2c2416);
   }
 
   .reading-content p {
-    @apply text-justify hyphens-auto mb-6;
+    @apply text-justify hyphens-auto mb-6 leading-[1.85];
   }
 
   .reading-content p:first-child {
@@ -74,7 +169,8 @@
   }
 
   .reading-content strong {
-    @apply text-[#1f2937] font-semibold;
+    font-weight: 650;
+    color: var(--reader-text, #2c2416);
   }
 
   .reading-content em {
@@ -82,12 +178,20 @@
   }
 
   .reading-content.wmde-markdown a {
-    @apply text-violet-700 underline underline-offset-4 decoration-violet-300;
+    color: var(--reader-accent, #a0703a);
+    @apply underline underline-offset-4;
+    text-decoration-color: var(--reader-accent-border, #c89660);
+    text-decoration-thickness: 1px;
+  }
+
+  .reading-content.wmde-markdown a:hover {
+    text-decoration-thickness: 2px;
   }
 
   .reading-content.wmde-markdown ul,
   .reading-content.wmde-markdown ol {
-    @apply my-5 pl-8 text-slate-700;
+    @apply my-5 pl-8;
+    color: var(--reader-text, #2c2416);
   }
 
   .reading-content.wmde-markdown ul {
@@ -99,23 +203,29 @@
   }
 
   .reading-content.wmde-markdown li {
-    @apply mb-2 pl-1;
+    @apply mb-2 pl-1 leading-relaxed;
   }
 
   .reading-content.wmde-markdown blockquote {
-    @apply my-6 rounded-r-lg border-l-4 border-violet-500 bg-violet-50/70 px-4 py-3 text-slate-700 italic;
+    @apply my-7 rounded-r-lg px-5 py-4 italic;
+    border-left: 3px solid var(--reader-blockquote-border, #c89660);
+    background: var(--reader-blockquote-bg, #f7f2ea);
+    color: var(--reader-text-muted, #8c7a62);
   }
 
   .reading-content.wmde-markdown hr {
-    @apply my-10 border-slate-200;
+    @apply my-12;
+    border-color: var(--reader-hr, #ddd5c4);
   }
 
   .reading-content.wmde-markdown img {
-    @apply my-6 block w-full max-h-[520px] rounded-lg border border-slate-200 bg-white object-contain;
+    @apply my-8 block w-full max-h-[520px] rounded-xl object-contain;
+    border: 1px solid var(--reader-border, #e4ddd0);
   }
 
   .reading-content.wmde-markdown pre {
-    @apply my-6 overflow-x-auto rounded-lg bg-slate-950 p-4 text-left;
+    @apply my-6 overflow-x-auto rounded-xl p-5 text-left;
+    background: var(--reader-code-bg, #1c1510);
   }
 
   .reading-content.wmde-markdown pre code {
@@ -123,7 +233,9 @@
   }
 
   .reading-content.wmde-markdown :not(pre) > code {
-    @apply rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-pink-600;
+    @apply rounded-md px-1.5 py-0.5 font-mono text-sm;
+    background: var(--reader-code-inline-bg, #ede7dc);
+    color: var(--reader-code-inline-text, #8b3a1a);
   }
 
   .reading-content.wmde-markdown table {
@@ -132,11 +244,104 @@
 
   .reading-content.wmde-markdown th,
   .reading-content.wmde-markdown td {
-    @apply border border-slate-200 px-3 py-2;
+    @apply px-3 py-2.5;
+    border: 1px solid var(--reader-border, #e4ddd0);
+    color: var(--reader-text, #2c2416);
   }
 
   .reading-content.wmde-markdown th {
-    @apply bg-slate-50 font-semibold text-slate-900;
+    @apply font-semibold;
+    background: var(--reader-accent-soft, #f0e8d8);
+    color: var(--reader-text, #2c2416);
+  }
+
+  /* ── Dark-mode overrides: force ALL wmde-markdown elements to use theme vars ── */
+
+  /* Root wrapper — clear MDEditor's own dark background */
+  [data-color-mode="dark"] .reading-content.wmde-markdown,
+  [data-color-mode="dark"].reading-content.wmde-markdown {
+    background: transparent !important;
+    color: var(--reader-text) !important;
+  }
+
+  /* Headings */
+  [data-color-mode="dark"] .reading-content.wmde-markdown h1,
+  [data-color-mode="dark"] .reading-content.wmde-markdown h2,
+  [data-color-mode="dark"] .reading-content.wmde-markdown h3,
+  [data-color-mode="dark"] .reading-content.wmde-markdown h4,
+  [data-color-mode="dark"] .reading-content.wmde-markdown h5,
+  [data-color-mode="dark"] .reading-content.wmde-markdown h6 {
+    color: var(--reader-text) !important;
+    border-color: var(--reader-border) !important;
+  }
+
+  /* Body text */
+  [data-color-mode="dark"] .reading-content p,
+  [data-color-mode="dark"] .reading-content.wmde-markdown li,
+  [data-color-mode="dark"] .reading-content.wmde-markdown ul,
+  [data-color-mode="dark"] .reading-content.wmde-markdown ol {
+    color: var(--reader-text) !important;
+  }
+
+  /* Tables */
+  [data-color-mode="dark"] .reading-content.wmde-markdown table {
+    border-color: var(--reader-border) !important;
+  }
+
+  [data-color-mode="dark"] .reading-content.wmde-markdown tr {
+    background: transparent !important;
+    border-color: var(--reader-border) !important;
+  }
+
+  [data-color-mode="dark"] .reading-content.wmde-markdown tr:nth-child(2n) {
+    background: var(--reader-hover) !important;
+  }
+
+  [data-color-mode="dark"] .reading-content.wmde-markdown th,
+  [data-color-mode="dark"] .reading-content.wmde-markdown td {
+    background: transparent !important;
+    border-color: var(--reader-border) !important;
+    color: var(--reader-text) !important;
+  }
+
+  [data-color-mode="dark"] .reading-content.wmde-markdown th {
+    background: var(--reader-accent-soft) !important;
+    color: var(--reader-text) !important;
+  }
+
+  /* Blockquote */
+  [data-color-mode="dark"] .reading-content.wmde-markdown blockquote {
+    border-left-color: var(--reader-blockquote-border) !important;
+    background: var(--reader-blockquote-bg) !important;
+    color: var(--reader-text-muted) !important;
+  }
+
+  /* Inline code */
+  [data-color-mode="dark"] .reading-content.wmde-markdown :not(pre) > code {
+    background: var(--reader-code-inline-bg) !important;
+    color: var(--reader-code-inline-text) !important;
+  }
+
+  /* Fenced code blocks */
+  [data-color-mode="dark"] .reading-content.wmde-markdown pre,
+  [data-color-mode="dark"] .reading-content.wmde-markdown pre > code {
+    background: var(--reader-code-bg) !important;
+    color: #e2e8f0 !important;
+  }
+
+  /* HR */
+  [data-color-mode="dark"] .reading-content.wmde-markdown hr {
+    border-color: var(--reader-hr) !important;
+  }
+
+  /* Links */
+  [data-color-mode="dark"] .reading-content.wmde-markdown a {
+    color: var(--reader-accent) !important;
+  }
+
+  /* Strong / em */
+  [data-color-mode="dark"] .reading-content strong {
+    color: var(--reader-text) !important;
   }
 
   /* @uiw-react-md-editor component styles */
