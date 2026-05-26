@@ -385,14 +385,29 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
             placeholder="5"
           />
 
-          <Input
-            type="text"
-            value={topic}
-            onChange={(event) => setTopic(event.target.value)}
-            icon={Lightbulb}
-            label="Topic (Optional)"
-            placeholder="Specific topic for AI generation"
-          />
+          <div className="w-full grid grid-cols-1 gap-y-2">
+            <label
+              htmlFor="book-topic"
+              className="text-gray-700 text-sm font-medium"
+            >
+              Topic (Optional)
+            </label>
+
+            <div className="relative">
+              <div className="pl-3 pt-3 pointer-events-none absolute inset-y-0 left-0">
+                <Lightbulb className="size-4 text-gray-400" />
+              </div>
+
+              <textarea
+                id="book-topic"
+                value={topic}
+                onChange={(event) => setTopic(event.target.value)}
+                rows={4}
+                className="w-full min-h-28 resize-y bg-white text-gray-900 text-sm placeholder-gray-400 pl-10 pr-3 py-3 border border-gray-200 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="Describe the book idea, angle, audience needs, must-cover points, or anything the AI should know."
+              />
+            </div>
+          </div>
 
           <Select
             value={writingStyle}
