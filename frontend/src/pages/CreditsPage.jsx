@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import {
+  ArrowUpRight,
   CalendarClock,
   Coins,
+  CreditCard,
   Crown,
   Gem,
   Image,
@@ -12,6 +14,8 @@ import {
 import DashboardLayout from "../layouts/DashboardLayout";
 import axiosInstance from "../lib/axios";
 import { API_ENDPOINTS } from "../utils/api-endpoints";
+
+const BUY_CREDITS_URL = "https://buy.stripe.com/aFadR2aO0gRt3lU7YUgjC0w";
 
 function formatCredits(value) {
   return new Intl.NumberFormat("en-US", {
@@ -103,13 +107,27 @@ function CreditsPage() {
   return (
     <DashboardLayout>
       <main className="container max-w-6xl h-full min-h-0 p-4 md:p-6 mx-auto flex flex-col">
-        <header className="mb-6 flex shrink-0 flex-col gap-2">
-          <p className="text-violet-600 text-xs font-semibold uppercase tracking-wide">
-            Usage
-          </p>
-          <h1 className="text-slate-950 text-2xl font-bold">
-            Credits and transactions
-          </h1>
+        <header className="mb-6 flex shrink-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-violet-600 text-xs font-semibold uppercase tracking-wide">
+              Usage
+            </p>
+            <h1 className="text-slate-950 text-2xl font-bold">
+              Credits and transactions
+            </h1>
+          </div>
+
+          <a
+            href={BUY_CREDITS_URL}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Buy credits with Stripe"
+            className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-slate-950/15 transition hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-slate-950/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 sm:w-auto"
+          >
+            <CreditCard className="size-4" />
+            <span>Buy Credits</span>
+            <ArrowUpRight className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </a>
         </header>
 
         {isLoading ? (

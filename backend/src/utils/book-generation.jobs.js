@@ -28,6 +28,7 @@ const {
   chargeImageUsage,
   chargeTokenUsage,
 } = require("./credits.service");
+const { normalizeChapterLength } = require("./chapter-length");
 
 const activeJobs = new Set();
 
@@ -306,6 +307,14 @@ async function resolveBookForJob(job) {
 
   const title = sanitizeInput(payload.title || payload.topic, 200);
   const author = sanitizeInput(payload.author || "Unknown Author", 100);
+  const modelConfig =
+    job.provider === "groq"
+      ? getGroqModels({
+          model: payload.model,
+          structureModel: payload.structureModel,
+          sectionModel: payload.sectionModel,
+        })
+      : getGeminiModels();
 
   if (!title || !author) {
     throw new Error("Title and author are required.");
@@ -325,10 +334,13 @@ async function resolveBookForJob(job) {
       jobId: job.id,
       sourcePrompt: sanitizeInput(payload.topic || title, 300),
       style: sanitizeInput(payload.style, 50) || "Informative",
+      structureModel: modelConfig.structureModel,
+      sectionModel: modelConfig.sectionModel,
       useGoogleSearch:
         job.provider === "gemini" &&
         isEnabled(payload.useGoogleSearch ?? payload.googleSearch),
       includeTextGraphics: shouldIncludeTextGraphics(payload),
+      chapterLength: normalizeChapterLength(payload.chapterLength),
       progress: job.progress,
     },
   });
@@ -370,14 +382,27 @@ async function runGenerationJob(jobId) {
       payload.includeImages ?? payload.generateImages
     );
     const includeTextGraphics = shouldIncludeTextGraphics(payload);
+    let chapterLength = normalizeChapterLength(
+      payload.chapterLength || payload.generation?.chapterLength
+    );
     const includeCover = isEnabled(payload.generateCover ?? payload.includeCover);
     const useGoogleSearch =
       provider === "gemini" &&
       isEnabled(payload.useGoogleSearch ?? payload.googleSearch);
+    const modelPayload = {
+      model: payload.model,
+      structureModel: payload.structureModel,
+      sectionModel: payload.sectionModel,
+    };
     const { structureModel, sectionModel } =
-      provider === "groq" ? getGroqModels() : getGeminiModels();
+      provider === "groq" ? getGroqModels(modelPayload) : getGeminiModels();
     let totalStats = emptyStats(provider);
     const book = await resolveBookForJob(job);
+    chapterLength = normalizeChapterLength(
+      payload.chapterLength ||
+        payload.generation?.chapterLength ||
+        book.generation?.chapterLength
+    );
     await assertHasCredits(
       job.userId,
       includeChapterImages || includeCover ? CREDIT_CONFIG.imageCredits : 0.0001
@@ -397,6 +422,7 @@ async function runGenerationJob(jobId) {
       sourcePrompt: sanitizeInput(payload.topic || book.title, 300),
       useGoogleSearch,
       includeTextGraphics,
+      chapterLength,
     });
 
     if (!job.retryFailedOnly && chapters.length === 0) {
@@ -413,6 +439,8 @@ async function runGenerationJob(jobId) {
         audience: safeAudience,
         useGoogleSearch,
         includeTextGraphics,
+        chapterLength,
+        ...modelPayload,
       });
 
       chapters = normalizeOutlineChapters(outlineResult.chapters);
@@ -552,6 +580,8 @@ async function runGenerationJob(jobId) {
           bookContext,
           useGoogleSearch,
           includeTextGraphics,
+          chapterLength,
+          ...modelPayload,
         });
         let chapterContent = assertGeneratedChapterContent(result, {
           provider,
@@ -690,6 +720,7 @@ async function runGenerationJob(jobId) {
       outlineTree,
       useGoogleSearch,
       includeTextGraphics,
+      chapterLength,
       grounding: outlineGrounding,
       stats: totalStats,
       statsText: summarizeStatsForDisplay(totalStats),

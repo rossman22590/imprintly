@@ -48,6 +48,7 @@ const {
   prepareExportImages,
   resolveExportImagePath,
 } = require("../utils/export-markdown");
+const { normalizeChapterLength } = require("../utils/chapter-length");
 
 /**
  * Basic input sanitization.
@@ -280,8 +281,8 @@ Requirements:
 4. Match the book's genre and target reader.`;
 }
 
-function getModelsForProvider(provider) {
-  return provider === "groq" ? getGroqModels() : getGeminiModels();
+function getModelsForProvider(provider, payload = {}) {
+  return provider === "groq" ? getGroqModels(payload) : getGeminiModels();
 }
 
 async function generateStructureForProvider(provider, payload) {
@@ -308,6 +309,7 @@ async function generateBookOutline(req, res) {
       chapterCount,
       description,
       provider,
+      model,
       genre,
       audience,
     } = req.body;
@@ -318,12 +320,13 @@ async function generateBookOutline(req, res) {
 
     const selectedProvider = normalizeProvider(provider);
     const useGoogleSearch = shouldUseGoogleSearch(selectedProvider, req.body);
+    const chapterLength = normalizeChapterLength(req.body.chapterLength);
     const safeTopic = sanitizeInput(topic, 200);
     const safeDescription = sanitizeInput(description, 500);
     const safeStyle = sanitizeInput(style, 50);
     const safeChapterCount = Math.min(
       Math.max(parseInt(chapterCount) || 5, 1),
-      20
+      26
     );
 
     await assertHasCredits(req.user.id, 0.0001);
@@ -338,6 +341,7 @@ async function generateBookOutline(req, res) {
         genre: sanitizeInput(genre, 100) || "Nonfiction",
         audience: sanitizeInput(audience, 200) || "General readers",
         useGoogleSearch,
+        model,
       });
       const billing = await chargeGeneratedTokens({
         req,
@@ -360,6 +364,7 @@ async function generateBookOutline(req, res) {
           structureModel: outlineResult.modelName,
           outlineTree: outlineResult.outlineTree,
           useGoogleSearch,
+          chapterLength,
           grounding: outlineResult.grounding || null,
           stats: outlineResult.stats,
           statsText: summarizeStatsForDisplay(outlineResult.stats),
@@ -399,6 +404,7 @@ async function generateBookOutline(req, res) {
         structureModel: outlineResult.modelName,
         outlineTree: outlineResult.outlineTree,
         useGoogleSearch,
+        chapterLength,
         grounding: outlineResult.grounding || null,
         stats: outlineResult.stats,
         statsText: summarizeStatsForDisplay(outlineResult.stats),
@@ -425,6 +431,7 @@ async function generateChapterContent(req, res) {
       genre,
       audience,
       bookContext,
+      model,
     } = req.body;
 
     if (!chapterTitle) {
@@ -434,6 +441,7 @@ async function generateChapterContent(req, res) {
     const selectedProvider = normalizeProvider(provider);
     const useGoogleSearch = shouldUseGoogleSearch(selectedProvider, req.body);
     const includeTextGraphics = shouldIncludeTextGraphics(req.body);
+    const chapterLength = normalizeChapterLength(req.body.chapterLength);
     const safeChapterTitle = sanitizeInput(chapterTitle, 300);
     const safeChapterDescription = sanitizeInput(chapterDescription, 600);
     const safeStyle = sanitizeInput(style, 50);
@@ -450,6 +458,8 @@ async function generateChapterContent(req, res) {
       bookContext: sanitizeInput(bookContext, 3000),
       useGoogleSearch,
       includeTextGraphics,
+      chapterLength,
+      model,
     });
     const content = assertGeneratedChapterContent(result, {
       provider: selectedProvider,
@@ -503,6 +513,7 @@ async function generateFullBook(req, res) {
       audience,
       outline,
       provider,
+      model,
     } = req.body;
 
     const selectedProvider = normalizeProvider(provider);
@@ -525,6 +536,9 @@ async function generateFullBook(req, res) {
       }
     }
 
+    const chapterLength = normalizeChapterLength(
+      req.body.chapterLength || book?.generation?.chapterLength
+    );
     let workingTitle = sanitizeInput(title || book?.title || topic, 200);
     const workingSubtitle = sanitizeInput(subtitle || book?.subtitle || "", 300);
     const workingAuthor = sanitizeInput(
@@ -538,8 +552,11 @@ async function generateFullBook(req, res) {
       sanitizeInput(audience || book?.audience, 200) || "General readers";
     const safeTopic = sanitizeInput(topic || workingTitle, 300);
     const safeDescription = sanitizeInput(description || "", 800);
-    const { structureModel, sectionModel } =
-      getModelsForProvider(selectedProvider);
+    const modelPayload = { model };
+    const { structureModel, sectionModel } = getModelsForProvider(
+      selectedProvider,
+      modelPayload
+    );
 
     if (!workingTitle || !workingAuthor) {
       return res
@@ -570,6 +587,8 @@ async function generateFullBook(req, res) {
           audience: safeAudience,
           useGoogleSearch,
           includeTextGraphics,
+          chapterLength,
+          ...modelPayload,
         }
       );
 
@@ -612,6 +631,8 @@ async function generateFullBook(req, res) {
           bookContext,
           useGoogleSearch,
           includeTextGraphics,
+          chapterLength,
+          ...modelPayload,
         });
         const content = assertGeneratedChapterContent(result, {
           provider: selectedProvider,
@@ -662,6 +683,7 @@ async function generateFullBook(req, res) {
       outlineTree,
       useGoogleSearch,
       includeTextGraphics,
+      chapterLength,
       grounding: outlineGrounding,
       stats: totalStats,
       statsText: summarizeStatsForDisplay(totalStats),

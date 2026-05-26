@@ -116,8 +116,27 @@ export const WRITING_STYLES = [
 ];
 
 export const AI_PROVIDERS = [
-  { label: "Groq GPT-OSS Fast Book Engine", value: "groq" },
+  { label: "Groq Book Engine", value: "groq" },
   { label: "Gemini 3.5 Flash Book Engine", value: "gemini" },
+];
+
+export const GROQ_TEXT_MODELS = [
+  {
+    label: "GPT-OSS 120B - best quality",
+    value: "openai/gpt-oss-120b",
+  },
+  {
+    label: "GPT-OSS 20B - fastest",
+    value: "openai/gpt-oss-20b",
+  },
+  {
+    label: "Llama 4 Scout",
+    value: "meta-llama/llama-4-scout-17b-16e-instruct",
+  },
+  {
+    label: "Llama 3.3 70B",
+    value: "llama-3.3-70b-versatile",
+  },
 ];
 
 export const BOOK_GENRES = [

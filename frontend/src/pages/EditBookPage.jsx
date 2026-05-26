@@ -428,9 +428,11 @@ function EditBookPage() {
         chapterDescription: chapter.description || "",
         style: book.generation?.style || "Informative",
         provider,
+        model: provider === "groq" ? book.generation?.sectionModel : undefined,
         useGoogleSearch:
           provider === "gemini" && Boolean(book.generation?.useGoogleSearch),
         includeTextGraphics: Boolean(book.generation?.includeTextGraphics),
+        chapterLength: book.generation?.chapterLength || "medium",
         bookTitle: book.title,
         genre: book.genre || "Nonfiction",
         audience: book.audience || "General readers",
@@ -672,6 +674,7 @@ function EditBookPage() {
             book.generation?.provider === "gemini" &&
             Boolean(book.generation?.useGoogleSearch),
           includeTextGraphics: Boolean(book.generation?.includeTextGraphics),
+          chapterLength: book.generation?.chapterLength || "medium",
         }
       );
 

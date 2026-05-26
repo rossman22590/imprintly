@@ -2,6 +2,7 @@ import { resolveImageUrl } from "../utils/api-endpoints";
 import {
   ChevronDown,
   ChevronUp,
+  FileText,
   LogOut,
   ShieldCheck,
   User2,
@@ -74,6 +75,14 @@ const ProfileMenu = ({
               <span>Admin Panel</span>
             </Link>
           )}
+
+          <Link
+            to="/docs"
+            className="flex items-center gap-x-2 w-full text-sm text-gray-700 px-3 py-2 transition-colors duration-200 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none"
+          >
+            <FileText className="size-4 text-gray-500" />
+            <span>Docs</span>
+          </Link>
 
           <Link
             to="/profile"

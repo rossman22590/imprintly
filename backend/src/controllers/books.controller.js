@@ -27,6 +27,7 @@ const {
   chargeImageUsage,
 } = require("../utils/credits.service");
 const { generateShareToken } = require("../utils/share-token");
+const { normalizeChapterLength } = require("../utils/chapter-length");
 
 const KDP_SETTING_LIMITS = {
   format: 20,
@@ -57,6 +58,17 @@ function pickKdpStrings(payload = {}, limits = {}) {
 
     return picked;
   }, {});
+}
+
+function normalizeGenerationPayload(generation) {
+  if (!generation || typeof generation !== "object") {
+    return generation;
+  }
+
+  return {
+    ...generation,
+    chapterLength: normalizeChapterLength(generation.chapterLength),
+  };
 }
 
 async function normalizeChapterPayloads(chapters = []) {
@@ -275,7 +287,7 @@ async function createBook(req, res) {
       audience,
       language,
       targetWordCount,
-      generation,
+      generation: normalizeGenerationPayload(generation),
       chapters: await normalizeChapterPayloads(chapters || []),
     });
     let coverError = "";
@@ -350,7 +362,7 @@ async function updateBookContent(req, res) {
       audience: req.body.audience,
       language: req.body.language,
       targetWordCount: req.body.targetWordCount,
-      generation: req.body.generation,
+      generation: normalizeGenerationPayload(req.body.generation),
       status: req.body.status,
     };
 

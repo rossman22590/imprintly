@@ -56,3 +56,16 @@ test("Gemini section prompt allows text graphics when requested", () => {
   assert.match(prompt, /Markdown tables/);
   assert.doesNotMatch(prompt, /Do not include charts, graphs, diagrams/);
 });
+
+test("Gemini section prompt applies large chapter length instructions", () => {
+  const prompt = buildGeminiSectionPrompt({
+    chapterTitle: "Container Basics",
+    bookTitle: "Docker Guide",
+    chapterLength: "large",
+  });
+
+  assert.match(prompt, /Chapter length: Large/);
+  assert.match(prompt, /3,500-5,000 words/);
+  assert.match(prompt, /about 14-20 ebook pages/);
+  assert.match(prompt, /hyper-detailed/);
+});

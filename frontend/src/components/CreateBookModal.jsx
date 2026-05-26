@@ -18,20 +18,33 @@ import {
   Users,
 } from "lucide-react";
 import Select from "./ui/Select";
-import { AI_PROVIDERS, BOOK_GENRES, WRITING_STYLES } from "../utils/constants";
+import {
+  AI_PROVIDERS,
+  BOOK_GENRES,
+  GROQ_TEXT_MODELS,
+  WRITING_STYLES,
+} from "../utils/constants";
 import Button from "./ui/Button";
 import toast from "react-hot-toast";
 import axiosInstance from "../lib/axios";
 import { API_ENDPOINTS } from "../utils/api-endpoints";
 
+const CHAPTER_LENGTH_OPTIONS = [
+  { value: "small", label: "Small - focused" },
+  { value: "medium", label: "Medium - detailed" },
+  { value: "large", label: "Large - most pages" },
+];
+
 function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   const [step, setStep] = useState(1);
   const [bookTitle, setBookTitle] = useState("");
   const [chapterCount, setChapterCount] = useState(5);
+  const [chapterLength, setChapterLength] = useState("medium");
   const [chapters, setChapters] = useState([]);
   const [topic, setTopic] = useState("");
   const [writingStyle, setWritingStyle] = useState(WRITING_STYLES[0]);
   const [aiProvider, setAiProvider] = useState("groq");
+  const [groqTextModel, setGroqTextModel] = useState(GROQ_TEXT_MODELS[0].value);
   const [bookGenre, setBookGenre] = useState(BOOK_GENRES[0]);
   const [audience, setAudience] = useState("General readers");
   const [useGoogleSearch, setUseGoogleSearch] = useState(false);
@@ -54,10 +67,12 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setStep(1);
     setBookTitle("");
     setChapterCount(5);
+    setChapterLength("medium");
     setChapters([]);
     setTopic("");
     setWritingStyle(WRITING_STYLES[0]);
     setAiProvider("groq");
+    setGroqTextModel(GROQ_TEXT_MODELS[0].value);
     setBookGenre(BOOK_GENRES[0]);
     setAudience("General readers");
     setUseGoogleSearch(false);
@@ -82,8 +97,11 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   };
 
   const handleGenerateOutline = async () => {
-    const validChapterCount =
+    const parsedChapterCount =
       typeof chapterCount === "string" ? parseInt(chapterCount) : chapterCount;
+    const validChapterCount = Number.isFinite(parsedChapterCount)
+      ? Math.max(1, Math.min(26, parsedChapterCount))
+      : 0;
 
     if (!bookTitle || !validChapterCount || validChapterCount < 1) {
       toast.error("Book title and a valid number of chapters are required!", {
@@ -103,7 +121,9 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
         description: topic || "",
         style: writingStyle,
         chapterCount: validChapterCount,
+        chapterLength,
         provider: aiProvider,
+        model: aiProvider === "groq" ? groqTextModel : undefined,
         genre: bookGenre,
         audience,
         useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
@@ -123,6 +143,11 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   };
 
   const handleAddChapter = () => {
+    if (chapters.length >= 26) {
+      toast.error("AI book creation supports up to 26 chapters.");
+      return;
+    }
+
     setChapters((prev) => [
       ...prev,
       {
@@ -166,6 +191,10 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           style: writingStyle,
           useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
           includeTextGraphics,
+          chapterLength,
+          ...(aiProvider === "groq"
+            ? { structureModel: groqTextModel, sectionModel: groqTextModel }
+            : {}),
           ...(generationStats || {}),
         },
         generateCover,
@@ -285,10 +314,12 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           description: topic || "",
           style: writingStyle,
           chapterCount: chapters.length,
+          chapterLength,
           genre: bookGenre,
           audience,
           outline: chapters,
           provider: aiProvider,
+          model: aiProvider === "groq" ? groqTextModel : undefined,
           generateCover,
           includeImages,
           includeTextGraphics,
@@ -386,40 +417,49 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
             placeholder="What should we call your book?"
           />
 
-          <Input
-            type="number"
-            value={chapterCount}
-            onChange={(event) => {
-              const value = event.target.value;
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              type="number"
+              value={chapterCount}
+              onChange={(event) => {
+                const value = event.target.value;
 
-              if (value === "") {
-                setChapterCount("");
+                if (value === "") {
+                  setChapterCount("");
 
-                return;
-              }
+                  return;
+                }
 
-              // parse and clamp between 1-20
-              const parsed = parseInt(value);
+                const parsed = parseInt(value);
 
-              if (!isNaN(parsed)) {
-                setChapterCount(Math.max(1, Math.min(20, parsed)));
-              }
-            }}
-            onBlur={(event) => {
-              // ensure we have a valid number
-              const value = event.target.value;
+                if (!isNaN(parsed)) {
+                  setChapterCount(Math.max(1, Math.min(26, parsed)));
+                }
+              }}
+              onBlur={(event) => {
+                const value = event.target.value;
 
-              if (value === "" || isNaN(parseInt(value))) {
-                setChapterCount(5);
-              }
-            }}
-            icon={Hash}
-            label="Number of Chapters"
-            min="1"
-            max="20"
-            step="1"
-            placeholder="5"
-          />
+                if (value === "" || isNaN(parseInt(value))) {
+                  setChapterCount(5);
+                }
+              }}
+              icon={Hash}
+              label="Number of Chapters"
+              min="1"
+              max="26"
+              step="1"
+              placeholder="5"
+            />
+
+            <Select
+              name="chapterLength"
+              value={chapterLength}
+              onChange={(event) => setChapterLength(event.target.value)}
+              options={CHAPTER_LENGTH_OPTIONS}
+              icon={BookOpen}
+              label="Chapter Length"
+            />
+          </div>
 
           <div className="w-full grid grid-cols-1 gap-y-2">
             <label
@@ -470,6 +510,16 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
               label="Book Type"
             />
           </div>
+
+          {aiProvider === "groq" && (
+            <Select
+              value={groqTextModel}
+              onChange={(event) => setGroqTextModel(event.target.value)}
+              options={GROQ_TEXT_MODELS}
+              icon={Bot}
+              label="Groq Text Model"
+            />
+          )}
 
           {aiProvider === "gemini" && (
             <label className="flex items-center justify-between gap-4 rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 cursor-pointer">
@@ -934,6 +984,19 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                   />
                 </label>
 
+                <div className="rounded-lg bg-white/70 border border-violet-100 px-3 py-3">
+                  <Select
+                    name="stepTwoChapterLength"
+                    value={chapterLength}
+                    onChange={(event) => setChapterLength(event.target.value)}
+                    options={CHAPTER_LENGTH_OPTIONS}
+                    label="Chapter length"
+                  />
+                  <p className="text-violet-700 text-[11px] leading-relaxed mt-2">
+                    Large asks for the most detailed, page-rich chapters.
+                  </p>
+                </div>
+
                 <Button
                   type="button"
                   onClick={handleGenerateFullBook}
@@ -963,6 +1026,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                 variant="secondary"
                 onClick={handleAddChapter}
                 icon={Plus}
+                disabled={chapters.length >= 26}
               >
                 Add Chapter
               </Button>

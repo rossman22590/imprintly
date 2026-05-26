@@ -306,6 +306,11 @@ const bookSchema = new mongoose.Schema(
         type: Boolean,
         default: false,
       },
+      chapterLength: {
+        type: String,
+        enum: ["small", "medium", "large"],
+        default: "medium",
+      },
       structureModel: {
         type: String,
         default: "",
