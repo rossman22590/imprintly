@@ -8,7 +8,7 @@ function numberFromEnv(value, fallback) {
 }
 
 const CREDIT_CONFIG = {
-  startingCredits: numberFromEnv(ENV.STARTING_CREDITS, 500),
+  startingCredits: numberFromEnv(ENV.STARTING_CREDITS, 50),
   usdPerCredit: numberFromEnv(ENV.USD_PER_CREDIT, 0.001),
   imageCredits: numberFromEnv(ENV.AI_IMAGE_CREDITS, 10),
   tokenMarkupMultiplier: numberFromEnv(ENV.AI_TOKEN_MARKUP_MULTIPLIER, 1.3),

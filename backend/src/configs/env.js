@@ -26,7 +26,7 @@ const ENV = {
   TRUSTED_IMAGE_HOSTS:
     process.env.TRUSTED_IMAGE_HOSTS ??
     "pixiomedia.nyc3.digitaloceanspaces.com",
-  STARTING_CREDITS: process.env.STARTING_CREDITS ?? "500",
+  STARTING_CREDITS: process.env.STARTING_CREDITS ?? "50",
   USD_PER_CREDIT: process.env.USD_PER_CREDIT ?? "0.001",
   AI_IMAGE_CREDITS: process.env.AI_IMAGE_CREDITS ?? "10",
   AI_TOKEN_MARKUP_MULTIPLIER:

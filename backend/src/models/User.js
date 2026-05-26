@@ -50,12 +50,12 @@ const userSchema = new mongoose.Schema(
     credits: {
       balance: {
         type: Number,
-        default: 500,
+        default: 50,
         min: [0, "Credit balance cannot be negative"],
       },
       lifetimeGranted: {
         type: Number,
-        default: 500,
+        default: 50,
         min: [0, "Lifetime granted credits cannot be negative"],
       },
       lifetimeSpent: {
