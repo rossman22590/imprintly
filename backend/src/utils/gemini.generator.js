@@ -94,6 +94,91 @@ function getGeminiDiagnostics(response) {
   return details.length ? details.join("; ") : "no Gemini diagnostics returned";
 }
 
+function getGroundingMetadata(response) {
+  return (
+    response?.candidates?.[0]?.groundingMetadata ||
+    response?.candidates?.[0]?.grounding_metadata ||
+    null
+  );
+}
+
+function getGroundingSources(metadata) {
+  const chunks = metadata?.groundingChunks || metadata?.grounding_chunks || [];
+
+  return chunks
+    .map((chunk, index) => {
+      const web = chunk.web || {};
+      const uri = web.uri || "";
+
+      if (!uri) return null;
+
+      return {
+        index: index + 1,
+        title: web.title || uri,
+        uri,
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeGroundingMetadata(response) {
+  const metadata = getGroundingMetadata(response);
+
+  if (!metadata) return null;
+
+  const sources = getGroundingSources(metadata);
+
+  return {
+    webSearchQueries:
+      metadata.webSearchQueries || metadata.web_search_queries || [],
+    sources,
+  };
+}
+
+function addGroundingCitations(text = "", response) {
+  const metadata = getGroundingMetadata(response);
+  const supports = metadata?.groundingSupports || metadata?.grounding_supports || [];
+  const chunks = metadata?.groundingChunks || metadata?.grounding_chunks || [];
+
+  if (!text || !Array.isArray(supports) || supports.length === 0) {
+    return text;
+  }
+
+  return [...supports]
+    .sort(
+      (a, b) =>
+        (b.segment?.endIndex ?? b.segment?.end_index ?? 0) -
+        (a.segment?.endIndex ?? a.segment?.end_index ?? 0)
+    )
+    .reduce((currentText, support) => {
+      const endIndex = support.segment?.endIndex ?? support.segment?.end_index;
+      const chunkIndexes =
+        support.groundingChunkIndices || support.grounding_chunk_indices || [];
+
+      if (!Number.isInteger(endIndex) || !Array.isArray(chunkIndexes)) {
+        return currentText;
+      }
+
+      const citationLinks = chunkIndexes
+        .map((chunkIndex) => {
+          const uri = chunks[chunkIndex]?.web?.uri;
+
+          return uri ? `[${chunkIndex + 1}](${uri})` : "";
+        })
+        .filter(Boolean);
+
+      if (citationLinks.length === 0) {
+        return currentText;
+      }
+
+      const citationText = citationLinks.join(", ");
+
+      return `${currentText.slice(0, endIndex)}${citationText}${currentText.slice(
+        endIndex
+      )}`;
+    }, text);
+}
+
 function assertUsefulChapterContent(content = "", response) {
   const trimmed = String(content || "").trim();
 
@@ -254,13 +339,12 @@ function normalizeOutlineJson(outlineJson) {
   };
 }
 
-async function createGeminiContent({
-  model,
-  contents,
+function buildGeminiGenerateConfig({
   maxOutputTokens = Number(ENV.GEMINI_MAX_OUTPUT_TOKENS || 9000),
   responseMimeType = "",
   thinkingLevel = ENV.GEMINI_THINKING_LEVEL,
-}) {
+  useGoogleSearch = false,
+} = {}) {
   const config = {
     maxOutputTokens,
     thinkingConfig: {
@@ -271,6 +355,28 @@ async function createGeminiContent({
   if (responseMimeType) {
     config.responseMimeType = responseMimeType;
   }
+
+  if (useGoogleSearch) {
+    config.tools = [{ googleSearch: {} }];
+  }
+
+  return config;
+}
+
+async function createGeminiContent({
+  model,
+  contents,
+  maxOutputTokens = Number(ENV.GEMINI_MAX_OUTPUT_TOKENS || 9000),
+  responseMimeType = "",
+  thinkingLevel = ENV.GEMINI_THINKING_LEVEL,
+  useGoogleSearch = false,
+}) {
+  const config = buildGeminiGenerateConfig({
+    maxOutputTokens,
+    responseMimeType,
+    thinkingLevel,
+    useGoogleSearch,
+  });
 
   return getGeminiClient().models.generateContent({
     model,
@@ -287,6 +393,7 @@ async function generateGeminiBookStructure({
   chapterCount = 8,
   genre = "Nonfiction",
   audience = "General readers",
+  useGoogleSearch = false,
 }) {
   const { structureModel } = getGeminiModels();
   const safeChapterCount = Math.min(Math.max(parseInt(chapterCount) || 8, 1), 20);
@@ -295,6 +402,7 @@ async function generateGeminiBookStructure({
   const response = await createGeminiContent({
     model: structureModel,
     responseMimeType: "application/json",
+    useGoogleSearch,
     contents: `Create a comprehensive book structure for a polished ebook. Return only valid JSON.
 
 Use this shape:
@@ -322,6 +430,7 @@ Requirements:
   return {
     ...normalized,
     stats: normalizeGeminiStats(response, structureModel),
+    grounding: normalizeGroundingMetadata(response),
     modelName: structureModel,
   };
 }
@@ -334,6 +443,7 @@ async function generateGeminiSection({
   genre = "Nonfiction",
   audience = "General readers",
   bookContext = "",
+  useGoogleSearch = false,
 }) {
   const { sectionModel } = getGeminiModels();
   const maxOutputTokens = Math.max(
@@ -346,6 +456,7 @@ async function generateGeminiSection({
     const response = await createGeminiContent({
       model: sectionModel,
       maxOutputTokens: attempt === 0 ? maxOutputTokens : maxOutputTokens + 4000,
+      useGoogleSearch,
       contents: buildGeminiSectionPrompt({
         chapterTitle,
         chapterDescription,
@@ -359,9 +470,12 @@ async function generateGeminiSection({
     });
 
     try {
+      const content = addGroundingCitations(getGeminiText(response), response);
+
       return {
-        content: assertUsefulChapterContent(getGeminiText(response), response),
+        content: assertUsefulChapterContent(content, response),
         stats: normalizeGeminiStats(response, sectionModel),
+        grounding: normalizeGroundingMetadata(response),
         modelName: sectionModel,
       };
     } catch (error) {
@@ -387,6 +501,7 @@ async function runGeminiEditorialTask(prompt) {
 }
 
 module.exports = {
+  buildGeminiGenerateConfig,
   generateGeminiBookStructure,
   generateGeminiSection,
   getGeminiClient,

@@ -213,15 +213,32 @@ function isAsciiDiagramLine(line = "") {
   const trimmed = line.trim();
 
   if (!trimmed) return false;
-  if (!/^[+|]/.test(trimmed)) return false;
+  if (/[\u2500-\u257F\u25B2-\u25C4\u2190-\u21FF]/.test(trimmed)) return true;
+  if (/^\[[^\]]{2,}\]/.test(trimmed)) return true;
+  if (!/^[+|<>^v/\\-]/.test(trimmed)) return false;
 
   const diagramChars = (trimmed.match(/[+\-|]/g) || []).length;
 
-  return diagramChars >= 2;
+  return diagramChars >= 2 || /^[<>^v/\\|\-+\s]+$/.test(trimmed);
 }
 
 function isAsciiDiagramBlock(lines = []) {
   if (lines.length < 3) return false;
+
+  if (lines.some((line) => /[\u2500-\u257F\u25B2-\u25C4\u2190-\u21FF]/.test(line))) {
+    return true;
+  }
+
+  const bracketNodeRows = lines.filter((line) =>
+    (line.match(/\[[^\]]{2,}\]/g) || []).length > 0
+  ).length;
+  const connectorRows = lines.filter((line) => {
+    const trimmed = line.trim();
+
+    return /^[<>^v/\\|\-+\s]+$/.test(trimmed) && /[<>^v/\\|\-+]/.test(trimmed);
+  }).length;
+
+  if (bracketNodeRows >= 1 && connectorRows >= 1) return true;
 
   const separatorCount = lines.filter((line) => /^\s*\+[-+]+\+?\s*$/.test(line))
     .length;

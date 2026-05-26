@@ -6,7 +6,8 @@
   "main": "./src/server.js",
   "scripts": {
     "start": "node ./src/server.js",
-    "dev": "node --env-file=.env --watch ./src/server.js"
+    "dev": "node --env-file=.env --watch ./src/server.js",
+    "test": "node --test \"src/**/*.test.js\""
   },
   "keywords": [],
   "author": "Dhrubajyoti Bhattacharjee",

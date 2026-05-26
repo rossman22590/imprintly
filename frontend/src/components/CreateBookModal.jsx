@@ -12,6 +12,7 @@ import {
   Lightbulb,
   Palette,
   Plus,
+  Search,
   Sparkles,
   Trash2,
   Users,
@@ -33,6 +34,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   const [aiProvider, setAiProvider] = useState("groq");
   const [bookGenre, setBookGenre] = useState(BOOK_GENRES[0]);
   const [audience, setAudience] = useState("General readers");
+  const [useGoogleSearch, setUseGoogleSearch] = useState(false);
   const [generateCover, setGenerateCover] = useState(true);
   const [includeImages, setIncludeImages] = useState(false);
   const [generationStats, setGenerationStats] = useState(null);
@@ -57,6 +59,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setAiProvider("groq");
     setBookGenre(BOOK_GENRES[0]);
     setAudience("General readers");
+    setUseGoogleSearch(false);
     setGenerateCover(true);
     setIncludeImages(false);
     setGenerationStats(null);
@@ -64,6 +67,16 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setIsGeneratingOutline(false);
     setIsGeneratingFullBook(false);
     setIsFinalisingBook(false);
+  };
+
+  const handleProviderChange = (event) => {
+    const nextProvider = event.target.value;
+
+    setAiProvider(nextProvider);
+
+    if (nextProvider !== "gemini") {
+      setUseGoogleSearch(false);
+    }
   };
 
   const handleGenerateOutline = async () => {
@@ -91,6 +104,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
         provider: aiProvider,
         genre: bookGenre,
         audience,
+        useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
       });
       setChapters(outline);
       setGenerationStats(generation || null);
@@ -148,6 +162,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           provider: aiProvider,
           status: "outline",
           style: writingStyle,
+          useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
           ...(generationStats || {}),
         },
         generateCover,
@@ -273,6 +288,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           provider: aiProvider,
           generateCover,
           includeImages,
+          useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
         }
       );
 
@@ -306,6 +322,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   };
 
   const outlineStats = generationStats?.stats;
+  const isGeminiSearchGrounded = aiProvider === "gemini" && useGoogleSearch;
 
   useEffect(() => {
     if (step === 2 && chaptersContainerRef.current) {
@@ -435,7 +452,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
               value={aiProvider}
-              onChange={(event) => setAiProvider(event.target.value)}
+              onChange={handleProviderChange}
               options={AI_PROVIDERS}
               icon={Bot}
               label="AI Provider"
@@ -449,6 +466,44 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
               label="Book Type"
             />
           </div>
+
+          {aiProvider === "gemini" && (
+            <label className="flex items-center justify-between gap-4 rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 cursor-pointer">
+              <span className="flex items-start gap-3 min-w-0">
+                <span className="size-9 rounded-lg bg-white text-blue-700 flex items-center justify-center shrink-0 shadow-sm">
+                  <Search className="size-4" />
+                </span>
+
+                <span className="min-w-0">
+                  <span className="block text-blue-950 text-sm font-semibold">
+                    Ground Gemini with Google Search
+                  </span>
+                  <span className="block text-blue-700 text-xs mt-1">
+                    Use live web search for Gemini outline and chapter writing.
+                  </span>
+                </span>
+              </span>
+
+              <input
+                type="checkbox"
+                checked={useGoogleSearch}
+                onChange={(event) => setUseGoogleSearch(event.target.checked)}
+                className="sr-only"
+              />
+
+              <span
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                  useGoogleSearch ? "bg-blue-600" : "bg-slate-200"
+                }`}
+              >
+                <span
+                  className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+                    useGoogleSearch ? "translate-x-5" : "translate-x-0.5"
+                  }`}
+                />
+              </span>
+            </label>
+          )}
 
           <Input
             type="text"
@@ -577,6 +632,23 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
               {chapters.length} {chapters.length === 1 ? "chapter" : "chapters"}
             </span>
           </section>
+
+          {isGeminiSearchGrounded && (
+            <section className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-3">
+              <div className="size-9 rounded-lg bg-white text-blue-700 flex items-center justify-center shrink-0 shadow-sm">
+                <Search className="size-4" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-blue-950 text-sm font-semibold">
+                  Search grounding on
+                </p>
+                <p className="text-blue-700 text-xs mt-1 leading-relaxed">
+                  Gemini will use Google Search when writing the full chapters.
+                </p>
+              </div>
+            </section>
+          )}
 
           {outlineStats && (
             <section className="grid grid-cols-3 gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3">

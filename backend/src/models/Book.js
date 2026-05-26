@@ -193,6 +193,10 @@ const bookSchema = new mongoose.Schema(
         type: String,
         default: "Informative",
       },
+      useGoogleSearch: {
+        type: Boolean,
+        default: false,
+      },
       structureModel: {
         type: String,
         default: "",

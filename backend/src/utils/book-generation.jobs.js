@@ -317,6 +317,9 @@ async function resolveBookForJob(job) {
       jobId: job.id,
       sourcePrompt: sanitizeInput(payload.topic || title, 300),
       style: sanitizeInput(payload.style, 50) || "Informative",
+      useGoogleSearch:
+        job.provider === "gemini" &&
+        isEnabled(payload.useGoogleSearch ?? payload.googleSearch),
       progress: job.progress,
     },
   });
@@ -358,6 +361,9 @@ async function runGenerationJob(jobId) {
       payload.includeImages ?? payload.generateImages
     );
     const includeCover = isEnabled(payload.generateCover ?? payload.includeCover);
+    const useGoogleSearch =
+      provider === "gemini" &&
+      isEnabled(payload.useGoogleSearch ?? payload.googleSearch);
     const { structureModel, sectionModel } =
       provider === "groq" ? getGroqModels() : getGeminiModels();
     let totalStats = emptyStats(provider);
@@ -373,11 +379,13 @@ async function runGenerationJob(jobId) {
         : book.chapters || []
     );
     let outlineTree = payload.outline || book.generation?.outlineTree || null;
+    let outlineGrounding = book.generation?.grounding || null;
 
     await updateBookProgress(book, job, {
       startedAt: job.startedAt,
       style: safeStyle,
       sourcePrompt: sanitizeInput(payload.topic || book.title, 300),
+      useGoogleSearch,
     });
 
     if (!job.retryFailedOnly && chapters.length === 0) {
@@ -392,10 +400,12 @@ async function runGenerationJob(jobId) {
         chapterCount: payload.chapterCount,
         genre: safeGenre,
         audience: safeAudience,
+        useGoogleSearch,
       });
 
       chapters = normalizeOutlineChapters(outlineResult.chapters);
       outlineTree = outlineResult.outlineTree;
+      outlineGrounding = outlineResult.grounding || null;
       totalStats = addStats(totalStats, outlineResult.stats);
       await chargeTokenUsage({
         userId: job.userId,
@@ -526,6 +536,7 @@ async function runGenerationJob(jobId) {
           genre: safeGenre,
           audience: safeAudience,
           bookContext,
+          useGoogleSearch,
         });
         let chapterContent = assertGeneratedChapterContent(result, {
           provider,
@@ -547,7 +558,10 @@ async function runGenerationJob(jobId) {
             chapterTitle: chapter.title,
           },
         });
-        const chapterStats = { ...result.stats };
+        const chapterStats = {
+          ...result.stats,
+          ...(result.grounding ? { grounding: result.grounding } : {}),
+        };
         let chapterStatus = "complete";
 
         job.progress.completed += 1;
@@ -659,6 +673,8 @@ async function runGenerationJob(jobId) {
       structureModel,
       sectionModel,
       outlineTree,
+      useGoogleSearch,
+      grounding: outlineGrounding,
       stats: totalStats,
       statsText: summarizeStatsForDisplay(totalStats),
       completedAt: job.completedAt,

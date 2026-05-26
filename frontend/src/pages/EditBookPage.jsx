@@ -404,6 +404,8 @@ function EditBookPage() {
         chapterDescription: chapter.description || "",
         style: book.generation?.style || "Informative",
         provider,
+        useGoogleSearch:
+          provider === "gemini" && Boolean(book.generation?.useGoogleSearch),
         bookTitle: book.title,
         genre: book.genre || "Nonfiction",
         audience: book.audience || "General readers",
@@ -639,6 +641,9 @@ function EditBookPage() {
           audience: book.audience || "General readers",
           outline: book.chapters,
           provider: book.generation?.provider || "groq",
+          useGoogleSearch:
+            book.generation?.provider === "gemini" &&
+            Boolean(book.generation?.useGoogleSearch),
         }
       );
 

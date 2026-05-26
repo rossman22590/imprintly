@@ -5,6 +5,16 @@ const { generateMarkdown } = require("../utils/markdown.generator");
 const { generatePdf } = require("../utils/pdf.generator");
 const { migrateBookImagesToStorage } = require("../utils/image-asset-migration");
 
+function setNoStoreHeaders(res) {
+  res.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate"
+  );
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+}
+
 async function getOwnedExportBook(req, res) {
   const book = await Book.findById(req.params.bookId);
 
@@ -49,7 +59,7 @@ async function exportAsDocx(req, res) {
     );
     res.setHeader("Content-Length", docBuffer.length);
     res.setHeader("Content-Transfer-Encoding", "binary"); // tell client this is binary
-    res.setHeader("Cache-Control", "no-cache"); // avoid caching weirdness in dev
+    setNoStoreHeaders(res);
 
     res.send(docBuffer);
   } catch (error) {
@@ -74,7 +84,7 @@ async function exportAsPdf(req, res) {
       `attachment; filename="${book.title.replace(/[^a-zA-Z0-9]/g, "_")}.pdf"`
     );
     res.setHeader("Content-Transfer-Encoding", "binary");
-    res.setHeader("Cache-Control", "no-cache");
+    setNoStoreHeaders(res);
 
     // generate PDF and pipe directly to response (generatePdf handles piping)
     await generatePdf(book, res);
@@ -98,7 +108,7 @@ async function exportAsMarkdown(req, res) {
 
     res.setHeader("Content-Type", "text/markdown; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.setHeader("Cache-Control", "no-cache");
+    setNoStoreHeaders(res);
 
     return res.send(markdown);
   } catch (error) {
@@ -120,7 +130,7 @@ async function exportAsEpub(req, res) {
     res.setHeader("Content-Type", "application/epub+zip");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.setHeader("Content-Length", epubBuffer.length);
-    res.setHeader("Cache-Control", "no-cache");
+    setNoStoreHeaders(res);
 
     return res.send(epubBuffer);
   } catch (error) {
