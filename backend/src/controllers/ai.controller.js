@@ -1,3 +1,4 @@
+const fs = require("fs");
 const ENV = require("../configs/env");
 const Book = require("../models/Book");
 const {
@@ -42,6 +43,11 @@ const {
   serializeBilling,
 } = require("../utils/credits.service");
 const { deleteUploadFile } = require("../utils/upload-paths");
+const {
+  getImageMimeType,
+  prepareExportImages,
+  resolveExportImagePath,
+} = require("../utils/export-markdown");
 
 /**
  * Basic input sanitization.
@@ -202,6 +208,45 @@ Requirements:
 3. Include the exact author name: "${book.author}".
 4. Use readable, intentional typography with strong hierarchy and safe margins.
 5. Match the genre and audience while avoiding generic stock-photo styling.`;
+}
+
+function buildCoverEditPrompt({ book, customPrompt }) {
+  const editDirection = customPrompt
+    ? `Requested edits from the author: ${customPrompt}`
+    : "Requested edits: improve the current cover's composition, typography, contrast, and publishing polish while preserving its core concept.";
+
+  return `Edit the provided ebook front cover image.
+
+Book title: ${book.title}
+Subtitle: ${book.subtitle || "None"}
+Author: ${book.author}
+Genre: ${book.genre || "Nonfiction"}
+Audience: ${book.audience || "General readers"}
+${editDirection}
+
+Requirements:
+1. Preserve the exact book title text: "${book.title}".
+2. Preserve the exact author name: "${book.author}".
+3. Keep it as a front cover only, not a 3D mockup, not a spread, and no spine.
+4. Improve the current cover rather than creating an unrelated concept.
+5. Keep typography readable with strong hierarchy and safe margins.`;
+}
+
+async function getCoverReferenceImage(book) {
+  await prepareExportImages(book);
+
+  const coverPath = resolveExportImagePath(book.coverImage);
+
+  if (!coverPath) {
+    const error = new Error("Current cover image is unavailable for editing.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    data: fs.readFileSync(coverPath).toString("base64"),
+    mimeType: getImageMimeType(coverPath),
+  };
 }
 
 function buildChapterImagePrompt({ book, chapter, customPrompt }) {
@@ -761,16 +806,33 @@ async function generateCoverImage(req, res) {
       aspectRatio = "2:3",
       imageSize,
       model,
+      mode = "generate",
     } = req.body;
     const book = await findOwnedBook(bookId, req.user.id);
+    const editExisting = mode === "edit";
     const customPrompt = sanitizeInput(prompt, 4000);
-    const finalPrompt = buildCoverPrompt({ book, customPrompt });
+    const finalPrompt = editExisting
+      ? buildCoverEditPrompt({ book, customPrompt })
+      : buildCoverPrompt({ book, customPrompt });
+    let referenceImages = [];
+
+    if (editExisting) {
+      if (book.coverGeneration?.source !== "gemini" || !book.coverImage) {
+        return res.status(400).json({
+          error: "Only existing Gemini-generated covers can be edited.",
+        });
+      }
+
+      referenceImages = [await getCoverReferenceImage(book)];
+    }
+
     await assertHasCredits(req.user.id, CREDIT_CONFIG.imageCredits);
     const image = await generateGeminiImage({
       prompt: finalPrompt,
       model: normalizeImageModel(model),
       aspectRatio: normalizeAspectRatio(aspectRatio, "2:3"),
       imageSize: normalizeImageSize(imageSize),
+      referenceImages,
     });
     const billing = await chargeImageUsage({
       userId: req.user.id,
@@ -790,6 +852,7 @@ async function generateCoverImage(req, res) {
       deleteUploadFile(book.coverImage);
     }
 
+    const previousCoverImage = book.coverImage || "";
     book.coverImage = image.url;
     book.coverGeneration = {
       prompt: finalPrompt,
@@ -797,6 +860,9 @@ async function generateCoverImage(req, res) {
       aspectRatio: image.aspectRatio,
       imageSize: image.imageSize,
       source: "gemini",
+      mode: editExisting ? "edited" : "generated",
+      customPrompt,
+      previousCoverImage,
       createdAt: new Date(),
     };
     await migrateBookImagesToStorage(book);

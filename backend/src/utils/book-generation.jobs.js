@@ -490,6 +490,8 @@ async function runGenerationJob(jobId) {
           aspectRatio: image.aspectRatio,
           imageSize: image.imageSize,
           source: "gemini",
+          mode: "generated",
+          customPrompt: sanitizeInput(payload.coverPrompt, 4000),
           createdAt: new Date(),
         };
         totalStats = addStats(totalStats, image.stats);

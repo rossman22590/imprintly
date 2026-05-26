@@ -450,6 +450,7 @@ function EditBookPage() {
     aspectRatio,
     imageSize,
     model,
+    mode,
   }) => {
     if (!book.title) {
       toast.error("Book title is required before generating a cover.");
@@ -468,6 +469,7 @@ function EditBookPage() {
         aspectRatio,
         imageSize,
         model,
+        mode,
       });
 
       skipNextAutosaveRef.current = true;

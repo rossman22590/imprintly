@@ -140,6 +140,20 @@ const bookSchema = new mongoose.Schema(
         enum: ["gemini", ""],
         default: "",
       },
+      mode: {
+        type: String,
+        enum: ["generated", "edited", ""],
+        default: "",
+      },
+      customPrompt: {
+        type: String,
+        default: "",
+        maxLength: [4000, "Cover custom prompt cannot exceed 4000 characters"],
+      },
+      previousCoverImage: {
+        type: String,
+        default: "",
+      },
       createdAt: {
         type: Date,
         default: null,

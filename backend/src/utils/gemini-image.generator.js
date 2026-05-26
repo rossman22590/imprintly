@@ -85,6 +85,7 @@ async function generateGeminiImage({
   model,
   aspectRatio = "1:1",
   imageSize,
+  referenceImages = [],
 }) {
   const selectedModel = normalizeImageModel(model);
   const selectedAspectRatio = normalizeAspectRatio(aspectRatio);
@@ -97,9 +98,20 @@ async function generateGeminiImage({
     imageConfig.imageSize = selectedImageSize;
   }
 
+  const contents = Array.isArray(referenceImages) && referenceImages.length > 0
+    ? [
+        { text: prompt },
+        ...referenceImages.map((image) => ({
+          inlineData: {
+            mimeType: image.mimeType || "image/png",
+            data: image.data,
+          },
+        })),
+      ]
+    : prompt;
   const response = await getGeminiClient().models.generateContent({
     model: selectedModel,
-    contents: prompt,
+    contents,
     config: {
       responseModalities: ["TEXT", "IMAGE"],
       imageConfig,

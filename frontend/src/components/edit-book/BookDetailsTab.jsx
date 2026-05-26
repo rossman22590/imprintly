@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Image as ImageIcon, Sparkles, UploadCloud } from "lucide-react";
+import {
+  Image as ImageIcon,
+  Pencil,
+  RefreshCw,
+  Sparkles,
+  UploadCloud,
+} from "lucide-react";
 import { resolveImageUrl } from "../../utils/api-endpoints";
 import Button from "../ui/Button";
 import Input from "../ui/Input";
@@ -19,9 +25,13 @@ function BookDetailsTab({
   const [coverAspectRatio, setCoverAspectRatio] = useState("2:3");
   const [coverImageSize, setCoverImageSize] = useState("1K");
   const [coverModel, setCoverModel] = useState("gemini-3.1-flash-image-preview");
+  const [coverMode, setCoverMode] = useState("generate");
   const coverImageUrl = book.coverImage ? resolveImageUrl(book.coverImage) : null;
   const generationStats = book.generation?.stats;
   const generatedCover = book.coverGeneration?.source === "gemini";
+  const canEditGeneratedCover = generatedCover && Boolean(coverImageUrl);
+  const effectiveCoverMode =
+    canEditGeneratedCover && coverMode === "edit" ? "edit" : "generate";
 
   const handleCoverGeneration = async (event) => {
     event.preventDefault();
@@ -31,7 +41,28 @@ function BookDetailsTab({
       aspectRatio: coverAspectRatio,
       imageSize: coverImageSize,
       model: coverModel,
+      mode: effectiveCoverMode,
     });
+  };
+
+  const openCoverMaker = () => {
+    setIsCoverMakerOpen((current) => !current);
+
+    if (!isCoverMakerOpen) {
+      setCoverMode(canEditGeneratedCover ? "edit" : "generate");
+
+      if (book.coverGeneration?.aspectRatio) {
+        setCoverAspectRatio(book.coverGeneration.aspectRatio);
+      }
+
+      if (book.coverGeneration?.imageSize) {
+        setCoverImageSize(book.coverGeneration.imageSize);
+      }
+
+      if (book.coverGeneration?.model) {
+        setCoverModel(book.coverGeneration.model);
+      }
+    }
   };
 
   return (
@@ -216,13 +247,13 @@ function BookDetailsTab({
 
                 <Button
                   type="button"
-                  onClick={() => setIsCoverMakerOpen((current) => !current)}
+                  onClick={openCoverMaker}
                   isLoading={isGeneratingCover}
-                  icon={Sparkles}
+                  icon={generatedCover ? Pencil : Sparkles}
                   size="sm"
                   className="w-full sm:w-fit"
                 >
-                  Generate Cover
+                  {generatedCover ? "Edit / Regenerate Cover" : "Generate Cover"}
                 </Button>
               </div>
             </div>
@@ -232,12 +263,48 @@ function BookDetailsTab({
                 onSubmit={handleCoverGeneration}
                 className="border-t border-slate-100 pt-5 grid grid-cols-1 gap-4"
               >
+              {canEditGeneratedCover && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCoverMode("edit")}
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                      effectiveCoverMode === "edit"
+                        ? "border-violet-300 bg-violet-50 text-violet-950"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                    }`}
+                  >
+                    <Pencil className="size-4 shrink-0" />
+                    <span className="text-sm font-semibold">
+                      Edit current cover
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCoverMode("generate")}
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
+                      effectiveCoverMode === "generate"
+                        ? "border-violet-300 bg-violet-50 text-violet-950"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                    }`}
+                  >
+                    <RefreshCw className="size-4 shrink-0" />
+                    <span className="text-sm font-semibold">
+                      Regenerate fresh
+                    </span>
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 gap-2">
                 <label
                   htmlFor="cover-prompt"
                   className="text-slate-700 text-sm font-medium"
                 >
-                  Cover Maker
+                  {effectiveCoverMode === "edit"
+                    ? "Edit Instructions"
+                    : "Cover Maker"}
                 </label>
                 <textarea
                   id="cover-prompt"
@@ -246,7 +313,11 @@ function BookDetailsTab({
                   onChange={(event) => setCoverPrompt(event.target.value)}
                   rows={4}
                   maxLength={1200}
-                  placeholder="Optional direction, mood, scene, typography, colors..."
+                  placeholder={
+                    effectiveCoverMode === "edit"
+                      ? "Tell Gemini what to change while keeping the current cover concept..."
+                      : "Optional direction, mood, scene, typography, colors..."
+                  }
                   className="w-full bg-white text-gray-900 text-sm placeholder-gray-400 px-3 py-2 border border-gray-200 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 resize-none"
                 />
               </div>
@@ -301,12 +372,16 @@ function BookDetailsTab({
 
               <Button
                 type="submit"
-                icon={Sparkles}
+                icon={effectiveCoverMode === "edit" ? Pencil : Sparkles}
                 isLoading={isGeneratingCover}
                 size="sm"
                 className="w-full sm:w-fit"
               >
-                Create Cover
+                {effectiveCoverMode === "edit"
+                  ? "Edit Current Cover"
+                  : generatedCover
+                    ? "Regenerate Cover"
+                    : "Create Cover"}
               </Button>
               </form>
             )}

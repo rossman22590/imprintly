@@ -74,6 +74,9 @@ async function generateInitialCover(book, payload = {}) {
     aspectRatio: image.aspectRatio,
     imageSize: image.imageSize,
     source: "gemini",
+    mode: "generated",
+    customPrompt:
+      typeof payload.coverPrompt === "string" ? payload.coverPrompt.slice(0, 4000) : "",
     createdAt: new Date(),
   };
 
