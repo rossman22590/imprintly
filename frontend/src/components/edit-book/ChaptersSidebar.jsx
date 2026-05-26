@@ -110,10 +110,10 @@ function ChaptersSidebar({
   onReorderChapters,
 }) {
   const navigate = useNavigate();
+  const chapters = Array.isArray(book?.chapters) ? book.chapters : [];
 
   const chapterIds =
-    book?.chapters?.map((chapter, index) => chapter?._id || `new-${index}`) ||
-    [];
+    chapters.map((chapter, index) => chapter?._id || `new-${index}`) || [];
 
   const handleDragEnd = (event) => {
     const { active, over } = event;
@@ -147,14 +147,13 @@ function ChaptersSidebar({
 
         <div className="mt-4">
           <h2
-            title={book.title}
+            title={book?.title || "Untitled Book"}
             className="text-slate-800 text-base font-semibold truncate"
           >
-            {book.title}
+            {book?.title || "Untitled Book"}
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            {book.chapters.length}{" "}
-            {book.chapters.length === 1 ? "chapter" : "chapters"}
+            {chapters.length} {chapters.length === 1 ? "chapter" : "chapters"}
           </p>
         </div>
       </header>
@@ -169,9 +168,9 @@ function ChaptersSidebar({
             items={chapterIds}
             strategy={verticalListSortingStrategy}
           >
-            {book.chapters.length > 0 ? (
+            {chapters.length > 0 ? (
               <ul className="space-y-2 p-4">
-                {book.chapters.map((chapter, index) => (
+                {chapters.map((chapter, index) => (
                   <SortableItem
                     key={chapter._id ?? `new-${index}`}
                     chapter={chapter}

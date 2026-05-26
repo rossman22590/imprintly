@@ -4,6 +4,7 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 const ENV = require("./configs/env");
 const { connectToDB } = require("./configs/db");
 const authRouter = require("./routes/auth.route");
@@ -16,8 +17,30 @@ const {
 } = require("./utils/book-generation.jobs");
 
 const app = express();
+const configuredOrigins = [ENV.CLIENT_URL, ...ENV.CLIENT_URLS.split(",")]
+  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+const allowedOrigins = new Set(configuredOrigins);
+const shouldAllowAllCors =
+  ENV.NODE_ENV !== "production" ||
+  ENV.CORS_ALLOW_ALL === "true" ||
+  allowedOrigins.size === 0;
 const corsOptions = {
-  origin: ENV.NODE_ENV === "production" ? ENV.CLIENT_URL : "*",
+  origin(origin, callback) {
+    if (!origin || shouldAllowAllCors) {
+      callback(null, true);
+      return;
+    }
+
+    const normalizedOrigin = origin.replace(/\/$/, "");
+
+    if (allowedOrigins.has(normalizedOrigin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(null, false);
+  },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   optionsSuccessStatus: 204,
@@ -57,15 +80,26 @@ app.use("/api/exports", exportsRouter);
 // Static folder for user uploads - serve from backend/uploads
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
-// PRODUCTION: serve React frontend
-if (ENV.NODE_ENV === "production") {
+app.get("/healthz", (_, res) => {
+  res.json({ status: "ok" });
+});
+
+const frontendDistPath = path.join(__dirname, "../../frontend/dist");
+const frontendIndexPath = path.join(frontendDistPath, "index.html");
+
+// PRODUCTION: serve React frontend only when this service includes a built frontend.
+if (ENV.NODE_ENV === "production" && fs.existsSync(frontendIndexPath)) {
   // serve static files from the React build
-  app.use(express.static(path.join(__dirname, "../../frontend/dist")));
+  app.use(express.static(frontendDistPath));
 
   // catch-all route: for any route not matched above, serve index.html
   // this allows React Router to handle routing on the client side
   app.get("/{*any}", (_, res) => {
-    res.sendFile(path.join(__dirname, "../../frontend/dist/index.html"));
+    res.sendFile(frontendIndexPath);
+  });
+} else {
+  app.get("/", (_, res) => {
+    res.json({ message: "Bookify API is running." });
   });
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useAuthContext } from "../contexts/AuthContext";
 import { validateName } from "../utils/helpers";
 import axiosInstance from "../lib/axios";
-import { API_ENDPOINTS, API_BASE_URL } from "../utils/api-endpoints";
+import { API_ENDPOINTS, resolveImageUrl } from "../utils/api-endpoints";
 import DashboardLayout from "../layouts/DashboardLayout";
 import { Button, Input } from "../components";
 import { Mail, User2, Camera, Trash2 } from "lucide-react";
@@ -26,7 +26,7 @@ function ProfilePage() {
   useEffect(() => {
     if (user) {
       setFormData((prev) => ({ ...prev, name: user.name, email: user.email }));
-      setAvatarPreview(user.avatar ? `${API_BASE_URL}${user.avatar}` : null);
+      setAvatarPreview(user.avatar ? resolveImageUrl(user.avatar) : null);
     }
   }, [user]);
 

@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "../utils/api-endpoints";
+import { resolveImageUrl } from "../utils/api-endpoints";
 import { ChevronDown, ChevronUp, LogOut, User2 } from "lucide-react";
 import { Link } from "react-router";
 
@@ -19,7 +19,7 @@ const ProfileMenu = ({
     >
       {avatarUrl ? (
         <img
-          src={`${API_BASE_URL}${avatarUrl}`}
+          src={resolveImageUrl(avatarUrl)}
           alt={`${username}'s avatar`}
           className="size-8 md:size-9 object-cover rounded-xl shrink-0"
         />

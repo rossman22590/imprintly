@@ -27,6 +27,8 @@ const ENV = {
     "pixiomedia.nyc3.digitaloceanspaces.com",
   PUBLIC_API_URL: process.env.PUBLIC_API_URL ?? "",
   CLIENT_URL: process.env.CLIENT_URL ?? "",
+  CLIENT_URLS: process.env.CLIENT_URLS ?? "",
+  CORS_ALLOW_ALL: process.env.CORS_ALLOW_ALL ?? "",
 };
 
 module.exports = ENV;
