@@ -7,22 +7,13 @@ const {
 } = require("./monthly-credit-plans.service");
 
 function numberFromEnv(value, fallback) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return fallback;
+  }
+
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
-
-const CREDIT_CONFIG = {
-  startingCredits: numberFromEnv(ENV.STARTING_CREDITS, 50),
-  usdPerCredit: numberFromEnv(ENV.USD_PER_CREDIT, 0.001),
-  imageCredits: numberFromEnv(ENV.AI_IMAGE_CREDITS, 10),
-  tokenMarkupMultiplier: numberFromEnv(ENV.AI_TOKEN_MARKUP_MULTIPLIER, 1.3),
-  inputUsdPerMillion: numberFromEnv(ENV.GEMINI_INPUT_USD_PER_MILLION, 1),
-  outputUsdPerMillion: numberFromEnv(ENV.GEMINI_OUTPUT_USD_PER_MILLION, 1),
-  fallbackUsdPerMillion: numberFromEnv(ENV.GEMINI_FALLBACK_USD_PER_MILLION, 1),
-};
-
-const CREDIT_HISTORY_DAYS = 40;
-const MONTHLY_CREDIT_PRESETS = DEFAULT_MONTHLY_CREDIT_PRESETS;
 
 function roundMoney(value) {
   return Math.round(Number(value || 0) * 1_000_000) / 1_000_000;
@@ -35,6 +26,166 @@ function roundCredits(value) {
 
   return Math.ceil(numeric * 10_000) / 10_000;
 }
+
+const DEFAULT_TEXT_MODEL_PRICES = {
+  groq: {
+    "openai/gpt-oss-120b": { inputUsdPerMillion: 0.15, outputUsdPerMillion: 0.6 },
+    "openai/gpt-oss-20b": { inputUsdPerMillion: 0.075, outputUsdPerMillion: 0.3 },
+    "meta-llama/llama-4-scout-17b-16e-instruct": {
+      inputUsdPerMillion: 0.11,
+      outputUsdPerMillion: 0.34,
+    },
+    "llama-3.3-70b-versatile": {
+      inputUsdPerMillion: 0.59,
+      outputUsdPerMillion: 0.79,
+    },
+    default: { inputUsdPerMillion: 0.15, outputUsdPerMillion: 0.6 },
+  },
+  gemini: {
+    "gemini-3.5-flash": { inputUsdPerMillion: 1.5, outputUsdPerMillion: 9 },
+    "gemini-3.1-flash-lite": {
+      inputUsdPerMillion: 0.25,
+      outputUsdPerMillion: 1.5,
+    },
+    "gemini-3.1-flash-lite-preview": {
+      inputUsdPerMillion: 0.25,
+      outputUsdPerMillion: 1.5,
+    },
+    "gemini-3.1-pro-preview": { inputUsdPerMillion: 2, outputUsdPerMillion: 12 },
+    "gemini-3.1-pro-preview-customtools": {
+      inputUsdPerMillion: 2,
+      outputUsdPerMillion: 12,
+    },
+    "gemini-3-flash-preview": {
+      inputUsdPerMillion: 0.5,
+      outputUsdPerMillion: 3,
+    },
+    "gemini-2.5-flash": { inputUsdPerMillion: 0.3, outputUsdPerMillion: 2.5 },
+    "gemini-2.5-flash-lite": {
+      inputUsdPerMillion: 0.1,
+      outputUsdPerMillion: 0.4,
+    },
+    "gemini-2.5-flash-lite-preview": {
+      inputUsdPerMillion: 0.1,
+      outputUsdPerMillion: 0.4,
+    },
+    default: { inputUsdPerMillion: 1.5, outputUsdPerMillion: 9 },
+  },
+};
+
+const DEFAULT_IMAGE_MODEL_PRICES = {
+  gemini: {
+    "gemini-3.1-flash-image-preview": {
+      inputUsdPerMillion: 0.5,
+      imageUsdBySize: {
+        "512": 0.045,
+        "1K": 0.067,
+        "2K": 0.101,
+        "4K": 0.151,
+      },
+    },
+    "gemini-3-pro-image-preview": {
+      inputUsdPerMillion: 2,
+      imageUsdBySize: {
+        "512": 0.134,
+        "1K": 0.134,
+        "2K": 0.134,
+        "4K": 0.24,
+      },
+    },
+    "gemini-2.5-flash-image": {
+      inputUsdPerMillion: 0.5,
+      imageUsdBySize: {
+        "512": 0.045,
+        "1K": 0.067,
+        "2K": 0.101,
+        "4K": 0.151,
+      },
+    },
+    default: {
+      inputUsdPerMillion: 0.5,
+      imageUsdBySize: {
+        "512": 0.045,
+        "1K": 0.067,
+        "2K": 0.101,
+        "4K": 0.151,
+      },
+    },
+  },
+};
+
+function normalizeProviderKey(provider = "") {
+  const selected = String(provider || "").trim().toLowerCase();
+
+  return selected || "groq";
+}
+
+function normalizeModelKey(model = "") {
+  return String(model || "")
+    .trim()
+    .replace(/^models\//i, "")
+    .toLowerCase();
+}
+
+function normalizeImageSizeKey(imageSize = "") {
+  const selected = String(imageSize || ENV.GEMINI_IMAGE_SIZE || "1K")
+    .trim()
+    .toUpperCase();
+
+  return selected === "512" || selected === "1K" || selected === "2K" || selected === "4K"
+    ? selected
+    : "1K";
+}
+
+function getTextModelPricing({ provider = "", model = "" } = {}) {
+  const providerKey = normalizeProviderKey(provider);
+  const modelKey = normalizeModelKey(model);
+  const providerPrices =
+    DEFAULT_TEXT_MODEL_PRICES[providerKey] || DEFAULT_TEXT_MODEL_PRICES.groq;
+
+  return {
+    provider: providerKey,
+    model: modelKey || "default",
+    ...(providerPrices[modelKey] || providerPrices.default),
+  };
+}
+
+function getImageModelPricing({ provider = "gemini", model = "" } = {}) {
+  const providerKey = normalizeProviderKey(provider);
+  const modelKey = normalizeModelKey(model || ENV.GEMINI_IMAGE_MODEL);
+  const providerPrices =
+    DEFAULT_IMAGE_MODEL_PRICES[providerKey] || DEFAULT_IMAGE_MODEL_PRICES.gemini;
+
+  return {
+    provider: providerKey,
+    model: modelKey || "default",
+    ...(providerPrices[modelKey] || providerPrices.default),
+  };
+}
+
+const bookifyUsdPerCredit = numberFromEnv(ENV.BOOKIFY_USD_PER_CREDIT, 0.01);
+const tokenMarkupMultiplier = numberFromEnv(ENV.AI_TOKEN_MARKUP_MULTIPLIER, 2);
+const defaultImagePricing = getImageModelPricing({
+  provider: "gemini",
+  model: ENV.GEMINI_IMAGE_MODEL,
+});
+const defaultImageSize = normalizeImageSizeKey(ENV.GEMINI_IMAGE_SIZE);
+const defaultImageBaseUsd =
+  defaultImagePricing.imageUsdBySize[defaultImageSize] ||
+  defaultImagePricing.imageUsdBySize["1K"];
+const defaultImageCredits = roundCredits(
+  (defaultImageBaseUsd * tokenMarkupMultiplier) / bookifyUsdPerCredit
+);
+
+const CREDIT_CONFIG = {
+  startingCredits: numberFromEnv(ENV.STARTING_CREDITS, 500),
+  usdPerCredit: bookifyUsdPerCredit,
+  imageCredits: defaultImageCredits,
+  tokenMarkupMultiplier,
+};
+
+const CREDIT_HISTORY_DAYS = 40;
+const MONTHLY_CREDIT_PRESETS = DEFAULT_MONTHLY_CREDIT_PRESETS;
 
 function serializeCredits(user) {
   const credits = user?.credits || {};
@@ -52,8 +203,6 @@ function serializeCredits(user) {
     usdPerCredit: CREDIT_CONFIG.usdPerCredit,
     imageCredits: CREDIT_CONFIG.imageCredits,
     tokenMarkupMultiplier: CREDIT_CONFIG.tokenMarkupMultiplier,
-    inputUsdPerMillion: CREDIT_CONFIG.inputUsdPerMillion,
-    outputUsdPerMillion: CREDIT_CONFIG.outputUsdPerMillion,
   };
 }
 
@@ -339,14 +488,27 @@ async function debitCredits({
   };
 }
 
-function calculateTokenCharge(usage = {}) {
+function getBillableUsageTokens(usage = {}) {
   const inputTokens = Number(
     usage.inputTokens || usage.promptTokens || usage.prompt_tokens || 0
   );
-  const outputTokens = Number(
+  const visibleOutputTokens = Number(
     usage.outputTokens ||
       usage.completionTokens ||
       usage.completion_tokens ||
+      usage.candidatesTokenCount ||
+      0
+  );
+  const thinkingTokens = Number(
+    usage.thinkingTokens ||
+      usage.thoughtsTokenCount ||
+      usage.thoughts_token_count ||
+      0
+  );
+  const outputTokens = Number(
+    usage.billableOutputTokens ||
+      usage.billedOutputTokens ||
+      Math.max(0, visibleOutputTokens) + Math.max(0, thinkingTokens) ||
       0
   );
   const totalTokens = Number(
@@ -355,29 +517,54 @@ function calculateTokenCharge(usage = {}) {
       Math.max(0, inputTokens) + Math.max(0, outputTokens)
   );
 
+  return {
+    inputTokens: Math.max(0, inputTokens),
+    outputTokens: Math.max(0, outputTokens),
+    visibleOutputTokens: Math.max(0, visibleOutputTokens),
+    thinkingTokens: Math.max(0, thinkingTokens),
+    totalTokens: Math.max(0, totalTokens),
+  };
+}
+
+function calculateTokenCharge(usage = {}, options = {}) {
+  const {
+    inputTokens,
+    outputTokens,
+    visibleOutputTokens,
+    thinkingTokens,
+    totalTokens,
+  } = getBillableUsageTokens(usage);
+  const pricing = getTextModelPricing({
+    provider: options.provider,
+    model: options.model || usage.modelName || usage.model,
+  });
   let baseUsd = 0;
 
   if (inputTokens > 0 || outputTokens > 0) {
     baseUsd =
-      (Math.max(0, inputTokens) * CREDIT_CONFIG.inputUsdPerMillion +
-        Math.max(0, outputTokens) * CREDIT_CONFIG.outputUsdPerMillion) /
+      (inputTokens * pricing.inputUsdPerMillion +
+        outputTokens * pricing.outputUsdPerMillion) /
       1_000_000;
   } else if (totalTokens > 0) {
-    baseUsd =
-      (Math.max(0, totalTokens) * CREDIT_CONFIG.fallbackUsdPerMillion) /
-      1_000_000;
+    const fallbackPrice = pricing.outputUsdPerMillion || 1;
+
+    baseUsd = (totalTokens * fallbackPrice) / 1_000_000;
   }
 
   const markedUpUsd = baseUsd * CREDIT_CONFIG.tokenMarkupMultiplier;
   const credits = roundCredits(markedUpUsd / CREDIT_CONFIG.usdPerCredit);
 
   return {
-    inputTokens: Math.max(0, inputTokens),
-    outputTokens: Math.max(0, outputTokens),
-    totalTokens: Math.max(0, totalTokens),
+    inputTokens,
+    outputTokens,
+    visibleOutputTokens,
+    thinkingTokens,
+    totalTokens,
     baseUsd: roundMoney(baseUsd),
     usdCost: roundMoney(markedUpUsd),
     credits,
+    pricing,
+    markupMultiplier: CREDIT_CONFIG.tokenMarkupMultiplier,
   };
 }
 
@@ -390,7 +577,7 @@ async function chargeTokenUsage({
   model = "",
   metadata = {},
 }) {
-  const charge = calculateTokenCharge(usage);
+  const charge = calculateTokenCharge(usage, { provider, model });
 
   if (charge.credits <= 0) {
     const user = await ensureUserCredits(userId);
@@ -412,6 +599,8 @@ async function chargeTokenUsage({
       ...usage,
       billedInputTokens: charge.inputTokens,
       billedOutputTokens: charge.outputTokens,
+      visibleOutputTokens: charge.visibleOutputTokens,
+      thinkingTokens: charge.thinkingTokens,
       billedTotalTokens: charge.totalTokens,
     },
     usdCost: charge.usdCost,
@@ -419,6 +608,7 @@ async function chargeTokenUsage({
     metadata: {
       ...metadata,
       baseUsd: charge.baseUsd,
+      pricing: charge.pricing,
     },
   });
 
@@ -426,6 +616,44 @@ async function chargeTokenUsage({
     ...result,
     charge,
   };
+}
+
+function calculateImageCharge({
+  provider = "gemini",
+  model = "",
+  usage = {},
+  imageSize = "",
+} = {}) {
+  const { inputTokens } = getBillableUsageTokens(usage || {});
+  const pricing = getImageModelPricing({ provider, model });
+  const size = normalizeImageSizeKey(imageSize);
+  const imageBaseUsd =
+    pricing.imageUsdBySize[size] || pricing.imageUsdBySize["1K"] || 0;
+  const inputBaseUsd = (inputTokens * pricing.inputUsdPerMillion) / 1_000_000;
+  const baseUsd = inputBaseUsd + imageBaseUsd;
+  const markedUpUsd = baseUsd * CREDIT_CONFIG.tokenMarkupMultiplier;
+  const credits = roundCredits(markedUpUsd / CREDIT_CONFIG.usdPerCredit);
+
+  return {
+    inputTokens,
+    imageSize: size,
+    imageBaseUsd: roundMoney(imageBaseUsd),
+    inputBaseUsd: roundMoney(inputBaseUsd),
+    baseUsd: roundMoney(baseUsd),
+    usdCost: roundMoney(markedUpUsd),
+    credits,
+    pricing: {
+      provider: pricing.provider,
+      model: pricing.model,
+      inputUsdPerMillion: pricing.inputUsdPerMillion,
+      imageUsd: imageBaseUsd,
+    },
+    markupMultiplier: CREDIT_CONFIG.tokenMarkupMultiplier,
+  };
+}
+
+function getImageCreditEstimate(options = {}) {
+  return calculateImageCharge(options).credits || CREDIT_CONFIG.imageCredits;
 }
 
 async function chargeImageUsage({
@@ -437,20 +665,42 @@ async function chargeImageUsage({
   usage = null,
   metadata = {},
 }) {
-  await assertHasCredits(userId, CREDIT_CONFIG.imageCredits);
+  const charge = calculateImageCharge({
+    provider,
+    model,
+    usage,
+    imageSize: metadata.imageSize,
+  });
 
-  return debitCredits({
+  await assertHasCredits(userId, charge.credits);
+
+  const result = await debitCredits({
     userId,
-    amount: CREDIT_CONFIG.imageCredits,
+    amount: charge.credits,
     reason,
     description,
     provider,
     model,
-    usage,
-    usdCost: 0,
-    markupMultiplier: 1,
-    metadata,
+    usage: {
+      ...usage,
+      billedInputTokens: charge.inputTokens,
+      billedImageSize: charge.imageSize,
+    },
+    usdCost: charge.usdCost,
+    markupMultiplier: CREDIT_CONFIG.tokenMarkupMultiplier,
+    metadata: {
+      ...metadata,
+      baseUsd: charge.baseUsd,
+      imageBaseUsd: charge.imageBaseUsd,
+      inputBaseUsd: charge.inputBaseUsd,
+      pricing: charge.pricing,
+    },
   });
+
+  return {
+    ...result,
+    charge,
+  };
 }
 
 async function adjustUserCredits({
@@ -638,13 +888,16 @@ module.exports = {
   adjustUserCredits,
   assertHasCredits,
   buildCreditHistoryQuery,
+  calculateImageCharge,
   calculateTokenCharge,
   chargeImageUsage,
   chargeTokenUsage,
   ensureUserCredits,
   getCreditHistorySince,
+  getImageCreditEstimate,
   getMonthlyResetKey,
   getNextMonthlyResetAt,
+  getTextModelPricing,
   getCreditSummary,
   serializeBilling,
   serializeCredits,

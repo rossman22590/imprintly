@@ -38,10 +38,10 @@ const {
   retryGenerationJob,
 } = require("../utils/book-generation.jobs");
 const {
-  CREDIT_CONFIG,
   assertHasCredits,
   chargeImageUsage,
   chargeTokenUsage,
+  getImageCreditEstimate,
   serializeBilling,
 } = require("../utils/credits.service");
 const { deleteUploadFile } = require("../utils/upload-paths");
@@ -991,9 +991,22 @@ async function createFullBookJob(req, res) {
       req.body.includeImages ?? req.body.generateImages
     );
     const includesCover = isEnabled(req.body.generateCover ?? req.body.includeCover);
+    const imageCountEstimate =
+      (includesCover ? 1 : 0) +
+      (includesImages
+        ? Math.max(1, Number.parseInt(req.body.chapterCount, 10) || 1)
+        : 0);
     await assertHasCredits(
       req.user.id,
-      includesImages || includesCover ? CREDIT_CONFIG.imageCredits : 0.0001
+      imageCountEstimate > 0
+        ? getImageCreditEstimate({
+            provider: "gemini",
+            model: normalizeImageModel(req.body.coverModel || req.body.imageModel),
+            imageSize: normalizeImageSize(
+              req.body.coverImageSize || req.body.imageSize
+            ),
+          }) * imageCountEstimate
+        : 0.0001
     );
 
     if (req.body.bookId) {
@@ -1173,7 +1186,14 @@ async function generateCoverImage(req, res) {
       referenceImages = [await getCoverReferenceImage(book), ...referenceImages];
     }
 
-    await assertHasCredits(req.user.id, CREDIT_CONFIG.imageCredits);
+    await assertHasCredits(
+      req.user.id,
+      getImageCreditEstimate({
+        provider: "gemini",
+        model: normalizeImageModel(model),
+        imageSize: normalizeImageSize(imageSize),
+      })
+    );
     const image = await generateGeminiImage({
       prompt: finalPrompt,
       model: normalizeImageModel(model),
@@ -1284,7 +1304,14 @@ async function generateChapterImage(req, res) {
       hasVisualReferences: referenceImages.length > 0,
       visualReferenceContext,
     });
-    await assertHasCredits(req.user.id, CREDIT_CONFIG.imageCredits);
+    await assertHasCredits(
+      req.user.id,
+      getImageCreditEstimate({
+        provider: "gemini",
+        model: normalizeImageModel(model),
+        imageSize: normalizeImageSize(imageSize),
+      })
+    );
     const image = await generateGeminiImage({
       prompt: finalPrompt,
       model: normalizeImageModel(model),

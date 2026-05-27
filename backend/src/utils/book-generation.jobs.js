@@ -23,10 +23,10 @@ const {
   isGeneratedUploadUrl,
 } = require("./chapter-image-markdown");
 const {
-  CREDIT_CONFIG,
   assertHasCredits,
   chargeImageUsage,
   chargeTokenUsage,
+  getImageCreditEstimate,
 } = require("./credits.service");
 const { normalizeChapterLength } = require("./chapter-length");
 const {
@@ -523,16 +523,24 @@ async function runGenerationJob(jobId) {
         payload.generation?.chapterLength ||
         book.generation?.chapterLength
     );
-    await assertHasCredits(
-      job.userId,
-      includeChapterImages || includeCover ? CREDIT_CONFIG.imageCredits : 0.0001
-    );
-
     let chapters = normalizeOutlineChapters(
       !job.retryFailedOnly && payload.outline?.length
         ? payload.outline
         : book.chapters || []
     );
+    const imageCountEstimate =
+      (includeCover ? 1 : 0) + (includeChapterImages ? chapters.length : 0);
+    await assertHasCredits(
+      job.userId,
+      imageCountEstimate > 0
+        ? getImageCreditEstimate({
+            provider: "gemini",
+            model: payload.coverModel,
+            imageSize: payload.coverImageSize || "1K",
+          }) * imageCountEstimate
+        : 0.0001
+    );
+
     let outlineTree = payload.outline || book.generation?.outlineTree || null;
     let outlineGrounding = book.generation?.grounding || null;
     const visualBible = normalizeVisualBiblePayload(
@@ -645,7 +653,14 @@ async function runGenerationJob(jobId) {
           book,
           customPrompt: sanitizeInput(payload.coverPrompt, 4000),
         });
-        await assertHasCredits(job.userId, CREDIT_CONFIG.imageCredits);
+        await assertHasCredits(
+          job.userId,
+          getImageCreditEstimate({
+            provider: "gemini",
+            model: payload.coverModel,
+            imageSize: payload.coverImageSize || "1K",
+          })
+        );
         const coverReferenceImages = await getCoverImageReferences(book);
         const image = await generateGeminiImage({
           prompt: finalPrompt,
@@ -782,7 +797,13 @@ async function runGenerationJob(jobId) {
           await updateBookProgress(book, job);
 
           try {
-            await assertHasCredits(job.userId, CREDIT_CONFIG.imageCredits);
+            await assertHasCredits(
+              job.userId,
+              getImageCreditEstimate({
+                provider: "gemini",
+                imageSize: "1K",
+              })
+            );
             const visualReferenceContext = buildVisualReferencePromptContext(
               visualBible,
               {
