@@ -3,6 +3,7 @@ const ENV = require("../configs/env");
 const User = require("../models/User");
 const { syncUserAdminRole } = require("../utils/admin.service");
 const { ensureUserCredits, serializeCredits } = require("../utils/credits.service");
+const { clearAuthCookie, setAuthCookie } = require("../utils/auth-cookie");
 
 function generateToken(userId) {
   return jwt.sign({ id: userId }, ENV.JWT_SECRET_KEY, { expiresIn: "7d" });
@@ -27,6 +28,8 @@ async function registerUser(req, res) {
     const user = await User.create({ name, email, password });
     await ensureUserCredits(user._id);
     await syncUserAdminRole(user);
+    const token = generateToken(user._id);
+    setAuthCookie(res, token);
 
     return res.status(201).json({
       message: "User registered successfully!",
@@ -44,7 +47,7 @@ async function registerUser(req, res) {
         role: user.role,
         credits: serializeCredits(user),
       },
-      token: generateToken(user._id),
+      token,
     });
   } catch (error) {
     console.error("Error registering user:", error);
@@ -69,6 +72,8 @@ async function signInUser(req, res) {
 
     await ensureUserCredits(user._id);
     await syncUserAdminRole(user);
+    const token = generateToken(user._id);
+    setAuthCookie(res, token);
 
     return res.status(200).json({
       message: "User signed in successfully!",
@@ -87,7 +92,7 @@ async function signInUser(req, res) {
         role: user.role,
         credits: serializeCredits(user),
       },
-      token: generateToken(user._id),
+      token,
     });
   } catch (error) {
     console.error("Error signing in user:", error);
@@ -96,4 +101,10 @@ async function signInUser(req, res) {
   }
 }
 
-module.exports = { registerUser, signInUser };
+function logoutUser(_, res) {
+  clearAuthCookie(res);
+
+  return res.status(200).json({ message: "User signed out successfully!" });
+}
+
+module.exports = { logoutUser, registerUser, signInUser };

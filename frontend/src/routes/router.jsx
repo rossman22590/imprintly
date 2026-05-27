@@ -14,6 +14,7 @@ import {
   PublicBookshelfPage,
   PublicBookPreviewPage,
   PublicSharePage,
+  JobsPage,
   SignInPage,
   SignUpPage,
 } from "../pages";
@@ -76,6 +77,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <DocsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "jobs",
+        element: (
+          <ProtectedRoute>
+            <JobsPage />
           </ProtectedRoute>
         ),
       },

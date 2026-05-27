@@ -45,6 +45,8 @@ const {
 const { getBookTypeImageGuidance } = require("./book-type-guidance");
 
 const activeJobs = new Set();
+let generationQueueScheduled = false;
+let generationQueueRunning = false;
 
 function sanitizeInput(input, maxLength = 500) {
   if (!input || typeof input !== "string") return "";
@@ -216,7 +218,21 @@ async function generateSectionForProvider(provider, payload) {
 }
 
 function normalizeJobId(value) {
+  if (!value) return "";
+  if (value._id) return value._id.toString();
+
   return value?.toString?.() || "";
+}
+
+function getJobBookTitle(job) {
+  const populatedTitle = String(job?.bookId?.title || "").trim();
+
+  if (populatedTitle) return populatedTitle;
+
+  return (
+    sanitizeInput(job?.payload?.title || job?.payload?.topic || "", 200) ||
+    "Untitled book"
+  );
 }
 
 function publicJob(job) {
@@ -226,12 +242,15 @@ function publicJob(job) {
     id: job.id,
     userId: normalizeJobId(job.userId),
     bookId: normalizeJobId(job.bookId),
+    bookTitle: getJobBookTitle(job),
     provider: job.provider,
+    retryFailedOnly: Boolean(job.retryFailedOnly),
     status: job.status,
     progress: job.progress,
     failedChapters: job.failedChapters || [],
     error: job.error || "",
     createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
     startedAt: job.startedAt,
     completedAt: job.completedAt,
   };
@@ -328,9 +347,19 @@ async function createGenerationJob({ userId, payload, retryFailedOnly = false })
     error: "",
   });
 
-  setImmediate(() => runGenerationJob(id));
+  scheduleGenerationQueue();
 
   return publicJob(job);
+}
+
+async function listGenerationJobs(userId, { limit = 50 } = {}) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
+  const jobs = await GenerationJob.find({ userId })
+    .populate("bookId", "title author")
+    .sort({ createdAt: -1 })
+    .limit(safeLimit);
+
+  return jobs.map(publicJob);
 }
 
 async function getGenerationJob(jobId, userId) {
@@ -350,6 +379,16 @@ async function cancelGenerationJob(jobId, userId) {
   }
 
   job.cancelled = true;
+
+  if (job.status === "queued") {
+    job.status = "cancelled";
+    job.completedAt = new Date();
+    job.progress.message = "Cancelled";
+    await saveJob(job);
+
+    return publicJob(job);
+  }
+
   job.status = "cancelling";
   job.progress.message = "Cancelling after the current chapter";
   await saveJob(job);
@@ -947,10 +986,51 @@ async function runGenerationJob(jobId) {
   }
 }
 
+function scheduleGenerationQueue() {
+  if (generationQueueScheduled) return;
+
+  generationQueueScheduled = true;
+
+  setImmediate(async () => {
+    generationQueueScheduled = false;
+
+    if (generationQueueRunning) return;
+
+    generationQueueRunning = true;
+
+    try {
+      while (true) {
+        const nextJob = await GenerationJob.findOne({ status: "queued" })
+          .sort({ createdAt: 1 })
+          .select("id")
+          .lean();
+
+        if (!nextJob) break;
+
+        await runGenerationJob(nextJob.id);
+      }
+    } catch (error) {
+      console.error("Error running generation queue:", error);
+    } finally {
+      generationQueueRunning = false;
+
+      try {
+        const hasQueuedJob = await GenerationJob.exists({ status: "queued" });
+
+        if (hasQueuedJob) {
+          scheduleGenerationQueue();
+        }
+      } catch (error) {
+        console.error("Error checking generation queue:", error);
+      }
+    }
+  });
+}
+
 async function recoverInterruptedGenerationJobs() {
   const message =
     "Server restarted before this generation finished. Start a new generation or retry failed chapters.";
-  const activeStatuses = ["queued", "generating", "cancelling"];
+  const activeStatuses = ["generating", "cancelling"];
   const now = new Date();
   const interruptedJobs = await GenerationJob.find({
     status: { $in: activeStatuses },
@@ -1018,7 +1098,15 @@ async function recoverInterruptedGenerationJobs() {
     });
 
     if (changed) {
-      await book.save();
+      await Book.updateOne(
+        { _id: book._id },
+        {
+          $set: {
+            chapters: book.chapters,
+            updatedAt: new Date(),
+          },
+        }
+      );
     }
   }
 
@@ -1034,6 +1122,7 @@ async function recoverInterruptedGenerationJobs() {
   );
 
   await autoResumeInterruptedBooks(interruptedBookIds);
+  scheduleGenerationQueue();
 }
 
 async function autoResumeInterruptedBooks(bookIds = []) {
@@ -1083,6 +1172,7 @@ module.exports = {
   cancelGenerationJob,
   createGenerationJob,
   getGenerationJob,
+  listGenerationJobs,
   publicJob,
   recoverInterruptedGenerationJobs,
   retryGenerationJob,

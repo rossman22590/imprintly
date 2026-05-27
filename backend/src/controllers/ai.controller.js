@@ -32,6 +32,7 @@ const {
   cancelGenerationJob,
   createGenerationJob,
   getGenerationJob,
+  listGenerationJobs,
   publicJob,
   retryGenerationJob,
 } = require("../utils/book-generation.jobs");
@@ -837,6 +838,23 @@ async function getFullBookJob(req, res) {
   }
 }
 
+async function listFullBookJobs(req, res) {
+  try {
+    const jobs = await listGenerationJobs(req.user.id, {
+      limit: req.query?.limit,
+    });
+
+    return res.status(200).json({
+      message: "Generation jobs retrieved.",
+      jobs,
+    });
+  } catch (error) {
+    console.error("Error listing full-book generation jobs:", error);
+
+    return res.status(500).json({ error: "Internal Server Error!" });
+  }
+}
+
 async function cancelFullBookJob(req, res) {
   try {
     const job = await cancelGenerationJob(req.params.jobId, req.user.id);
@@ -1263,6 +1281,7 @@ module.exports = {
   generateCoverImage,
   generateFullBook,
   getFullBookJob,
+  listFullBookJobs,
   retryFullBookJob,
   runQualityTool,
 };

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { useAuthContext } from "../contexts/AuthContext";
 import Modal from "./ui/Modal";
 import Input from "./ui/Input";
@@ -119,13 +120,12 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   const [isFinalisingBook, setIsFinalisingBook] = useState(false);
 
   const chaptersContainerRef = useRef(null);
-  const activePollRef = useRef(null);
   const modalScrollRef = useRef(null);
 
   const { user } = useAuthContext();
+  const navigate = useNavigate();
 
   const resetModal = () => {
-    activePollRef.current = null;
     setStep(1);
     setBookTitle("");
     setBookSubtitle("");
@@ -394,77 +394,6 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     }
   };
 
-  const pollFullBookJob = async (jobId) => {
-    const pollKey = Symbol(jobId);
-    activePollRef.current = pollKey;
-
-    while (activePollRef.current === pollKey) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      if (activePollRef.current !== pollKey) return;
-
-      let response;
-
-      try {
-        response = await axiosInstance.get(
-          `${API_ENDPOINTS.AI.FULL_BOOK_JOBS}/${jobId}`
-        );
-      } catch (error) {
-        if (activePollRef.current !== pollKey) return;
-
-        setIsGeneratingFullBook(false);
-        activePollRef.current = null;
-        toast.error(
-          error.response?.status === 404
-            ? "Generation was interrupted. Start a new full-book generation."
-            : "Lost generation progress. Please try again."
-        );
-        return;
-      }
-
-      const {
-        data: { job, book },
-      } = response;
-
-      setGenerationJob(job);
-
-      if (["complete", "failed", "cancelled"].includes(job.status)) {
-        setIsGeneratingFullBook(false);
-        activePollRef.current = null;
-
-        const hasGeneratedContent = Array.isArray(book?.chapters)
-          ? book.chapters.some((chapter) => chapter.content?.trim())
-          : false;
-
-        if (book && job.status === "complete") {
-          toast.success(
-            "Full AI book generated!"
-          );
-          onBookCreate(book._id);
-          onClose();
-          resetModal();
-        } else if (book && job.status === "failed" && hasGeneratedContent) {
-          toast.error("Book generated with failed chapters.");
-          onBookCreate(book._id);
-          onClose();
-          resetModal();
-        } else if (job.status === "failed") {
-          const failureReason =
-            job.failedChapters?.[0]?.error ||
-            job.error ||
-            job.progress?.message ||
-            "The AI provider did not return usable chapter content.";
-
-          toast.error(failureReason, { duration: 8000 });
-        } else if (job.status === "cancelled") {
-          toast("Generation cancelled.");
-        }
-
-        return;
-      }
-    }
-  };
-
   const handleGenerateFullBook = async () => {
     if (chapters.length === 0) {
       toast.error("Generate or add at least one chapter first.", {
@@ -504,13 +433,16 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
       );
 
       setGenerationJob(job);
-      toast.success("Generation job started.");
-      await pollFullBookJob(job.id);
+      toast.success("Generation job queued.");
+      onClose();
+      resetModal();
+      navigate("/jobs");
     } catch (error) {
       console.error("Error generating full book:", error);
       toast.error(
         error.response?.data?.error || "Failed to generate the full book."
       );
+    } finally {
       setIsGeneratingFullBook(false);
     }
   };
@@ -544,12 +476,6 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
       });
     }
   }, [step, chapters.length]);
-
-  useEffect(() => {
-    return () => {
-      activePollRef.current = null;
-    };
-  }, []);
 
   useEffect(() => {
     if (!includeImages && modalScrollRef.current) {

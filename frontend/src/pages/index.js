@@ -10,6 +10,7 @@ export { default as KDPStudioPage } from "./KDPStudioPage";
 export { default as PricingPage } from "./PricingPage";
 export { default as ProfilePage } from "./ProfilePage";
 export { default as CreditsPage } from "./CreditsPage";
+export { default as JobsPage } from "./JobsPage";
 export { default as ErrorPage } from "./ErrorPage";
 export { default as PublicBookshelfPage } from "./PublicBookshelfPage";
 export { default as PublicBookPreviewPage } from "./PublicBookPreviewPage";

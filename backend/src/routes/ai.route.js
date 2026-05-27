@@ -9,6 +9,7 @@ const {
   generateCoverImage,
   generateFullBook,
   getFullBookJob,
+  listFullBookJobs,
   retryFullBookJob,
   runQualityTool,
 } = require("../controllers/ai.controller");
@@ -22,6 +23,7 @@ router.post("/generate-chapter-image", generateChapterImage);
 router.post("/generate-full-book", generateFullBook);
 router.post("/quality-tool", runQualityTool);
 router.post("/full-book-jobs", createFullBookJob);
+router.get("/full-book-jobs", listFullBookJobs);
 router.get("/full-book-jobs/:jobId", getFullBookJob);
 router.delete("/full-book-jobs/:jobId", cancelFullBookJob);
 router.post("/full-book-jobs/:jobId/retry", retryFullBookJob);

@@ -77,21 +77,11 @@ function SignUpPage() {
     try {
       // registration request
       const {
-        data: { token },
+        data: { user },
       } = await axiosInstance.post(API_ENDPOINTS.AUTH.REGISTER, trimmedData);
 
-      // get profile info
-      const { data: profileInfo } = await axiosInstance.get(
-        API_ENDPOINTS.PROFILE.GET,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
       // update auth context
-      authenticateUser(token, profileInfo.user);
+      authenticateUser(user);
       localStorage.setItem(DASHBOARD_VIEW_STORAGE_KEY, "flat");
 
       toast.success("Welcome aboard, Author!");
@@ -114,8 +104,9 @@ function SignUpPage() {
         email: errorMessage,
       }));
 
-      // clear sensitive data on error
-      localStorage.clear();
+      localStorage.removeItem("token");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
     } finally {
       setIsLoading(false);
     }

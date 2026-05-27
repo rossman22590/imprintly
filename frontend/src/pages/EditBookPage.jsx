@@ -371,7 +371,6 @@ function EditBookPage() {
   const [generationJob, setGenerationJob] = useState(null);
   const skipNextAutosaveRef = useRef(false);
   const autosaveTimerRef = useRef(null);
-  const activeGenerationPollRef = useRef(null);
 
   const { bookId } = useParams();
   const navigate = useNavigate();
@@ -949,7 +948,6 @@ function EditBookPage() {
 
   useEffect(() => {
     return () => {
-      activeGenerationPollRef.current = null;
       clearTimeout(autosaveTimerRef.current);
     };
   }, []);
@@ -969,7 +967,6 @@ function EditBookPage() {
     }
 
     setIsGenerating(true);
-    let pollKey = null;
 
     try {
       const {
@@ -999,43 +996,8 @@ function EditBookPage() {
       );
 
       setGenerationJob(job);
-      toast.success("Generation job started.");
-      pollKey = Symbol(job.id);
-      activeGenerationPollRef.current = pollKey;
-
-      while (activeGenerationPollRef.current === pollKey) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-
-        if (activeGenerationPollRef.current !== pollKey) return;
-
-        const {
-          data: { job: nextJob, book: nextBook },
-        } = await axiosInstance.get(
-          `${API_ENDPOINTS.AI.FULL_BOOK_JOBS}/${job.id}`
-        );
-
-        if (activeGenerationPollRef.current !== pollKey) return;
-
-        setGenerationJob(nextJob);
-
-        if (nextBook) {
-          skipNextAutosaveRef.current = true;
-          setBook(normalizeBook(nextBook));
-        }
-
-        if (["complete", "failed", "cancelled"].includes(nextJob.status)) {
-          activeGenerationPollRef.current = null;
-          setIsGenerating(false);
-          toast.success(
-            nextJob.status === "complete"
-              ? "Full book generated successfully!"
-              : nextJob.status === "failed"
-                ? "Book generated with failed chapters."
-                : "Generation cancelled."
-          );
-          break;
-        }
-      }
+      toast.success("Generation job queued.");
+      navigate("/jobs");
     } catch (error) {
       console.error("Error generating full book:", error);
       toast.error(
@@ -1044,10 +1006,7 @@ function EditBookPage() {
           : error.response?.data?.error || "Failed to generate the full book."
       );
     } finally {
-      if (!pollKey || activeGenerationPollRef.current === pollKey) {
-        activeGenerationPollRef.current = null;
-        setIsGenerating(false);
-      }
+      setIsGenerating(false);
     }
   };
 
@@ -1081,7 +1040,8 @@ function EditBookPage() {
       );
 
       setGenerationJob(job);
-      toast.success("Retry job started.");
+      toast.success("Retry job queued.");
+      navigate("/jobs");
     } catch (error) {
       console.error("Error retrying generation:", error);
       toast.error("Failed to retry failed chapters.");
