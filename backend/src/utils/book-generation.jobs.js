@@ -33,6 +33,16 @@ const {
   normalizeBookBiblePayload,
   serializeBookBible,
 } = require("./book-bible");
+const {
+  getChapterImageReferences,
+  getCoverImageReferences,
+} = require("./image-reference");
+const {
+  buildVisualReferencePromptContext,
+  normalizeVisualBiblePayload,
+  serializeVisualBible,
+} = require("./visual-bible");
+const { getBookTypeImageGuidance } = require("./book-type-guidance");
 
 const activeJobs = new Set();
 
@@ -44,6 +54,19 @@ function sanitizeInput(input, maxLength = 500) {
     .slice(0, maxLength)
     .replace(/<script[^>]*>.*?<\/script>/gi, "")
     .replace(/<[^>]+>/g, "");
+}
+
+function serializeGenerationCanon(bookBible = {}, visualBible = {}) {
+  const textCanon = serializeBookBible(bookBible);
+  const visualCanon = serializeVisualBible(visualBible);
+
+  return [
+    textCanon,
+    visualCanon ? `# Visual Bible / Visual Canon\n${visualCanon}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 26000);
 }
 
 function normalizeProvider(provider) {
@@ -141,17 +164,32 @@ function createBookContext({ title, genre, audience, chapters }) {
   ].join("\n");
 }
 
-function buildChapterImagePrompt({ book, chapter, content, genre, audience }) {
+function buildChapterImagePrompt({
+  book,
+  chapter,
+  content,
+  genre,
+  audience,
+  hasVisualReferences = false,
+  visualReferenceContext = "",
+}) {
   const excerpt = excerptContent(content);
+  const continuityInstruction = hasVisualReferences
+    ? "\nVisual continuity: use the provided reference image(s) as the book's style bible. Preserve the same overall art direction, lighting logic, palette, character design language, and genre feel, but create a new scene that fits this chapter. Do not copy the previous scene unchanged."
+    : "";
+  const bookTypeGuidance = getBookTypeImageGuidance(genre);
 
   return `Create a relevant inline ebook illustration for this chapter.
 
 Book title: ${book.title}
 Genre: ${genre}
 Audience: ${audience}
+${bookTypeGuidance}
 Chapter title: ${chapter.title}
 Chapter brief: ${chapter.description || "No brief provided."}
 Chapter excerpt: ${excerpt || "No chapter excerpt available."}
+${continuityInstruction}
+${visualReferenceContext}
 
 Requirements:
 1. Represent the chapter's actual ideas, not a generic book or writing scene.
@@ -197,6 +235,66 @@ function publicJob(job) {
     startedAt: job.startedAt,
     completedAt: job.completedAt,
   };
+}
+
+function toPlainValue(value) {
+  return typeof value?.toObject === "function"
+    ? value.toObject({ depopulate: true })
+    : value;
+}
+
+function hasChapterImage(chapter = {}) {
+  return Array.isArray(chapter.images) && chapter.images.length > 0;
+}
+
+function isIncompleteChapterForRetry(chapter = {}, includeChapterImages = false) {
+  const status = chapter.generationStatus || "";
+  const hasContent = Boolean(String(chapter.content || "").trim());
+  const stats = chapter.generationStats || {};
+
+  if (status === "failed") return true;
+  if (stats.imageStatus === "failed" || stats.imageError) return true;
+  if (
+    includeChapterImages &&
+    hasContent &&
+    !hasChapterImage(chapter) &&
+    ["queued", "generating", "empty"].includes(status)
+  ) {
+    return true;
+  }
+  if (["queued", "generating", "empty"].includes(status) && !hasContent) {
+    return true;
+  }
+
+  return false;
+}
+
+function isImageOnlyRetryChapter(chapter = {}, includeChapterImages = false) {
+  const hasContent = Boolean(String(chapter.content || "").trim());
+  const stats = chapter.generationStats || {};
+
+  return (
+    includeChapterImages &&
+    hasContent &&
+    (stats.imageStatus === "failed" ||
+      Boolean(stats.imageError) ||
+      !hasChapterImage(chapter))
+  );
+}
+
+function getChapterGenerationStepCount(
+  chapter = {},
+  includeChapterImages = false,
+  retryFailedOnly = false
+) {
+  if (
+    retryFailedOnly &&
+    isImageOnlyRetryChapter(chapter, includeChapterImages)
+  ) {
+    return 1;
+  }
+
+  return includeChapterImages ? 2 : 1;
 }
 
 async function saveJob(job) {
@@ -289,7 +387,23 @@ async function updateBookProgress(book, job, extraGeneration = {}) {
     jobId: job.id,
     progress: job.progress,
   };
-  await Promise.all([saveJob(job), book.save()]);
+  await saveJob(job);
+  await Book.updateOne(
+    { _id: book._id },
+    {
+      $set: {
+        title: book.title,
+        subtitle: book.subtitle,
+        genre: book.genre,
+        audience: book.audience,
+        chapters: (book.chapters || []).map(toPlainValue),
+        coverImage: book.coverImage || "",
+        coverGeneration: toPlainValue(book.coverGeneration || {}),
+        visualBible: toPlainValue(book.visualBible || {}),
+        generation: toPlainValue(book.generation || {}),
+      },
+    }
+  );
 }
 
 async function resolveBookForJob(job) {
@@ -333,6 +447,7 @@ async function resolveBookForJob(job) {
     audience: sanitizeInput(payload.audience, 200) || "General readers",
     chapters: normalizeOutlineChapters(payload.outline || []),
     bible: normalizeBookBiblePayload(payload.bible),
+    visualBible: normalizeVisualBiblePayload(payload.visualBible),
     generation: {
       provider: job.provider,
       status: "queued",
@@ -420,7 +535,20 @@ async function runGenerationJob(jobId) {
     );
     let outlineTree = payload.outline || book.generation?.outlineTree || null;
     let outlineGrounding = book.generation?.grounding || null;
-    const bookBible = serializeBookBible(payload.bible || book.bible);
+    const visualBible = normalizeVisualBiblePayload(
+      payload.visualBible || book.visualBible
+    );
+    const bookBible = serializeGenerationCanon(
+      payload.bible || book.bible,
+      visualBible
+    );
+
+    if (payload.visualBible) {
+      book.visualBible = {
+        ...visualBible,
+        updatedAt: new Date(),
+      };
+    }
 
     await updateBookProgress(book, job, {
       startedAt: job.startedAt,
@@ -469,17 +597,27 @@ async function runGenerationJob(jobId) {
     const targetIndexes = job.retryFailedOnly
       ? chapters
           .map((chapter, index) =>
-            chapter.generationStatus === "failed" ? index : null
+            isIncompleteChapterForRetry(chapter, includeChapterImages)
+              ? index
+              : null
           )
           .filter((index) => index !== null)
       : chapters.map((_, index) => index);
 
-    const stepsPerChapter = includeChapterImages ? 2 : 1;
     const shouldGenerateCover =
       includeCover && !job.retryFailedOnly && !book.coverImage;
 
     job.progress.total =
-      targetIndexes.length * stepsPerChapter + (shouldGenerateCover ? 1 : 0);
+      targetIndexes.reduce(
+        (total, index) =>
+          total +
+          getChapterGenerationStepCount(
+            chapters[index],
+            includeChapterImages,
+            job.retryFailedOnly
+          ),
+        shouldGenerateCover ? 1 : 0
+      );
     job.progress.completed = 0;
     job.progress.failed = 0;
     book.genre = safeGenre;
@@ -508,11 +646,13 @@ async function runGenerationJob(jobId) {
           customPrompt: sanitizeInput(payload.coverPrompt, 4000),
         });
         await assertHasCredits(job.userId, CREDIT_CONFIG.imageCredits);
+        const coverReferenceImages = await getCoverImageReferences(book);
         const image = await generateGeminiImage({
           prompt: finalPrompt,
           model: payload.coverModel,
           aspectRatio: "2:3",
           imageSize: payload.coverImageSize || "1K",
+          referenceImages: coverReferenceImages,
         });
         await chargeImageUsage({
           userId: job.userId,
@@ -526,6 +666,7 @@ async function runGenerationJob(jobId) {
             bookId: book._id.toString(),
             aspectRatio: image.aspectRatio,
             imageSize: image.imageSize,
+            visualReferenceCount: coverReferenceImages.length,
           },
         });
 
@@ -569,54 +710,70 @@ async function runGenerationJob(jobId) {
       }
 
       const chapter = book.chapters[chapterIndex];
+      const retryImageOnly = isImageOnlyRetryChapter(
+        chapter,
+        includeChapterImages
+      );
       job.progress.currentChapterIndex = chapterIndex;
       job.progress.currentChapterTitle = chapter.title;
-      job.progress.message = `Generating ${chapter.title}`;
-      book.chapters[chapterIndex].generationStatus = "generating";
+      job.progress.message = retryImageOnly
+        ? `Retrying image for ${chapter.title}`
+        : `Generating ${chapter.title}`;
+      book.chapters[chapterIndex].generationStatus = retryImageOnly
+        ? "complete"
+        : "generating";
       await updateBookProgress(book, job);
 
       try {
-        const result = await generateSectionForProvider(provider, {
-          chapterTitle: chapter.title,
-          chapterDescription: chapter.description,
-          style: safeStyle,
-          bookTitle: book.title,
-          genre: safeGenre,
-          audience: safeAudience,
-          bookContext,
-          bookBible,
-          useGoogleSearch,
-          includeTextGraphics,
-          chapterLength,
-          ...modelPayload,
-        });
-        let chapterContent = assertGeneratedChapterContent(result, {
-          provider,
-          chapterTitle: chapter.title,
-        });
-
-        totalStats = addStats(totalStats, result.stats);
-        await chargeTokenUsage({
-          userId: job.userId,
-          usage: result.stats,
-          reason: "full_book_chapter_generation",
-          description: `Generated chapter "${chapter.title}"`,
-          provider,
-          model: result.modelName,
-          metadata: {
-            jobId: job.id,
-            bookId: book._id.toString(),
-            chapterIndex,
-            chapterTitle: chapter.title,
-          },
-        });
+        let chapterContent = String(chapter.content || "");
         const chapterStats = {
-          ...result.stats,
-          ...(result.grounding ? { grounding: result.grounding } : {}),
+          ...(chapter.generationStats?.toObject?.() ||
+            chapter.generationStats ||
+            {}),
         };
         let chapterStatus = "complete";
 
-        job.progress.completed += 1;
+        if (!retryImageOnly) {
+          const result = await generateSectionForProvider(provider, {
+            chapterTitle: chapter.title,
+            chapterDescription: chapter.description,
+            style: safeStyle,
+            bookTitle: book.title,
+            genre: safeGenre,
+            audience: safeAudience,
+            bookContext,
+            bookBible,
+            useGoogleSearch,
+            includeTextGraphics,
+            chapterLength,
+            ...modelPayload,
+          });
+          chapterContent = assertGeneratedChapterContent(result, {
+            provider,
+            chapterTitle: chapter.title,
+          });
+
+          totalStats = addStats(totalStats, result.stats);
+          await chargeTokenUsage({
+            userId: job.userId,
+            usage: result.stats,
+            reason: "full_book_chapter_generation",
+            description: `Generated chapter "${chapter.title}"`,
+            provider,
+            model: result.modelName,
+            metadata: {
+              jobId: job.id,
+              bookId: book._id.toString(),
+              chapterIndex,
+              chapterTitle: chapter.title,
+            },
+          });
+          Object.assign(chapterStats, {
+            ...result.stats,
+            ...(result.grounding ? { grounding: result.grounding } : {}),
+          });
+          job.progress.completed += 1;
+        }
 
         if (includeChapterImages) {
           job.progress.message = `Generating image for ${chapter.title}`;
@@ -626,6 +783,17 @@ async function runGenerationJob(jobId) {
 
           try {
             await assertHasCredits(job.userId, CREDIT_CONFIG.imageCredits);
+            const visualReferenceContext = buildVisualReferencePromptContext(
+              visualBible,
+              {
+                ...chapter,
+                content: chapterContent,
+              }
+            );
+            const referenceImages = await getChapterImageReferences(
+              book,
+              chapterIndex
+            );
             const image = await generateGeminiImage({
               prompt: buildChapterImagePrompt({
                 book,
@@ -633,9 +801,12 @@ async function runGenerationJob(jobId) {
                 content: chapterContent,
                 genre: safeGenre,
                 audience: safeAudience,
+                hasVisualReferences: referenceImages.length > 0,
+                visualReferenceContext,
               }),
               aspectRatio: "16:9",
               imageSize: "1K",
+              referenceImages,
             });
             await chargeImageUsage({
               userId: job.userId,
@@ -651,6 +822,7 @@ async function runGenerationJob(jobId) {
                 chapterTitle: chapter.title,
                 aspectRatio: image.aspectRatio,
                 imageSize: image.imageSize,
+                visualReferenceCount: referenceImages.length,
               },
             });
             const imageAlt = `${
@@ -681,11 +853,13 @@ async function runGenerationJob(jobId) {
               imageAsset,
             ];
             chapterStats.image = imageAsset;
+            delete chapterStats.imageError;
+            delete chapterStats.imageStatus;
             totalStats = addStats(totalStats, image.stats);
             job.progress.completed += 1;
           } catch (imageError) {
-            chapterStatus = "failed";
             chapterStats.imageError = imageError.message;
+            chapterStats.imageStatus = "failed";
             job.progress.failed += 1;
             job.failedChapters.push({
               index: chapterIndex,
@@ -702,7 +876,11 @@ async function runGenerationJob(jobId) {
       } catch (error) {
         book.chapters[chapterIndex].generationStatus = "failed";
         book.chapters[chapterIndex].generationStats = { error: error.message };
-        job.progress.failed += stepsPerChapter;
+        job.progress.failed += getChapterGenerationStepCount(
+          chapter,
+          includeChapterImages,
+          job.retryFailedOnly
+        );
         job.failedChapters.push({
           index: chapterIndex,
           title: chapter.title,
@@ -774,6 +952,9 @@ async function recoverInterruptedGenerationJobs() {
     "Server restarted before this generation finished. Start a new generation or retry failed chapters.";
   const activeStatuses = ["queued", "generating", "cancelling"];
   const now = new Date();
+  const interruptedJobs = await GenerationJob.find({
+    status: { $in: activeStatuses },
+  }).select("bookId").lean();
 
   await GenerationJob.updateMany(
     { status: { $in: activeStatuses } },
@@ -787,6 +968,60 @@ async function recoverInterruptedGenerationJobs() {
     }
   );
 
+  const interruptedBookIds = [
+    ...new Set(
+      interruptedJobs
+        .map((job) => job.bookId?.toString())
+        .filter(Boolean)
+    ),
+  ];
+
+  for (const bookId of interruptedBookIds) {
+    const book = await Book.findById(bookId);
+
+    if (!book) continue;
+
+    let changed = false;
+
+    book.chapters = (book.chapters || []).map((chapter) => {
+      const status = chapter.generationStatus || "";
+      const hasContent = Boolean(String(chapter.content || "").trim());
+      const base = chapter.toObject?.() || chapter;
+      const existingStats = chapter.generationStats?.toObject?.() || chapter.generationStats || {};
+
+      if (["queued", "generating", "empty"].includes(status) && !hasContent) {
+        changed = true;
+        return {
+          ...base,
+          generationStatus: "failed",
+          generationStats: {
+            ...existingStats,
+            error: message,
+          },
+        };
+      }
+
+      if (status === "generating" && hasContent) {
+        changed = true;
+        return {
+          ...base,
+          generationStatus: "complete",
+          generationStats: {
+            ...existingStats,
+            imageStatus: "failed",
+            imageError: message,
+          },
+        };
+      }
+
+      return chapter;
+    });
+
+    if (changed) {
+      await book.save();
+    }
+  }
+
   await Book.updateMany(
     { "generation.status": { $in: activeStatuses } },
     {
@@ -797,6 +1032,51 @@ async function recoverInterruptedGenerationJobs() {
       },
     }
   );
+
+  await autoResumeInterruptedBooks(interruptedBookIds);
+}
+
+async function autoResumeInterruptedBooks(bookIds = []) {
+  for (const bookId of bookIds) {
+    try {
+      const book = await Book.findById(bookId);
+
+      if (!book) continue;
+
+      const includeChapterImages =
+        Boolean(book.generation?.includeImages) ||
+        (Array.isArray(book.chapters) &&
+          book.chapters.some(
+            (chapter) =>
+              Array.isArray(chapter.images) && chapter.images.length > 0
+          ));
+      const hasResumable = (book.chapters || []).some((chapter) =>
+        isIncompleteChapterForRetry(chapter, includeChapterImages)
+      );
+
+      if (!hasResumable) continue;
+
+      const lastJob = await GenerationJob.findOne({ bookId: book._id })
+        .sort({ createdAt: -1 })
+        .lean();
+
+      if (!lastJob) continue;
+
+      await createGenerationJob({
+        userId: book.userId,
+        retryFailedOnly: true,
+        payload: {
+          ...(lastJob.payload || {}),
+          bookId: book._id.toString(),
+          provider: lastJob.provider,
+        },
+      });
+    } catch (error) {
+      console.error(
+        `Auto-resume failed for book ${bookId}: ${error.message}`
+      );
+    }
+  }
 }
 
 module.exports = {

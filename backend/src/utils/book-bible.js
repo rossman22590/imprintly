@@ -23,8 +23,35 @@ const BOOK_BIBLE_LABELS = {
 const BOOK_BIBLE_FIELD_LIMIT = 12000;
 const BOOK_BIBLE_PROMPT_LIMIT = 18000;
 
+function stringifyBibleValue(value = "") {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        const text = stringifyBibleValue(item).trim();
+
+        if (!text) return "";
+        return /^\s*[-*]\s+/.test(text) ? text : `- ${text}`;
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .map(([key, itemValue]) => {
+        const text = stringifyBibleValue(itemValue).trim();
+
+        return text ? `- **${key}**: ${text}` : "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return String(value || "");
+}
+
 function sanitizeBibleText(value = "") {
-  return String(value || "")
+  return stringifyBibleValue(value)
     .replace(/<script[^>]*>.*?<\/script>/gi, "")
     .replace(/<[^>]+>/g, "")
     .slice(0, BOOK_BIBLE_FIELD_LIMIT);
@@ -61,5 +88,6 @@ module.exports = {
   BOOK_BIBLE_FIELD_LIMIT,
   BOOK_BIBLE_LABELS,
   normalizeBookBiblePayload,
+  stringifyBibleValue,
   serializeBookBible,
 };

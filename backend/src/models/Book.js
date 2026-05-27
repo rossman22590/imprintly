@@ -43,6 +43,80 @@ const imageAssetSchema = new mongoose.Schema(
   }
 );
 
+const visualReferenceSchema = new mongoose.Schema(
+  {
+    id: {
+      type: String,
+      default: "",
+      maxLength: [100, "Reference ID cannot exceed 100 characters"],
+    },
+    name: {
+      type: String,
+      default: "",
+      maxLength: [120, "Reference name cannot exceed 120 characters"],
+    },
+    label: {
+      type: String,
+      default: "",
+      maxLength: [120, "Reference label cannot exceed 120 characters"],
+    },
+    description: {
+      type: String,
+      default: "",
+      maxLength: [1200, "Reference description cannot exceed 1200 characters"],
+    },
+    imageUrl: {
+      type: String,
+      default: "",
+    },
+    kind: {
+      type: String,
+      enum: ["character", "style", "world", "reference"],
+      default: "reference",
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
+const visualBibleSchema = new mongoose.Schema(
+  {
+    enabled: {
+      type: Boolean,
+      default: true,
+    },
+    matchBookStyle: {
+      type: Boolean,
+      default: true,
+    },
+    characters: {
+      type: [visualReferenceSchema],
+      default: [],
+    },
+    styleReferences: {
+      type: [visualReferenceSchema],
+      default: [],
+    },
+    worldReferences: {
+      type: [visualReferenceSchema],
+      default: [],
+    },
+    notes: {
+      type: String,
+      default: "",
+      maxLength: [2000, "Visual bible notes cannot exceed 2000 characters"],
+    },
+    updatedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
 const chapterSchema = new mongoose.Schema(
   {
     title: {
@@ -416,6 +490,10 @@ const bookSchema = new mongoose.Schema(
     },
     bible: {
       type: bookBibleSchema,
+      default: () => ({}),
+    },
+    visualBible: {
+      type: visualBibleSchema,
       default: () => ({}),
     },
     status: {

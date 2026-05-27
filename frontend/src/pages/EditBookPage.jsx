@@ -136,6 +136,33 @@ const BIBLE_JSON_KEYS = [
   "notes",
 ];
 
+function stringifyBibleToolValue(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        const text = stringifyBibleToolValue(item).trim();
+
+        if (!text) return "";
+        return /^\s*[-*]\s+/.test(text) ? text : `- ${text}`;
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .map(([key, itemValue]) => {
+        const text = stringifyBibleToolValue(itemValue).trim();
+
+        return text ? `- **${key}**: ${text}` : "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return String(value || "");
+}
+
 function parseBibleToolContent(content = "") {
   const raw = String(content || "")
     .trim()
@@ -153,7 +180,7 @@ function parseBibleToolContent(content = "") {
     const parsed = JSON.parse(trimmed);
 
     return BIBLE_JSON_KEYS.reduce((bible, key) => {
-      bible[key] = String(parsed?.[key] || "");
+      bible[key] = stringifyBibleToolValue(parsed?.[key]);
       return bible;
     }, { ...DEFAULT_BOOK_BIBLE });
   } catch {
@@ -395,6 +422,201 @@ function EditBookPage() {
     }));
   };
 
+  const withVisualBible = (bookValue, updater) => {
+    const current = {
+      enabled: true,
+      matchBookStyle: true,
+      characters: [],
+      styleReferences: [],
+      worldReferences: [],
+      notes: "",
+      ...(bookValue.visualBible || {}),
+    };
+
+    return {
+      ...bookValue,
+      visualBible: {
+        ...updater(current),
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  };
+
+  const handleEditVisualBibleMeta = (field, value) => {
+    setBook((prev) =>
+      withVisualBible(prev, (visualBible) => ({
+        ...visualBible,
+        [field]: value,
+      }))
+    );
+  };
+
+  const handleAddVisualReference = (group) => {
+    const defaultName =
+      group === "characters"
+        ? "New character"
+        : group === "styleReferences"
+          ? "Style reference"
+          : "World reference";
+
+    setBook((prev) =>
+      withVisualBible(prev, (visualBible) => ({
+        ...visualBible,
+        [group]: [
+          ...(Array.isArray(visualBible[group]) ? visualBible[group] : []),
+          {
+            id: `${group}-${Date.now()}`,
+            name: defaultName,
+            label: defaultName,
+            description: "",
+            imageUrl: "",
+            kind:
+              group === "characters"
+                ? "character"
+                : group === "styleReferences"
+                  ? "style"
+                  : "world",
+          },
+        ],
+      }))
+    );
+  };
+
+  const handleSetVisualReferenceImage = (group, referenceId, fallbackIndex, imageUrl) => {
+    setBook((prev) =>
+      withVisualBible(prev, (visualBible) => {
+        const refs = Array.isArray(visualBible[group])
+          ? [...visualBible[group]]
+          : [];
+        let refIndex = refs.findIndex(
+          (reference) => reference?.id === referenceId
+        );
+
+        if (refIndex < 0 && refs[fallbackIndex]) {
+          refIndex = fallbackIndex;
+        }
+
+        if (refIndex < 0) {
+          const defaultName =
+            group === "characters"
+              ? "New character"
+              : group === "styleReferences"
+                ? "Style reference"
+                : "World reference";
+
+          refs.push({
+            id: referenceId || `${group}-${Date.now()}`,
+            name: defaultName,
+            label: defaultName,
+            description: "",
+            imageUrl,
+            kind:
+              group === "characters"
+                ? "character"
+                : group === "styleReferences"
+                  ? "style"
+                  : "world",
+          });
+        } else {
+          refs[refIndex] = {
+            ...refs[refIndex],
+            imageUrl,
+          };
+        }
+
+        return {
+          ...visualBible,
+          [group]: refs,
+        };
+      })
+    );
+  };
+
+  const handleEditVisualReference = (group, index, field, value) => {
+    setBook((prev) =>
+      withVisualBible(prev, (visualBible) => {
+        const refs = Array.isArray(visualBible[group])
+          ? [...visualBible[group]]
+          : [];
+
+        refs[index] = {
+          ...(refs[index] || {}),
+          [field]: value,
+        };
+
+        return {
+          ...visualBible,
+          [group]: refs,
+        };
+      })
+    );
+  };
+
+  const handleRemoveVisualReference = (group, index) => {
+    setBook((prev) =>
+      withVisualBible(prev, (visualBible) => ({
+        ...visualBible,
+        [group]: (Array.isArray(visualBible[group])
+          ? visualBible[group]
+          : []
+        ).filter((_, itemIndex) => itemIndex !== index),
+      }))
+    );
+  };
+
+  const handleUploadVisualReference = async (group, index, file) => {
+    if (!file) return;
+
+    const referenceId = book.visualBible?.[group]?.[index]?.id;
+    const formData = new FormData();
+    formData.append("referenceImage", file);
+
+    try {
+      const {
+        data: { imageUrl },
+      } = await axiosInstance.post(
+        API_ENDPOINTS.BOOKS.UPLOAD_VISUAL_REFERENCE,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      handleSetVisualReferenceImage(group, referenceId, index, imageUrl);
+      toast.success("Visual reference uploaded.");
+    } catch (error) {
+      console.error("Error uploading visual reference:", error);
+      toast.error(
+        error.response?.data?.error || "Failed to upload visual reference."
+      );
+    }
+  };
+
+  const handleImportVisualReferenceUrl = async (group, index, url) => {
+    const sourceUrl = String(url || "").trim();
+    const referenceId = book.visualBible?.[group]?.[index]?.id;
+
+    if (!sourceUrl) {
+      toast.error("Paste an image URL first.");
+      return;
+    }
+
+    try {
+      const {
+        data: { imageUrl },
+      } = await axiosInstance.post(
+        API_ENDPOINTS.BOOKS.IMPORT_VISUAL_REFERENCE_URL,
+        { url: sourceUrl }
+      );
+
+      handleSetVisualReferenceImage(group, referenceId, index, imageUrl);
+      toast.success("Visual reference stored.");
+    } catch (error) {
+      console.error("Error importing visual reference URL:", error);
+      toast.error(
+        error.response?.data?.error || "Failed to import visual reference."
+      );
+    }
+  };
+
   const handleAddChapter = () => {
     const newChapter = {
       title: `Chapter ${book.chapters.length + 1}`,
@@ -525,6 +747,7 @@ function EditBookPage() {
         includeTextGraphics: Boolean(book.generation?.includeTextGraphics),
         chapterLength: book.generation?.chapterLength || "medium",
         bookBible: book.bible,
+        visualBible: book.visualBible,
         bookTitle: book.title,
         genre: book.genre || "Nonfiction",
         audience: book.audience || "General readers",
@@ -589,6 +812,7 @@ function EditBookPage() {
         imageSize,
         model,
         mode,
+        visualBible: book.visualBible,
       });
 
       skipNextAutosaveRef.current = true;
@@ -623,6 +847,7 @@ function EditBookPage() {
       } = await axiosInstance.post(API_ENDPOINTS.AI.GENERATE_CHAPTER_IMAGE, {
         bookId,
         chapterIndex: index,
+        visualBible: book.visualBible,
         ...options,
       });
 
@@ -664,6 +889,7 @@ function EditBookPage() {
         aspectRatio: command.aspectRatio || "16:9",
         imageSize: command.imageSize || "1K",
         model: command.model,
+        visualBible: book.visualBible,
         insertIntoContent: false,
       });
       const normalizedNextBook = normalizeBook(nextBook) || book;
@@ -768,6 +994,7 @@ function EditBookPage() {
           includeTextGraphics: Boolean(book.generation?.includeTextGraphics),
           chapterLength: book.generation?.chapterLength || "medium",
           bible: book.bible,
+          visualBible: book.visualBible,
         }
       );
 
@@ -1114,8 +1341,10 @@ function EditBookPage() {
         provider: book.generation?.provider || "groq",
         bookTitle: book.title,
         chapterTitle: currentChapter.title,
+        genre: book.genre || "Nonfiction",
         audience: book.audience || "General readers",
         bookBible: book.bible,
+        visualBible: book.visualBible,
       });
 
       const proposedContent = buildAiToolProposal({
@@ -1179,8 +1408,10 @@ function EditBookPage() {
         bookTitle: book.title,
         chapterTitle:
           action === "bible_update" ? currentChapter?.title || "" : "",
+        genre: book.genre || "Nonfiction",
         audience: book.audience || "General readers",
         bookBible: book.bible,
+        visualBible: book.visualBible,
       });
 
       toast.dismiss(loadingToast);
@@ -1805,6 +2036,12 @@ function EditBookPage() {
             <BookBibleTab
               book={book}
               onEditBible={handleEditBible}
+              onEditVisualBibleMeta={handleEditVisualBibleMeta}
+              onAddVisualReference={handleAddVisualReference}
+              onEditVisualReference={handleEditVisualReference}
+              onRemoveVisualReference={handleRemoveVisualReference}
+              onUploadVisualReference={handleUploadVisualReference}
+              onImportVisualReferenceUrl={handleImportVisualReferenceUrl}
               onRunBibleTool={handleBibleTool}
               runningBibleTool={runningBibleTool}
               pendingBibleReview={pendingBibleReview}

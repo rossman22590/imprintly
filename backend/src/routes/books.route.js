@@ -4,14 +4,19 @@ const {
   getBooks,
   getBookById,
   createBook,
+  importVisualReferenceUrl,
   updateBookContent,
   updateBookCover,
   updateBookKdp,
+  uploadVisualReference,
   enableBookPreviewShare,
   disableBookPreviewShare,
   deleteBook,
 } = require("../controllers/books.controller");
-const { uploadBookCoverImage } = require("../middlewares/upload.middleware");
+const {
+  uploadBookCoverImage,
+  uploadVisualReferenceImage,
+} = require("../middlewares/upload.middleware");
 
 // All routes require authentication
 router.use(authenticate);
@@ -19,6 +24,14 @@ router.use(authenticate);
 // GET /api/books - Get all user's books
 // POST /api/books - Create a new book
 router.route("/").get(getBooks).post(createBook);
+
+// POST /api/books/visual-references/upload - Upload a reusable Visual Bible image
+router
+  .route("/visual-references/upload")
+  .post(uploadVisualReferenceImage, uploadVisualReference);
+
+// POST /api/books/visual-references/import-url - Import an image URL into durable storage
+router.route("/visual-references/import-url").post(importVisualReferenceUrl);
 
 // GET /api/books/:bookId - Get a specific book
 // PUT /api/books/:bookId - Update book content/metadata

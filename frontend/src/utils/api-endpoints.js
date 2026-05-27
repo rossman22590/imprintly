@@ -45,6 +45,8 @@ export const API_ENDPOINTS = {
     UPDATE_COVER: "/api/books",
     UPDATE_KDP: "/api/books",
     PREVIEW_SHARE: "/api/books",
+    UPLOAD_VISUAL_REFERENCE: "/api/books/visual-references/upload",
+    IMPORT_VISUAL_REFERENCE_URL: "/api/books/visual-references/import-url",
     DELETE: "/api/books",
   },
   AI: {

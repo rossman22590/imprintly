@@ -4,6 +4,10 @@ export function normalizeBook(book) {
   }
 
   const bible = book.bible && typeof book.bible === "object" ? book.bible : {};
+  const visualBible =
+    book.visualBible && typeof book.visualBible === "object"
+      ? book.visualBible
+      : {};
 
   return {
     ...book,
@@ -18,6 +22,21 @@ export function normalizeBook(book) {
       unresolvedThreads: bible.unresolvedThreads || "",
       notes: bible.notes || "",
       updatedAt: bible.updatedAt || null,
+    },
+    visualBible: {
+      enabled: visualBible.enabled !== false,
+      matchBookStyle: visualBible.matchBookStyle !== false,
+      characters: Array.isArray(visualBible.characters)
+        ? visualBible.characters
+        : [],
+      styleReferences: Array.isArray(visualBible.styleReferences)
+        ? visualBible.styleReferences
+        : [],
+      worldReferences: Array.isArray(visualBible.worldReferences)
+        ? visualBible.worldReferences
+        : [],
+      notes: visualBible.notes || "",
+      updatedAt: visualBible.updatedAt || null,
     },
   };
 }

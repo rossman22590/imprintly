@@ -3,6 +3,7 @@ const test = require("node:test");
 const {
   buildGeminiGenerateConfig,
   buildGeminiSectionPrompt,
+  normalizeOutlineJson,
 } = require("./gemini.generator");
 
 test("Gemini config includes googleSearch tool when search grounding is enabled", () => {
@@ -81,4 +82,47 @@ test("Gemini section prompt includes book bible canon instructions", () => {
   assert.match(prompt, /Mira has green eyes/);
   assert.match(prompt, /Treat the Book Bible as canon/);
   assert.match(prompt, /Do not contradict it/);
+});
+
+test("Gemini section prompt makes novel chapters narrative", () => {
+  const prompt = buildGeminiSectionPrompt({
+    chapterTitle: "The Locked Observatory",
+    bookTitle: "Moonforge",
+    genre: "Novel",
+  });
+
+  assert.match(prompt, /Write this as real novel prose/);
+  assert.match(prompt, /immersive scene work/);
+  assert.match(prompt, /publication-quality novel chapter/);
+  assert.match(prompt, /character objective, obstacle, conflict/);
+  assert.match(prompt, /Avoid instructional headings/);
+  assert.doesNotMatch(prompt, /practical examples/);
+  assert.doesNotMatch(prompt, /reader takeaways/);
+});
+
+test("novel outlines strip textbook numbering from chapter titles", () => {
+  const outline = normalizeOutlineJson(
+    {
+      title: "Moonforge",
+      subtitle: "A Starship Novel",
+      structure: {
+        "1. The Signal Beneath the Ice": "Mira hears the impossible signal.",
+        "1.2 The Door That Should Not Open": "Ross finds the sealed chamber.",
+        "Module 3: The False Dawn": "Nick decodes the first warning.",
+      },
+    },
+    { genre: "Novel" }
+  );
+
+  assert.deepEqual(
+    outline.chapters.map((chapter) => chapter.title),
+    [
+      "The Signal Beneath the Ice",
+      "The Door That Should Not Open",
+      "The False Dawn",
+    ]
+  );
+  assert.deepEqual(outline.chapters[1].outlinePath, [
+    "The Door That Should Not Open",
+  ]);
 });

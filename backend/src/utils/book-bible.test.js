@@ -18,6 +18,21 @@ test("normalizes Book Bible payload to supported fields only", () => {
   assert.equal(bible.locations, "");
 });
 
+test("normalizes array and object bible values into markdown bullets", () => {
+  const bible = normalizeBookBiblePayload({
+    characters: [
+      "Mira: green eyes",
+      { Jonas: "ship mechanic" },
+      "- Existing bullet",
+    ],
+  });
+
+  assert.equal(
+    bible.characters,
+    "- Mira: green eyes\n- **Jonas**: ship mechanic\n- Existing bullet"
+  );
+});
+
 test("serializes Book Bible as prompt-ready canon sections", () => {
   const promptText = serializeBookBible({
     characters: "Mira: green eyes",

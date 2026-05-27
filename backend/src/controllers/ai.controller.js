@@ -53,6 +53,23 @@ const {
   normalizeBookBiblePayload,
   serializeBookBible,
 } = require("../utils/book-bible");
+const {
+  getChapterImageReferences,
+  getCoverImageReferences,
+} = require("../utils/image-reference");
+const {
+  buildVisualReferencePromptContext,
+  normalizeVisualBiblePayload,
+  serializeVisualBible,
+} = require("../utils/visual-bible");
+const {
+  getBookTypeChapterGuidance,
+  getBookTypeImageGuidance,
+} = require("../utils/book-type-guidance");
+const {
+  buildEbookCoverEditPrompt,
+  buildEbookCoverPrompt,
+} = require("../utils/book-image-prompts");
 
 /**
  * Basic input sanitization.
@@ -68,6 +85,19 @@ function sanitizeInput(input, maxLength = 500) {
   sanitized = sanitized.replace(/<[^>]+>/g, "");
 
   return sanitized;
+}
+
+function serializeGenerationCanon(bookBible = {}, visualBible = {}) {
+  const textCanon = serializeBookBible(bookBible);
+  const visualCanon = serializeVisualBible(visualBible);
+
+  return [
+    textCanon,
+    visualCanon ? `# Visual Bible / Visual Canon\n${visualCanon}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 26000);
 }
 
 function normalizeProvider(provider) {
@@ -202,47 +232,11 @@ async function findOwnedBook(bookId, userId) {
 }
 
 function buildCoverPrompt({ book, customPrompt }) {
-  const coverDirection = customPrompt
-    ? `Creative direction from the author: ${customPrompt}`
-    : "Creative direction: premium contemporary publishing cover, memorable first-glance composition, polished commercial finish.";
-
-  return `Create a professional ebook front cover image.
-
-Book title: ${book.title}
-Subtitle: ${book.subtitle || "None"}
-Author: ${book.author}
-Genre: ${book.genre || "Nonfiction"}
-Audience: ${book.audience || "General readers"}
-${coverDirection}
-
-Requirements:
-1. Front cover only, not a 3D mockup, not a spread, and no spine.
-2. Include the exact title text: "${book.title}".
-3. Include the exact author name: "${book.author}".
-4. Use readable, intentional typography with strong hierarchy and safe margins.
-5. Match the genre and audience while avoiding generic stock-photo styling.`;
+  return buildEbookCoverPrompt({ book, customPrompt });
 }
 
 function buildCoverEditPrompt({ book, customPrompt }) {
-  const editDirection = customPrompt
-    ? `Requested edits from the author: ${customPrompt}`
-    : "Requested edits: improve the current cover's composition, typography, contrast, and publishing polish while preserving its core concept.";
-
-  return `Edit the provided ebook front cover image.
-
-Book title: ${book.title}
-Subtitle: ${book.subtitle || "None"}
-Author: ${book.author}
-Genre: ${book.genre || "Nonfiction"}
-Audience: ${book.audience || "General readers"}
-${editDirection}
-
-Requirements:
-1. Preserve the exact book title text: "${book.title}".
-2. Preserve the exact author name: "${book.author}".
-3. Keep it as a front cover only, not a 3D mockup, not a spread, and no spine.
-4. Improve the current cover rather than creating an unrelated concept.
-5. Keep typography readable with strong hierarchy and safe margins.`;
+  return buildEbookCoverEditPrompt({ book, customPrompt });
 }
 
 async function getCoverReferenceImage(book) {
@@ -262,21 +256,34 @@ async function getCoverReferenceImage(book) {
   };
 }
 
-function buildChapterImagePrompt({ book, chapter, customPrompt }) {
+function buildChapterImagePrompt({
+  book,
+  chapter,
+  customPrompt,
+  hasVisualReferences = false,
+  visualReferenceContext = "",
+}) {
   const direction = customPrompt
     ? `Scene direction from the author: ${customPrompt}`
     : `Create a visual scene that captures this chapter brief: ${
         chapter.description || chapter.title
       }`;
+  const continuityInstruction = hasVisualReferences
+    ? "\nVisual continuity: use the provided reference image(s) as the book's style bible. Preserve the same overall art direction, lighting logic, palette, character design language, and genre feel, but create a new scene that fits this chapter. Do not copy the previous scene unchanged."
+    : "";
+  const bookTypeGuidance = getBookTypeImageGuidance(book.genre);
 
   return `Create a polished illustration for a chapter inside an ebook.
 
 Book title: ${book.title}
 Genre: ${book.genre || "Nonfiction"}
 Audience: ${book.audience || "General readers"}
+${bookTypeGuidance}
 Chapter title: ${chapter.title}
 Chapter brief: ${chapter.description || "No brief provided."}
 ${direction}
+${continuityInstruction}
+${visualReferenceContext}
 
 Requirements:
 1. No title text, captions, logos, watermarks, or UI.
@@ -461,7 +468,7 @@ async function generateChapterContent(req, res) {
       genre: sanitizeInput(genre, 100) || "Nonfiction",
       audience: sanitizeInput(audience, 200) || "General readers",
       bookContext: sanitizeInput(bookContext, 3000),
-      bookBible: serializeBookBible(bookBible),
+      bookBible: serializeGenerationCanon(bookBible, req.body.visualBible),
       useGoogleSearch,
       includeTextGraphics,
       chapterLength,
@@ -621,7 +628,13 @@ async function generateFullBook(req, res) {
       audience: safeAudience,
       chapters,
     });
-    const bookBible = serializeBookBible(req.body.bible || book?.bible);
+    const visualBible = normalizeVisualBiblePayload(
+      req.body.visualBible || book?.visualBible
+    );
+    const bookBible = serializeGenerationCanon(
+      req.body.bible || book?.bible,
+      visualBible
+    );
 
     const generatedChapters = [];
     let failedCount = 0;
@@ -710,6 +723,12 @@ async function generateFullBook(req, res) {
       if (req.body.bible) {
         book.bible = normalizeBookBiblePayload(req.body.bible);
       }
+      if (req.body.visualBible) {
+        book.visualBible = {
+          ...visualBible,
+          updatedAt: new Date(),
+        };
+      }
       await book.save();
     } else {
       book = await Book.create({
@@ -721,6 +740,14 @@ async function generateFullBook(req, res) {
         audience: safeAudience,
         chapters: generatedChapters,
         generation,
+        ...(req.body.visualBible
+          ? {
+              visualBible: {
+                ...visualBible,
+                updatedAt: new Date(),
+              },
+            }
+          : {}),
         ...(req.body.bible
           ? { bible: normalizeBookBiblePayload(req.body.bible) }
           : {}),
@@ -857,14 +884,23 @@ async function generateCoverImage(req, res) {
       imageSize,
       model,
       mode = "generate",
+      visualBible,
     } = req.body;
     const book = await findOwnedBook(bookId, req.user.id);
     const editExisting = mode === "edit";
     const customPrompt = sanitizeInput(prompt, 4000);
+
+    if (visualBible !== undefined) {
+      book.visualBible = {
+        ...normalizeVisualBiblePayload(visualBible),
+        updatedAt: new Date(),
+      };
+    }
+
     const finalPrompt = editExisting
       ? buildCoverEditPrompt({ book, customPrompt })
       : buildCoverPrompt({ book, customPrompt });
-    let referenceImages = [];
+    let referenceImages = await getCoverImageReferences(book);
 
     if (editExisting) {
       if (book.coverGeneration?.source !== "gemini" || !book.coverImage) {
@@ -873,7 +909,7 @@ async function generateCoverImage(req, res) {
         });
       }
 
-      referenceImages = [await getCoverReferenceImage(book)];
+      referenceImages = [await getCoverReferenceImage(book), ...referenceImages];
     }
 
     await assertHasCredits(req.user.id, CREDIT_CONFIG.imageCredits);
@@ -895,6 +931,7 @@ async function generateCoverImage(req, res) {
         bookId: book._id.toString(),
         aspectRatio: image.aspectRatio,
         imageSize: image.imageSize,
+        visualReferenceCount: referenceImages.length,
       },
     });
 
@@ -944,6 +981,8 @@ async function generateChapterImage(req, res) {
       imageSize,
       model,
       insertIntoContent = true,
+      visualReferenceIds,
+      visualBible,
     } = req.body;
     const book = await findOwnedBook(bookId, req.user.id);
     const safeChapterIndex = Number.parseInt(chapterIndex, 10);
@@ -958,10 +997,31 @@ async function generateChapterImage(req, res) {
 
     const chapter = book.chapters[safeChapterIndex];
     const customPrompt = sanitizeInput(prompt, 4000);
+
+    if (visualBible !== undefined) {
+      book.visualBible = {
+        ...normalizeVisualBiblePayload(visualBible),
+        updatedAt: new Date(),
+      };
+    }
+
+    const referenceOptions = { selectedReferenceIds: visualReferenceIds };
+    const visualReferenceContext = buildVisualReferencePromptContext(
+      book.visualBible,
+      chapter,
+      referenceOptions
+    );
+    const referenceImages = await getChapterImageReferences(
+      book,
+      safeChapterIndex,
+      referenceOptions
+    );
     const finalPrompt = buildChapterImagePrompt({
       book,
       chapter,
       customPrompt,
+      hasVisualReferences: referenceImages.length > 0,
+      visualReferenceContext,
     });
     await assertHasCredits(req.user.id, CREDIT_CONFIG.imageCredits);
     const image = await generateGeminiImage({
@@ -969,6 +1029,7 @@ async function generateChapterImage(req, res) {
       model: normalizeImageModel(model),
       aspectRatio: normalizeAspectRatio(aspectRatio, "16:9"),
       imageSize: normalizeImageSize(imageSize),
+      referenceImages,
     });
     const billing = await chargeImageUsage({
       userId: req.user.id,
@@ -982,6 +1043,7 @@ async function generateChapterImage(req, res) {
         chapterIndex: safeChapterIndex,
         aspectRatio: image.aspectRatio,
         imageSize: image.imageSize,
+        visualReferenceCount: referenceImages.length,
       },
     });
     const imageAlt =
@@ -1040,8 +1102,10 @@ async function runQualityTool(req, res) {
       tone,
       bookTitle,
       chapterTitle,
+      genre,
       audience,
       bookBible,
+      visualBible,
     } = req.body;
 
     if (!action || !content) {
@@ -1053,8 +1117,9 @@ async function runQualityTool(req, res) {
     const selectedProvider = normalizeProvider(provider);
     const safeAction = sanitizeInput(action, 50);
     const safeTone = sanitizeInput(tone, 100);
+    const safeGenre = sanitizeInput(genre || "Nonfiction", 100);
     const safeContent = String(content).slice(0, 20000);
-    const safeBookBible = serializeBookBible(bookBible);
+    const safeBookBible = serializeGenerationCanon(bookBible, visualBible);
     const instructionMap = {
       rewrite: "Rewrite the text for clarity, flow, and professional polish.",
       expand:
@@ -1102,13 +1167,19 @@ async function runQualityTool(req, res) {
       return res.status(400).json({ error: "Unsupported AI tool action!" });
     }
 
+    const bookTypeGuidance = ["cover", "kdp_cover_prompt"].includes(safeAction)
+      ? getBookTypeImageGuidance(safeGenre)
+      : getBookTypeChapterGuidance(safeGenre);
+
     await assertHasCredits(req.user.id, 0.0001);
 
     const prompt = `You are a senior book editor helping improve an AI-generated book.
 
 Book: ${sanitizeInput(bookTitle, 200)}
 Chapter: ${sanitizeInput(chapterTitle, 200)}
+Book type / genre: ${safeGenre}
 Audience: ${sanitizeInput(audience, 200)}
+${bookTypeGuidance}
 Book Bible / Canon:
 ${safeBookBible || "Not provided."}
 Task: ${instruction}

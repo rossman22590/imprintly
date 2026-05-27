@@ -457,7 +457,6 @@ const AI_PROVIDERS = [
         traits: ["17B active / MoE", "Llama 4 generation", "Fast chapter output"],
       },
     ],
-    note: "Groq models are open-weight. The active models are set via environment config — check GROQ_STRUCTURE_MODEL and GROQ_SECTION_MODEL to confirm which models are running.",
   },
   {
     id: "gemini",
@@ -1239,14 +1238,16 @@ function DocsPage() {
                           </div>
                         )}
 
-                        <div className="mt-4 rounded-lg border-l-4 border-slate-200 bg-slate-50 px-4 py-2.5">
-                          <p className="text-xs leading-5 text-slate-500">
-                            <span className="font-semibold text-slate-700">
-                              Note:{" "}
-                            </span>
-                            {provider.note}
-                          </p>
-                        </div>
+                        {provider.note && (
+                          <div className="mt-4 rounded-lg border-l-4 border-slate-200 bg-slate-50 px-4 py-2.5">
+                            <p className="text-xs leading-5 text-slate-500">
+                              <span className="font-semibold text-slate-700">
+                                Note:{" "}
+                              </span>
+                              {provider.note}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

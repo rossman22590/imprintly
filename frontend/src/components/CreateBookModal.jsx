@@ -10,11 +10,13 @@ import {
   Hash,
   Image as ImageIcon,
   Lightbulb,
+  Link,
   Palette,
   Plus,
   Search,
   Sparkles,
   Trash2,
+  UploadCloud,
   Users,
 } from "lucide-react";
 import Select from "./ui/Select";
@@ -34,10 +36,65 @@ const CHAPTER_LENGTH_OPTIONS = [
   { value: "medium", label: "Medium - detailed" },
   { value: "large", label: "Large - most pages" },
 ];
+const EMPTY_VISUAL_BIBLE = {
+  enabled: true,
+  matchBookStyle: true,
+  characters: [],
+  styleReferences: [],
+  worldReferences: [],
+  notes: "",
+};
+const VISUAL_REFERENCE_SECTIONS = [
+  {
+    key: "characters",
+    label: "Characters",
+    nameLabel: "Character name",
+    descriptionLabel: "Appearance / role",
+    addLabel: "Add character",
+  },
+  {
+    key: "styleReferences",
+    label: "Style",
+    nameLabel: "Style label",
+    descriptionLabel: "Mood, palette, art direction",
+    addLabel: "Add style ref",
+  },
+  {
+    key: "worldReferences",
+    label: "World / locations",
+    nameLabel: "Place or object",
+    descriptionLabel: "Setting look, recurring object, location notes",
+    addLabel: "Add world ref",
+  },
+];
+
+function createVisualReference() {
+  return {
+    id: `ref-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name: "",
+    label: "",
+    description: "",
+    imageUrl: "",
+    sourceUrl: "",
+  };
+}
+
+function hasVisualBibleContent(visualBible = EMPTY_VISUAL_BIBLE) {
+  return VISUAL_REFERENCE_SECTIONS.some(({ key }) =>
+    (visualBible[key] || []).some(
+      (reference) =>
+        reference.imageUrl ||
+        reference.name ||
+        reference.label ||
+        reference.description
+    )
+  );
+}
 
 function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   const [step, setStep] = useState(1);
   const [bookTitle, setBookTitle] = useState("");
+  const [bookSubtitle, setBookSubtitle] = useState("");
   const [chapterCount, setChapterCount] = useState(5);
   const [chapterLength, setChapterLength] = useState("medium");
   const [chapters, setChapters] = useState([]);
@@ -51,6 +108,8 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   const [generateCover, setGenerateCover] = useState(true);
   const [includeImages, setIncludeImages] = useState(false);
   const [includeTextGraphics, setIncludeTextGraphics] = useState(false);
+  const [visualBible, setVisualBible] = useState(EMPTY_VISUAL_BIBLE);
+  const [uploadingReferenceId, setUploadingReferenceId] = useState("");
   const [generationStats, setGenerationStats] = useState(null);
   const [generationJob, setGenerationJob] = useState(null);
   const [isGeneratingOutline, setIsGeneratingOutline] = useState(false);
@@ -66,6 +125,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     activePollRef.current = null;
     setStep(1);
     setBookTitle("");
+    setBookSubtitle("");
     setChapterCount(5);
     setChapterLength("medium");
     setChapters([]);
@@ -79,6 +139,8 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setGenerateCover(true);
     setIncludeImages(false);
     setIncludeTextGraphics(false);
+    setVisualBible(EMPTY_VISUAL_BIBLE);
+    setUploadingReferenceId("");
     setGenerationStats(null);
     setGenerationJob(null);
     setIsGeneratingOutline(false);
@@ -115,7 +177,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
 
     try {
       const {
-        data: { outline, generation },
+        data: { outline, generation, title, subtitle },
       } = await axiosInstance.post(API_ENDPOINTS.AI.GENERATE_OUTLINE, {
         topic: bookTitle,
         description: topic || "",
@@ -128,6 +190,12 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
         audience,
         useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
       });
+
+      if (title) {
+        setBookTitle(title);
+      }
+
+      setBookSubtitle((subtitle || bookSubtitle || "").trim());
       setChapters(outline);
       setGenerationStats(generation || null);
       setStep(2);
@@ -169,6 +237,105 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setChapters((prev) => [...prev].filter((_, i) => i !== index));
   };
 
+  const updateVisualReference = (sectionKey, index, field, value) => {
+    setVisualBible((current) => {
+      const nextItems = [...(current[sectionKey] || [])];
+      nextItems[index] = {
+        ...nextItems[index],
+        [field]: value,
+      };
+
+      if (field === "name") {
+        nextItems[index].label = value;
+      }
+
+      return {
+        ...current,
+        [sectionKey]: nextItems,
+      };
+    });
+  };
+
+  const addVisualReference = (sectionKey) => {
+    setVisualBible((current) => ({
+      ...current,
+      [sectionKey]: [...(current[sectionKey] || []), createVisualReference()],
+    }));
+  };
+
+  const removeVisualReference = (sectionKey, index) => {
+    setVisualBible((current) => ({
+      ...current,
+      [sectionKey]: (current[sectionKey] || []).filter((_, itemIndex) => itemIndex !== index),
+    }));
+  };
+
+  const uploadVisualReferenceFile = async (sectionKey, index, file) => {
+    if (!file) return;
+
+    const reference = visualBible[sectionKey]?.[index];
+    const uploadKey = `${sectionKey}-${reference?.id || index}`;
+    const formData = new FormData();
+
+    formData.append("referenceImage", file);
+    setUploadingReferenceId(uploadKey);
+
+    try {
+      const {
+        data: { imageUrl },
+      } = await axiosInstance.post(
+        API_ENDPOINTS.BOOKS.UPLOAD_VISUAL_REFERENCE,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      updateVisualReference(sectionKey, index, "imageUrl", imageUrl);
+      toast.success("Reference uploaded.");
+    } catch (error) {
+      console.error("Error uploading reference:", error);
+      toast.error(error.response?.data?.error || "Reference upload failed.");
+    } finally {
+      setUploadingReferenceId("");
+    }
+  };
+
+  const importVisualReferenceUrl = async (sectionKey, index) => {
+    const reference = visualBible[sectionKey]?.[index];
+    const sourceUrl = reference?.sourceUrl?.trim();
+
+    if (!sourceUrl) {
+      toast.error("Paste an image URL first.");
+      return;
+    }
+
+    const uploadKey = `${sectionKey}-${reference?.id || index}`;
+    setUploadingReferenceId(uploadKey);
+
+    try {
+      const {
+        data: { imageUrl },
+      } = await axiosInstance.post(API_ENDPOINTS.BOOKS.IMPORT_VISUAL_REFERENCE_URL, {
+        url: sourceUrl,
+      });
+
+      updateVisualReference(sectionKey, index, "imageUrl", imageUrl);
+      toast.success("Reference stored.");
+    } catch (error) {
+      console.error("Error importing reference URL:", error);
+      toast.error(error.response?.data?.error || "Could not store image URL.");
+    } finally {
+      setUploadingReferenceId("");
+    }
+  };
+
+  const getVisualBiblePayload = () => ({
+    ...visualBible,
+    enabled: includeImages && visualBible.enabled !== false,
+    updatedAt: new Date().toISOString(),
+  });
+
   const handleFinaliseBook = async () => {
     if (chapters.length === 0) {
       toast.error("At least one chapter is required!", { duration: 5000 });
@@ -181,6 +348,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     try {
       const { data } = await axiosInstance.post(API_ENDPOINTS.BOOKS.CREATE, {
         title: bookTitle,
+        subtitle: bookSubtitle,
         author: user?.name || "Unknown Author",
         genre: bookGenre,
         audience,
@@ -197,6 +365,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
             : {}),
           ...(generationStats || {}),
         },
+        visualBible: getVisualBiblePayload(),
         generateCover,
       });
       const { book } = data;
@@ -309,6 +478,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
         API_ENDPOINTS.AI.FULL_BOOK_JOBS,
         {
           title: bookTitle,
+          subtitle: bookSubtitle,
           author: user?.name || "Unknown Author",
           topic: bookTitle,
           description: topic || "",
@@ -323,6 +493,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           generateCover,
           includeImages,
           includeTextGraphics,
+          visualBible: getVisualBiblePayload(),
           useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
         }
       );
@@ -415,6 +586,16 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
             label="Book Title"
             required
             placeholder="What should we call your book?"
+          />
+
+          <Input
+            type="text"
+            value={bookSubtitle}
+            onChange={(event) => setBookSubtitle(event.target.value)}
+            icon={FileText}
+            label="Subtitle"
+            placeholder="Optional. AI can fill this after the outline."
+            helperText="Leave blank if you want Bookify to suggest one from the outline."
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -641,6 +822,208 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
             </span>
           </label>
 
+          {includeImages && (
+            <section className="rounded-2xl border border-slate-200 bg-slate-950 text-white overflow-hidden">
+              <div className="p-4 md:p-5 border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.35),transparent_34%),linear-gradient(135deg,rgba(15,23,42,1),rgba(30,41,59,1))]">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-white text-sm font-semibold">
+                      Visual Bible
+                    </p>
+                    <p className="text-slate-300 text-xs mt-1 max-w-2xl leading-relaxed">
+                      Optional. Upload or store image links for recurring
+                      characters, style, and locations. Bookify uses them as
+                      image inputs, then still uses the first chapter image for
+                      overall art continuity.
+                    </p>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-xs text-slate-200 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={visualBible.matchBookStyle !== false}
+                      onChange={(event) =>
+                        setVisualBible((current) => ({
+                          ...current,
+                          matchBookStyle: event.target.checked,
+                        }))
+                      }
+                      className="size-4 accent-violet-500"
+                    />
+                    Match generated book style
+                  </label>
+                </div>
+              </div>
+
+              <div className="p-4 md:p-5 space-y-5 bg-slate-50 text-slate-900">
+                {VISUAL_REFERENCE_SECTIONS.map((section) => (
+                  <div key={section.key} className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="text-sm font-semibold text-slate-900">
+                        {section.label}
+                      </h4>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        icon={Plus}
+                        onClick={() => addVisualReference(section.key)}
+                      >
+                        {section.addLabel}
+                      </Button>
+                    </div>
+
+                    {(visualBible[section.key] || []).length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-4 text-xs text-slate-500">
+                        No {section.label.toLowerCase()} references yet.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3">
+                        {(visualBible[section.key] || []).map(
+                          (reference, index) => {
+                            const uploadKey = `${section.key}-${reference.id || index}`;
+                            const isUploadingReference =
+                              uploadingReferenceId === uploadKey;
+
+                            return (
+                              <div
+                                key={reference.id || index}
+                                className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+                              >
+                                <div className="grid grid-cols-1 lg:grid-cols-[7rem,1fr] gap-3">
+                                  <div className="h-28 rounded-lg bg-slate-100 overflow-hidden border border-slate-200 flex items-center justify-center">
+                                    {reference.imageUrl ? (
+                                      <img
+                                        src={reference.imageUrl}
+                                        alt={reference.name || reference.label || "Reference"}
+                                        className="size-full object-cover"
+                                      />
+                                    ) : (
+                                      <ImageIcon className="size-6 text-slate-400" />
+                                    )}
+                                  </div>
+
+                                  <div className="grid grid-cols-1 gap-2">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                      <input
+                                        type="text"
+                                        value={reference.name || reference.label || ""}
+                                        onChange={(event) =>
+                                          updateVisualReference(
+                                            section.key,
+                                            index,
+                                            "name",
+                                            event.target.value
+                                          )
+                                        }
+                                        placeholder={section.nameLabel}
+                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                      />
+
+                                      <div className="flex gap-2">
+                                        <label className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 cursor-pointer hover:bg-slate-100">
+                                          <UploadCloud className="size-4" />
+                                          Upload
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(event) => {
+                                              uploadVisualReferenceFile(
+                                                section.key,
+                                                index,
+                                                event.target.files?.[0]
+                                              );
+                                              event.target.value = "";
+                                            }}
+                                          />
+                                        </label>
+
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            removeVisualReference(
+                                              section.key,
+                                              index
+                                            )
+                                          }
+                                          className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-red-600 hover:bg-red-100"
+                                          aria-label="Remove reference"
+                                          title="Remove reference"
+                                        >
+                                          <Trash2 className="size-4" />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <textarea
+                                      value={reference.description || ""}
+                                      onChange={(event) =>
+                                        updateVisualReference(
+                                          section.key,
+                                          index,
+                                          "description",
+                                          event.target.value
+                                        )
+                                      }
+                                      rows={2}
+                                      maxLength={600}
+                                      placeholder={section.descriptionLabel}
+                                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                                    />
+
+                                    <div className="grid grid-cols-1 md:grid-cols-[1fr,auto] gap-2">
+                                      <input
+                                        type="url"
+                                        value={reference.sourceUrl || ""}
+                                        onChange={(event) =>
+                                          updateVisualReference(
+                                            section.key,
+                                            index,
+                                            "sourceUrl",
+                                            event.target.value
+                                          )
+                                        }
+                                        placeholder="Paste image URL to store on PixioMedia"
+                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                      />
+
+                                      <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        icon={Link}
+                                        isLoading={isUploadingReference}
+                                        onClick={() =>
+                                          importVisualReferenceUrl(
+                                            section.key,
+                                            index
+                                          )
+                                        }
+                                      >
+                                        Store link
+                                      </Button>
+                                    </div>
+
+                                    {reference.imageUrl && (
+                                      <p className="truncate text-[11px] text-emerald-700">
+                                        Stored: {reference.imageUrl}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 cursor-pointer">
             <span className="flex items-start gap-3 min-w-0">
               <span className="size-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
@@ -714,14 +1097,39 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           </ol>
 
           {/* Chapter review header */}
-          <section className="mb-3 md:mb-4 flex justify-between items-center">
-            <h3 className="text-gray-900 text-base md:text-lg font-semibold">
-              Review Chapters
-            </h3>
+          <section className="mb-3 md:mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h3 className="text-gray-900 text-base md:text-lg font-semibold">
+                Review Chapters
+              </h3>
+              <p className="text-gray-500 text-xs md:text-sm mt-1">
+                Confirm the title, subtitle, and chapter plan before creating
+                the book.
+              </p>
+            </div>
 
             <span className="text-gray-500 text-xs md:text-sm">
               {chapters.length} {chapters.length === 1 ? "chapter" : "chapters"}
             </span>
+          </section>
+
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <Input
+              type="text"
+              value={bookTitle}
+              onChange={(event) => setBookTitle(event.target.value)}
+              icon={BookOpen}
+              label="Book Title"
+              required
+            />
+            <Input
+              type="text"
+              value={bookSubtitle}
+              onChange={(event) => setBookSubtitle(event.target.value)}
+              icon={FileText}
+              label="Subtitle"
+              placeholder="Optional subtitle"
+            />
           </section>
 
           {isGeminiSearchGrounded && (
@@ -736,6 +1144,24 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                 </p>
                 <p className="text-blue-700 text-xs mt-1 leading-relaxed">
                   Gemini will use Google Search when writing the full chapters.
+                </p>
+              </div>
+            </section>
+          )}
+
+          {includeImages && hasVisualBibleContent(visualBible) && (
+            <section className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="size-9 rounded-lg bg-white text-slate-700 flex items-center justify-center shrink-0 shadow-sm">
+                <ImageIcon className="size-4" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-slate-950 text-sm font-semibold">
+                  Visual Bible active
+                </p>
+                <p className="text-slate-600 text-xs mt-1 leading-relaxed">
+                  Chapter images will use your character, style, and world
+                  references before matching generated chapter art.
                 </p>
               </div>
             </section>

@@ -44,6 +44,10 @@ function ChapterEditorTab({
   const [imageModel, setImageModel] = useState(
     "gemini-3.1-flash-image-preview"
   );
+  const [visualReferenceSelection, setVisualReferenceSelection] = useState({
+    chapterIndex: null,
+    ids: null,
+  });
 
   const mdEditorOptions = useMemo(
     () => ({
@@ -52,13 +56,44 @@ function ChapterEditorTab({
     }),
     []
   );
+  const hasSelectedChapter =
+    selectedChapterIndex !== null &&
+    book &&
+    Array.isArray(book.chapters) &&
+    Boolean(book.chapters[selectedChapterIndex]);
+  const currentChapter = hasSelectedChapter ? book.chapters[selectedChapterIndex] : {};
+  const visualCharacters = Array.isArray(book?.visualBible?.characters)
+    ? book.visualBible.characters.filter((reference) => reference.imageUrl)
+    : [];
+  const chapterReferenceText = [
+    currentChapter.title,
+    currentChapter.description,
+    currentChapter.content,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const suggestedVisualReferenceIds = visualCharacters
+    .filter((reference) => {
+      const name = String(reference.name || reference.label || "")
+        .trim()
+        .toLowerCase();
 
-  if (
-    selectedChapterIndex === null ||
-    !book ||
-    !Array.isArray(book.chapters) ||
-    !book.chapters[selectedChapterIndex]
-  ) {
+      return name && chapterReferenceText.includes(name);
+    })
+    .map((reference) => reference.id);
+  const allVisualReferenceIds = visualCharacters.map((reference) => reference.id);
+  const activeSelectedVisualReferenceIds =
+    visualReferenceSelection.chapterIndex === selectedChapterIndex &&
+    Array.isArray(visualReferenceSelection.ids)
+      ? visualReferenceSelection.ids
+      : allVisualReferenceIds;
+  const explicitVisualReferenceIds =
+    visualReferenceSelection.chapterIndex === selectedChapterIndex
+      ? activeSelectedVisualReferenceIds
+      : undefined;
+
+  if (!hasSelectedChapter) {
     return (
       <section className="flex-1 flex justify-center items-center p-8">
         <div className="text-center">
@@ -78,7 +113,6 @@ function ChapterEditorTab({
     );
   }
 
-  const currentChapter = book.chapters[selectedChapterIndex];
   const chapterActionLabel = currentChapter.content?.trim()
     ? "Regenerate"
     : "Generate";
@@ -127,6 +161,7 @@ function ChapterEditorTab({
       aspectRatio: imageAspectRatio,
       imageSize,
       model: imageModel,
+      visualReferenceIds: explicitVisualReferenceIds,
     });
   };
 
@@ -293,6 +328,85 @@ function ChapterEditorTab({
                 placeholder="Optional scene, style, palette, camera angle..."
                 className="w-full min-h-24 xl:min-h-11 bg-white text-gray-900 text-sm placeholder-gray-400 px-3 py-2 border border-gray-200 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 resize-none"
               />
+
+              {visualCharacters.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <p className="text-xs font-semibold text-slate-700">
+                      Character inputs
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setVisualReferenceSelection({
+                            chapterIndex: selectedChapterIndex,
+                            ids: allVisualReferenceIds,
+                          })
+                        }
+                        className="text-[11px] font-semibold text-violet-700 hover:text-violet-900"
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setVisualReferenceSelection({
+                            chapterIndex: selectedChapterIndex,
+                            ids: suggestedVisualReferenceIds,
+                          })
+                        }
+                        className="text-[11px] font-semibold text-violet-700 hover:text-violet-900"
+                      >
+                        Mentioned
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {visualCharacters.map((reference) => {
+                      const checked = activeSelectedVisualReferenceIds.includes(
+                        reference.id
+                      );
+
+                      return (
+                        <label
+                          key={reference.id}
+                          className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs cursor-pointer ${
+                            checked
+                              ? "border-violet-300 bg-violet-50 text-violet-800"
+                              : "border-slate-200 bg-white text-slate-600"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) => {
+                              const nextIds = event.target.checked
+                                ? Array.from(
+                                    new Set([
+                                      ...activeSelectedVisualReferenceIds,
+                                      reference.id,
+                                    ])
+                                  )
+                                : activeSelectedVisualReferenceIds.filter(
+                                    (id) => id !== reference.id
+                                  );
+
+                              setVisualReferenceSelection({
+                                chapterIndex: selectedChapterIndex,
+                                ids: nextIds,
+                              });
+                            }}
+                            className="size-3 accent-violet-600"
+                          />
+                          {reference.name || reference.label || "Character"}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <Select

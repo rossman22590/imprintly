@@ -4,7 +4,10 @@ const {
   assertUploadedImageFile,
   deleteUploadFile,
 } = require("../utils/upload-paths");
-const { uploadImageFileToStorage } = require("../utils/image-storage");
+const {
+  uploadImageFileToStorage,
+  uploadImageUrlToStorage,
+} = require("../utils/image-storage");
 const { buildEbookCoverPrompt } = require("../utils/book-image-prompts");
 const {
   ensureChapterImageInContent,
@@ -29,6 +32,7 @@ const {
 const { generateShareToken } = require("../utils/share-token");
 const { normalizeChapterLength } = require("../utils/chapter-length");
 const { normalizeBookBiblePayload } = require("../utils/book-bible");
+const { normalizeVisualBiblePayload } = require("../utils/visual-bible");
 
 const KDP_SETTING_LIMITS = {
   format: 20,
@@ -69,6 +73,15 @@ function normalizeGenerationPayload(generation) {
   return {
     ...generation,
     chapterLength: normalizeChapterLength(generation.chapterLength),
+  };
+}
+
+function normalizeVisualBibleForSave(visualBible) {
+  if (visualBible === undefined) return undefined;
+
+  return {
+    ...normalizeVisualBiblePayload(visualBible),
+    updatedAt: new Date(),
   };
 }
 
@@ -268,6 +281,7 @@ async function createBook(req, res) {
       targetWordCount,
       generation,
       bible,
+      visualBible,
       generateCover,
       coverPrompt,
       coverModel,
@@ -291,6 +305,7 @@ async function createBook(req, res) {
       targetWordCount,
       generation: normalizeGenerationPayload(generation),
       bible: normalizeBookBiblePayload(bible),
+      visualBible: normalizeVisualBiblePayload(visualBible),
       chapters: await normalizeChapterPayloads(chapters || []),
     });
     let coverError = "";
@@ -373,6 +388,7 @@ async function updateBookContent(req, res) {
               ...normalizeBookBiblePayload(req.body.bible),
               updatedAt: new Date(),
             },
+      visualBible: normalizeVisualBibleForSave(req.body.visualBible),
       status: req.body.status,
     };
 
@@ -410,6 +426,61 @@ async function updateBookContent(req, res) {
     }
 
     return res.status(500).json({ error: "Internal Server Error!" });
+  }
+}
+
+async function uploadVisualReference(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No image file provided!" });
+    }
+
+    assertUploadedImageFile(req.file);
+
+    const imageUrl = await uploadImageFileToStorage(
+      req.file.path,
+      req.file.filename,
+      req.file.mimetype
+    );
+
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    return res.status(200).json({
+      message: "Visual reference uploaded.",
+      imageUrl,
+    });
+  } catch (error) {
+    console.error("Error uploading visual reference:", error);
+
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.message || "Internal Server Error!" });
+  }
+}
+
+async function importVisualReferenceUrl(req, res) {
+  try {
+    const imageUrl = await uploadImageUrlToStorage(
+      req.body.url,
+      req.body.fileName
+    );
+
+    return res.status(200).json({
+      message: "Visual reference imported.",
+      imageUrl,
+    });
+  } catch (error) {
+    console.error("Error importing visual reference URL:", error);
+
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.message || "Internal Server Error!" });
   }
 }
 
@@ -661,9 +732,11 @@ module.exports = {
   getBooks,
   getBookById,
   createBook,
+  importVisualReferenceUrl,
   updateBookContent,
   updateBookCover,
   updateBookKdp,
+  uploadVisualReference,
   enableBookPreviewShare,
   disableBookPreviewShare,
   deleteBook,
