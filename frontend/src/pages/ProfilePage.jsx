@@ -1,4 +1,4 @@
-import { createElement, useEffect, useState, useRef } from "react";
+import { createElement, useCallback, useEffect, useState, useRef } from "react";
 import { useAuthContext } from "../contexts/AuthContext";
 import { validateName } from "../utils/helpers";
 import axiosInstance from "../lib/axios";
@@ -18,6 +18,13 @@ import {
   Globe2,
   Search,
   Sparkles,
+  KeyRound,
+  Plus,
+  Copy,
+  Pencil,
+  Check,
+  X,
+  ShieldCheck,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -83,6 +90,22 @@ function resolvePreviewUrl(value = "") {
   return resolveImageUrl(normalized);
 }
 
+function formatApiKeyDate(value) {
+  if (!value) return "Never";
+
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return "Never";
+  }
+}
+
 function SectionHeader({ icon: HeaderIcon, eyebrow, title, description }) {
   const iconElement = HeaderIcon
     ? createElement(HeaderIcon, { className: "size-5" })
@@ -108,6 +131,14 @@ function ProfilePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isDeletingAvatar, setIsDeletingAvatar] = useState(false);
+  const [apiKeys, setApiKeys] = useState([]);
+  const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(false);
+  const [isCreatingApiKey, setIsCreatingApiKey] = useState(false);
+  const [apiKeyName, setApiKeyName] = useState("Default integration");
+  const [newApiKeySecret, setNewApiKeySecret] = useState("");
+  const [editingApiKeyId, setEditingApiKeyId] = useState("");
+  const [editingApiKeyName, setEditingApiKeyName] = useState("");
+  const [revokingApiKeyId, setRevokingApiKeyId] = useState("");
   const [errors, setErrors] = useState({
     name: "",
     storeUrl: "",
@@ -144,6 +175,7 @@ function ProfilePage() {
 
   const fileInputRef = useRef(null);
   const { user, updateUser, isLoading: authContextLoading } = useAuthContext();
+  const currentUserId = user?._id;
 
   // Fetch user whenever user changes
   useEffect(() => {
@@ -162,6 +194,123 @@ function ProfilePage() {
       setAvatarPreview(user.avatar ? resolveImageUrl(user.avatar) : null);
     }
   }, [user]);
+
+  const loadApiKeys = useCallback(async () => {
+    setIsLoadingApiKeys(true);
+
+    try {
+      const { data } = await axiosInstance.get(API_ENDPOINTS.PROFILE.API_KEYS);
+      setApiKeys(Array.isArray(data.apiKeys) ? data.apiKeys : []);
+    } catch (error) {
+      console.error("Error loading API keys:", error?.message);
+      toast.error(
+        error?.response?.data?.error || "Failed to load API keys.",
+        { duration: 5000 }
+      );
+    } finally {
+      setIsLoadingApiKeys(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (currentUserId) {
+      loadApiKeys();
+    }
+  }, [currentUserId, loadApiKeys]);
+
+  const handleCreateApiKey = async () => {
+    const name = apiKeyName.trim() || "API key";
+
+    setIsCreatingApiKey(true);
+
+    try {
+      const { data } = await axiosInstance.post(
+        API_ENDPOINTS.PROFILE.API_KEYS,
+        { name }
+      );
+
+      setApiKeys((prev) => [data.apiKey, ...prev].filter(Boolean));
+      setNewApiKeySecret(data.key || "");
+      setApiKeyName("");
+      toast.success("API key created.");
+    } catch (error) {
+      console.error("Error creating API key:", error?.message);
+      toast.error(error?.response?.data?.error || "Failed to create API key.", {
+        duration: 5000,
+      });
+    } finally {
+      setIsCreatingApiKey(false);
+    }
+  };
+
+  const handleCopyApiKey = async () => {
+    if (!newApiKeySecret) return;
+
+    try {
+      await navigator.clipboard.writeText(newApiKeySecret);
+      toast.success("API key copied.");
+    } catch (error) {
+      console.error("Error copying API key:", error?.message);
+      toast.error("Could not copy API key.");
+    }
+  };
+
+  const handleStartRenameApiKey = (apiKey) => {
+    setEditingApiKeyId(apiKey.id);
+    setEditingApiKeyName(apiKey.name || "");
+  };
+
+  const handleCancelRenameApiKey = () => {
+    setEditingApiKeyId("");
+    setEditingApiKeyName("");
+  };
+
+  const handleSaveApiKeyName = async (apiKeyId) => {
+    const name = editingApiKeyName.trim();
+
+    if (!name) {
+      toast.error("API key name is required.");
+      return;
+    }
+
+    try {
+      const { data } = await axiosInstance.patch(
+        `${API_ENDPOINTS.PROFILE.API_KEYS}/${apiKeyId}`,
+        { name }
+      );
+
+      setApiKeys((prev) =>
+        prev.map((apiKey) => (apiKey.id === apiKeyId ? data.apiKey : apiKey))
+      );
+      handleCancelRenameApiKey();
+      toast.success("API key renamed.");
+    } catch (error) {
+      console.error("Error renaming API key:", error?.message);
+      toast.error(error?.response?.data?.error || "Failed to rename API key.", {
+        duration: 5000,
+      });
+    }
+  };
+
+  const handleRevokeApiKey = async (apiKeyId) => {
+    setRevokingApiKeyId(apiKeyId);
+
+    try {
+      await axiosInstance.delete(`${API_ENDPOINTS.PROFILE.API_KEYS}/${apiKeyId}`);
+      setApiKeys((prev) => prev.filter((apiKey) => apiKey.id !== apiKeyId));
+      if (editingApiKeyId === apiKeyId) {
+        handleCancelRenameApiKey();
+      }
+      toast.success("API key revoked.");
+    } catch (error) {
+      console.error("Error revoking API key:", error?.message);
+      toast.error(error?.response?.data?.error || "Failed to revoke API key.", {
+        duration: 5000,
+      });
+    } finally {
+      setRevokingApiKeyId("");
+    }
+  };
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -604,6 +753,176 @@ function ProfilePage() {
                   disabled
                   helperText="Registered email cannot be modified."
                 />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-7 shadow-sm">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <SectionHeader
+                  icon={KeyRound}
+                  eyebrow="Developer API"
+                  title="API keys"
+                  description="Programmatic book generation uses your account credits."
+                />
+
+                <div className="inline-flex items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
+                  <ShieldCheck className="size-4" />
+                  Same credits
+                </div>
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-4">
+                {newApiKeySecret && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">
+                          New key
+                        </p>
+                        <p className="mt-2 break-all rounded-lg bg-white px-3 py-2 font-mono text-xs text-slate-900 ring-1 ring-amber-200">
+                          {newApiKeySecret}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCopyApiKey}
+                        className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2"
+                      >
+                        <Copy className="size-4" />
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto]">
+                  <Input
+                    type="text"
+                    label="Key Name"
+                    name="apiKeyName"
+                    value={apiKeyName}
+                    onChange={(event) => setApiKeyName(event.target.value)}
+                    icon={KeyRound}
+                    maxLength={80}
+                    placeholder="Zapier"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateApiKey}
+                    disabled={isCreatingApiKey}
+                    className="mt-0 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:mt-7"
+                  >
+                    {isCreatingApiKey ? (
+                      <div className="size-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    ) : (
+                      <Plus className="size-4" />
+                    )}
+                    Create Key
+                  </button>
+                </div>
+
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  {isLoadingApiKeys ? (
+                    <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm font-semibold text-slate-500">
+                      <div className="size-4 rounded-full border-2 border-slate-300 border-t-slate-900 animate-spin" />
+                      Loading keys...
+                    </div>
+                  ) : apiKeys.length === 0 ? (
+                    <div className="px-4 py-8 text-center">
+                      <KeyRound className="mx-auto size-8 text-slate-300" />
+                      <p className="mt-3 text-sm font-bold text-slate-700">
+                        No active API keys
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-200">
+                      {apiKeys.map((apiKey) => {
+                        const isEditing = editingApiKeyId === apiKey.id;
+                        const isRevoking = revokingApiKeyId === apiKey.id;
+
+                        return (
+                          <div
+                            key={apiKey.id}
+                            className="grid grid-cols-1 gap-4 px-4 py-4 lg:grid-cols-[1fr_auto] lg:items-center"
+                          >
+                            <div className="min-w-0">
+                              {isEditing ? (
+                                <Input
+                                  type="text"
+                                  label="Rename Key"
+                                  name={`api-key-${apiKey.id}`}
+                                  value={editingApiKeyName}
+                                  onChange={(event) =>
+                                    setEditingApiKeyName(event.target.value)
+                                  }
+                                  maxLength={80}
+                                />
+                              ) : (
+                                <>
+                                  <p className="text-sm font-black text-slate-950">
+                                    {apiKey.name}
+                                  </p>
+                                  <p className="mt-1 break-all font-mono text-xs text-slate-500">
+                                    {apiKey.maskedKey}
+                                  </p>
+                                  <p className="mt-2 text-xs font-medium text-slate-500">
+                                    Last used {formatApiKeyDate(apiKey.lastUsedAt)}
+                                  </p>
+                                </>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveApiKeyName(apiKey.id)}
+                                    className="inline-flex size-10 items-center justify-center rounded-xl bg-emerald-600 text-white transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                                    aria-label="Save API key name"
+                                  >
+                                    <Check className="size-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelRenameApiKey}
+                                    className="inline-flex size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
+                                    aria-label="Cancel API key rename"
+                                  >
+                                    <X className="size-4" />
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartRenameApiKey(apiKey)}
+                                  className="inline-flex size-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
+                                  aria-label="Rename API key"
+                                >
+                                  <Pencil className="size-4" />
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handleRevokeApiKey(apiKey.id)}
+                                disabled={isRevoking}
+                                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-red-200 px-3 text-sm font-bold text-red-700 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {isRevoking ? (
+                                  <div className="size-4 rounded-full border-2 border-red-600 border-t-transparent animate-spin" />
+                                ) : (
+                                  <Trash2 className="size-4" />
+                                )}
+                                Revoke
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </section>
 

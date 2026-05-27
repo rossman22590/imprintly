@@ -31,6 +31,7 @@ export const API_ENDPOINTS = {
     UPLOAD_AVATAR: "/api/profile/avatar",
     DELETE_AVATAR: "/api/profile/avatar",
     BOOKSHELF_SHARE: "/api/profile/bookshelf-share",
+    API_KEYS: "/api/profile/api-keys",
   },
   CREDITS: {
     GET: "/api/credits",

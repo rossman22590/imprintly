@@ -15,6 +15,7 @@ const booksRouter = require("./routes/books.route");
 const aiRouter = require("./routes/ai.route");
 const exportsRouter = require("./routes/exports.route");
 const publicRouter = require("./routes/public.route");
+const developerApiRouter = require("./routes/developer-api.route");
 const {
   recoverInterruptedGenerationJobs,
 } = require("./utils/book-generation.jobs");
@@ -87,6 +88,7 @@ app.use("/api/books", booksRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/exports", exportsRouter);
 app.use("/api/public", publicRouter);
+app.use("/api/v1", developerApiRouter);
 
 // Static folder for user uploads - serve from backend/uploads
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));

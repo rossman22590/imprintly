@@ -116,6 +116,34 @@ function shouldIncludeTextGraphics(payload = {}) {
   );
 }
 
+function buildHttpError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function getJobSourceMetadata(job) {
+  const payload = job?.payload || {};
+  const metadata = {};
+
+  if (payload.apiSource) {
+    metadata.source = payload.apiSource;
+  }
+
+  if (payload.apiKeyId) {
+    metadata.apiKeyId = payload.apiKeyId;
+  }
+
+  return metadata;
+}
+
+function buildUsageMetadata(job, metadata = {}) {
+  return {
+    ...metadata,
+    ...getJobSourceMetadata(job),
+  };
+}
+
 function excerptContent(content = "", maxLength = 1200) {
   return String(content)
     .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
@@ -352,6 +380,28 @@ async function createGenerationJob({ userId, payload, retryFailedOnly = false })
   return publicJob(job);
 }
 
+async function validateFullBookJobRequest({ userId, payload = {} }) {
+  const includesImages = isEnabled(payload.includeImages ?? payload.generateImages);
+  const includesCover = isEnabled(payload.generateCover ?? payload.includeCover);
+
+  await assertHasCredits(
+    userId,
+    includesImages || includesCover ? CREDIT_CONFIG.imageCredits : 0.0001
+  );
+
+  if (!payload.bookId) return;
+
+  const book = await Book.findById(payload.bookId);
+
+  if (!book) {
+    throw buildHttpError(404, "Book not found!");
+  }
+
+  if (book.userId.toString() !== userId.toString()) {
+    throw buildHttpError(403, "Forbidden: You cannot update this book!");
+  }
+}
+
 async function listGenerationJobs(userId, { limit = 50 } = {}) {
   const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
   const jobs = await GenerationJob.find({ userId })
@@ -396,7 +446,7 @@ async function cancelGenerationJob(jobId, userId) {
   return publicJob(job);
 }
 
-async function retryGenerationJob(jobId, userId) {
+async function retryGenerationJob(jobId, userId, { payloadOverrides = {} } = {}) {
   const job = await getGenerationJob(jobId, userId);
 
   if (!job || !job.bookId) return null;
@@ -408,6 +458,7 @@ async function retryGenerationJob(jobId, userId) {
       ...(job.payload || {}),
       bookId: job.bookId.toString(),
       provider: job.provider,
+      ...payloadOverrides,
     },
   });
 }
@@ -435,6 +486,7 @@ async function updateBookProgress(book, job, extraGeneration = {}) {
         subtitle: book.subtitle,
         genre: book.genre,
         audience: book.audience,
+        language: book.language,
         chapters: (book.chapters || []).map(toPlainValue),
         coverImage: book.coverImage || "",
         coverGeneration: toPlainValue(book.coverGeneration || {}),
@@ -464,6 +516,7 @@ async function resolveBookForJob(job) {
 
   const title = sanitizeInput(payload.title || payload.topic, 200);
   const author = sanitizeInput(payload.author || "Unknown Author", 100);
+  const language = sanitizeInput(payload.language, 50) || "English";
   const modelConfig =
     job.provider === "groq"
       ? getGroqModels({
@@ -484,6 +537,7 @@ async function resolveBookForJob(job) {
     author,
     genre: sanitizeInput(payload.genre, 100) || "Nonfiction",
     audience: sanitizeInput(payload.audience, 200) || "General readers",
+    language,
     chapters: normalizeOutlineChapters(payload.outline || []),
     bible: normalizeBookBiblePayload(payload.bible),
     visualBible: normalizeVisualBiblePayload(payload.visualBible),
@@ -557,6 +611,10 @@ async function runGenerationJob(jobId) {
       provider === "groq" ? getGroqModels(modelPayload) : getGeminiModels();
     let totalStats = emptyStats(provider);
     const book = await resolveBookForJob(job);
+    const safeLanguage =
+      sanitizeInput(payload.language || payload.bookLanguage, 50) ||
+      book.language ||
+      "English";
     chapterLength = normalizeChapterLength(
       payload.chapterLength ||
         payload.generation?.chapterLength ||
@@ -627,7 +685,10 @@ async function runGenerationJob(jobId) {
         description: `Generated full-book outline for "${book.title}"`,
         provider,
         model: outlineResult.modelName,
-        metadata: { jobId: job.id, bookId: book._id.toString() },
+        metadata: buildUsageMetadata(job, {
+          jobId: job.id,
+          bookId: book._id.toString(),
+        }),
       });
       book.title = outlineResult.title || book.title;
       book.subtitle = payload.subtitle || outlineResult.subtitle || book.subtitle;
@@ -661,6 +722,7 @@ async function runGenerationJob(jobId) {
     job.progress.failed = 0;
     book.genre = safeGenre;
     book.audience = safeAudience;
+    book.language = safeLanguage;
     book.chapters = chapters.map((chapter, index) =>
       targetIndexes.includes(index)
         ? { ...chapter, generationStatus: "queued" }
@@ -700,13 +762,13 @@ async function runGenerationJob(jobId) {
           provider: "gemini",
           model: image.model,
           usage: image.stats,
-          metadata: {
+          metadata: buildUsageMetadata(job, {
             jobId: job.id,
             bookId: book._id.toString(),
             aspectRatio: image.aspectRatio,
             imageSize: image.imageSize,
             visualReferenceCount: coverReferenceImages.length,
-          },
+          }),
         });
 
         book.coverImage = image.url;
@@ -800,12 +862,12 @@ async function runGenerationJob(jobId) {
             description: `Generated chapter "${chapter.title}"`,
             provider,
             model: result.modelName,
-            metadata: {
+            metadata: buildUsageMetadata(job, {
               jobId: job.id,
               bookId: book._id.toString(),
               chapterIndex,
               chapterTitle: chapter.title,
-            },
+            }),
           });
           Object.assign(chapterStats, {
             ...result.stats,
@@ -854,7 +916,7 @@ async function runGenerationJob(jobId) {
               provider: "gemini",
               model: image.model,
               usage: image.stats,
-              metadata: {
+              metadata: buildUsageMetadata(job, {
                 jobId: job.id,
                 bookId: book._id.toString(),
                 chapterIndex,
@@ -862,7 +924,7 @@ async function runGenerationJob(jobId) {
                 aspectRatio: image.aspectRatio,
                 imageSize: image.imageSize,
                 visualReferenceCount: referenceImages.length,
-              },
+              }),
             });
             const imageAlt = `${
               chapter.title || `Chapter ${chapterIndex + 1}`
@@ -1176,4 +1238,5 @@ module.exports = {
   publicJob,
   recoverInterruptedGenerationJobs,
   retryGenerationJob,
+  validateFullBookJobRequest,
 };

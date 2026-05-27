@@ -35,6 +35,7 @@ const {
   listGenerationJobs,
   publicJob,
   retryGenerationJob,
+  validateFullBookJobRequest,
 } = require("../utils/book-generation.jobs");
 const {
   CREDIT_CONFIG,
@@ -775,28 +776,10 @@ async function generateFullBook(req, res) {
 
 async function createFullBookJob(req, res) {
   try {
-    const includesImages = isEnabled(
-      req.body.includeImages ?? req.body.generateImages
-    );
-    const includesCover = isEnabled(req.body.generateCover ?? req.body.includeCover);
-    await assertHasCredits(
-      req.user.id,
-      includesImages || includesCover ? CREDIT_CONFIG.imageCredits : 0.0001
-    );
-
-    if (req.body.bookId) {
-      const book = await Book.findById(req.body.bookId);
-
-      if (!book) {
-        return res.status(404).json({ error: "Book not found!" });
-      }
-
-      if (book.userId.toString() !== req.user.id.toString()) {
-        return res
-          .status(403)
-          .json({ error: "Forbidden: You cannot update this book!" });
-      }
-    }
+    await validateFullBookJobRequest({
+      userId: req.user.id,
+      payload: req.body,
+    });
 
     const job = await createGenerationJob({
       userId: req.user.id,
