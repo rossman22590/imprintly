@@ -921,7 +921,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                         No {section.label.toLowerCase()} references yet.
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
                         {(visualBible[section.key] || []).map(
                           (reference, index) => {
                             const uploadKey = `${section.key}-${reference.id || index}`;
@@ -931,128 +931,124 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                             return (
                               <div
                                 key={reference.id || index}
-                                className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm"
+                                className="group relative rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col"
                               >
-                                <div className="grid grid-cols-1 lg:grid-cols-[5rem,1fr] gap-2.5">
-                                  <div className="h-20 rounded-lg bg-slate-100 overflow-hidden border border-slate-200 flex items-center justify-center">
-                                    {reference.imageUrl ? (
-                                      <img
-                                        src={reference.imageUrl}
-                                        alt={reference.name || reference.label || "Reference"}
-                                        className="size-full object-cover"
-                                      />
-                                    ) : (
-                                      <ImageIcon className="size-6 text-slate-400" />
-                                    )}
-                                  </div>
-
-                                  <div className="grid grid-cols-1 gap-2">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                      <input
-                                        type="text"
-                                        value={reference.name || reference.label || ""}
-                                        onChange={(event) =>
-                                          updateVisualReference(
-                                            section.key,
-                                            index,
-                                            "name",
-                                            event.target.value
-                                          )
-                                        }
-                                        placeholder={section.nameLabel}
-                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                                      />
-
-                                      <div className="flex gap-2">
-                                        <label className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 cursor-pointer hover:bg-slate-100">
-                                          <UploadCloud className="size-4" />
-                                          Upload
-                                          <input
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            onChange={(event) => {
-                                              uploadVisualReferenceFile(
-                                                section.key,
-                                                index,
-                                                event.target.files?.[0]
-                                              );
-                                              event.target.value = "";
-                                            }}
-                                          />
-                                        </label>
-
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            removeVisualReference(
-                                              section.key,
-                                              index
-                                            )
-                                          }
-                                          className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-red-600 hover:bg-red-100"
-                                          aria-label="Remove reference"
-                                          title="Remove reference"
-                                        >
-                                          <Trash2 className="size-4" />
-                                        </button>
-                                      </div>
+                                <div className="relative aspect-square bg-slate-100 overflow-hidden">
+                                  {reference.imageUrl ? (
+                                    <img
+                                      src={reference.imageUrl}
+                                      alt={reference.name || reference.label || "Reference"}
+                                      className="size-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="size-full flex items-center justify-center">
+                                      <ImageIcon className="size-8 text-slate-400" />
                                     </div>
+                                  )}
 
-                                    <textarea
-                                      value={reference.description || ""}
+                                  <label
+                                    className="absolute inset-0 flex items-center justify-center gap-1.5 bg-slate-950/0 text-white text-xs font-semibold opacity-0 transition-all duration-200 group-hover:bg-slate-950/55 group-hover:opacity-100 cursor-pointer"
+                                    aria-label="Upload reference image"
+                                  >
+                                    <UploadCloud className="size-4" />
+                                    Upload
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={(event) => {
+                                        uploadVisualReferenceFile(
+                                          section.key,
+                                          index,
+                                          event.target.files?.[0]
+                                        );
+                                        event.target.value = "";
+                                      }}
+                                    />
+                                  </label>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      removeVisualReference(section.key, index)
+                                    }
+                                    className="absolute top-1.5 right-1.5 size-7 rounded-full bg-white/90 backdrop-blur text-red-600 shadow-sm flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 hover:bg-red-50 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                    aria-label="Remove reference"
+                                    title="Remove reference"
+                                  >
+                                    <Trash2 className="size-3.5" />
+                                  </button>
+
+                                  {isUploadingReference && (
+                                    <div className="absolute inset-0 bg-slate-950/40 flex items-center justify-center text-white text-xs font-semibold">
+                                      Uploading...
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="p-2 space-y-1.5">
+                                  <input
+                                    type="text"
+                                    value={reference.name || reference.label || ""}
+                                    onChange={(event) =>
+                                      updateVisualReference(
+                                        section.key,
+                                        index,
+                                        "name",
+                                        event.target.value
+                                      )
+                                    }
+                                    placeholder={section.nameLabel}
+                                    className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                  />
+
+                                  <textarea
+                                    value={reference.description || ""}
+                                    onChange={(event) =>
+                                      updateVisualReference(
+                                        section.key,
+                                        index,
+                                        "description",
+                                        event.target.value
+                                      )
+                                    }
+                                    rows={2}
+                                    maxLength={600}
+                                    placeholder={section.descriptionLabel}
+                                    className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                                  />
+
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="url"
+                                      value={reference.sourceUrl || ""}
                                       onChange={(event) =>
                                         updateVisualReference(
                                           section.key,
                                           index,
-                                          "description",
+                                          "sourceUrl",
                                           event.target.value
                                         )
                                       }
-                                      rows={2}
-                                      maxLength={600}
-                                      placeholder={section.descriptionLabel}
-                                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                                      placeholder="Image URL"
+                                      className="w-full min-w-0 rounded-md border border-slate-200 px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500"
                                     />
 
-                                    <div className="grid grid-cols-1 md:grid-cols-[1fr,auto] gap-2">
-                                      <input
-                                        type="url"
-                                        value={reference.sourceUrl || ""}
-                                        onChange={(event) =>
-                                          updateVisualReference(
-                                            section.key,
-                                            index,
-                                            "sourceUrl",
-                                            event.target.value
-                                          )
-                                        }
-                                        placeholder="Paste image URL to store on PixioMedia"
-                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500"
-                                      />
-
-                                      <Button
-                                        type="button"
-                                        variant="secondary"
-                                        size="sm"
-                                        icon={Link}
-                                        isLoading={isUploadingReference}
-                                        onClick={() =>
-                                          importVisualReferenceUrl(
-                                            section.key,
-                                            index
-                                          )
-                                        }
-                                      >
-                                        Store link
-                                      </Button>
-                                    </div>
-
-                                    {reference.imageUrl && (
-                                      <p className="truncate text-[11px] text-emerald-700">
-                                        Stored: {reference.imageUrl}
-                                      </p>
-                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        importVisualReferenceUrl(
+                                          section.key,
+                                          index
+                                        )
+                                      }
+                                      disabled={isUploadingReference}
+                                      aria-label="Store image link"
+                                      title="Store image link"
+                                      className="shrink-0 size-7 rounded-md border border-slate-200 bg-slate-50 text-slate-700 flex items-center justify-center hover:bg-slate-100 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                                    >
+                                      <Link className="size-3.5" />
+                                    </button>
                                   </div>
                                 </div>
                               </div>

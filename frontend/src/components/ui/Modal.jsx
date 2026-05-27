@@ -38,7 +38,7 @@ const Modal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-center items-center px-3 py-3 sm:px-4 sm:py-4"
+      className="fixed inset-0 z-50 flex justify-center items-center px-3 py-6 sm:px-4 sm:py-10"
       role="presentation"
     >
       <div
@@ -51,7 +51,7 @@ const Modal = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className={`${sizeClassName} w-full h-fit max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] bg-white text-left rounded-2xl shadow-2xl relative z-10 animate-in zoom-in-95 duration-200 flex flex-col overflow-hidden`}
+        className={`${sizeClassName} w-full h-fit max-h-[calc(100dvh-3rem)] sm:max-h-[calc(100dvh-5rem)] bg-white text-left rounded-2xl shadow-2xl relative z-10 animate-in zoom-in-95 duration-200 flex flex-col overflow-hidden`}
       >
         <header className="shrink-0 flex items-center justify-between gap-4 px-5 py-4 border-b border-slate-100">
           <h3
