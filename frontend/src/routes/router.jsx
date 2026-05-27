@@ -1,6 +1,7 @@
 import { createBrowserRouter, Outlet } from "react-router";
 import {
   AdminPage,
+  ApiDocsPage,
   BookPage,
   CreditsPage,
   DashboardPage,
@@ -77,6 +78,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <DocsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "api-docs",
+        element: (
+          <ProtectedRoute>
+            <ApiDocsPage />
           </ProtectedRoute>
         ),
       },

@@ -77,14 +77,78 @@ function buildBookDownloadLinks(req, bookId) {
   };
 }
 
+function serializeV1ImageAsset(image = {}) {
+  return {
+    id: image._id?.toString?.() || image.id || "",
+    url: image.url || "",
+    prompt: image.prompt || "",
+    alt: image.alt || "",
+    model: image.model || "",
+    mimeType: image.mimeType || "",
+    aspectRatio: image.aspectRatio || "",
+    imageSize: image.imageSize || "",
+    source: image.source || "",
+    createdAt: image.createdAt || null,
+    updatedAt: image.updatedAt || null,
+  };
+}
+
+function serializeV1Chapter(chapter = {}) {
+  return {
+    id: chapter._id?.toString?.() || chapter.id || "",
+    title: chapter.title || "",
+    description: chapter.description || "",
+    content: chapter.content || "",
+    generationStatus: chapter.generationStatus || "empty",
+    wordCount: chapter.wordCount || 0,
+    outlinePath: Array.isArray(chapter.outlinePath) ? chapter.outlinePath : [],
+    generationStats: chapter.generationStats || null,
+    images: Array.isArray(chapter.images)
+      ? chapter.images.map(serializeV1ImageAsset)
+      : [],
+    createdAt: chapter.createdAt || null,
+    updatedAt: chapter.updatedAt || null,
+  };
+}
+
+function serializePublicBook(book) {
+  const value =
+    typeof book?.toObject === "function"
+      ? book.toObject({ depopulate: true, versionKey: false })
+      : book || {};
+
+  return {
+    id: value._id?.toString?.() || value.id || "",
+    title: value.title || "",
+    subtitle: value.subtitle || "",
+    author: value.author || "",
+    genre: value.genre || "",
+    audience: value.audience || "",
+    language: value.language || "",
+    status: value.status || "draft",
+    coverImage: value.coverImage || "",
+    coverGeneration: value.coverGeneration || null,
+    chapters: Array.isArray(value.chapters)
+      ? value.chapters.map(serializeV1Chapter)
+      : [],
+    generation: value.generation || null,
+    kdp: value.kdp || null,
+    bible: value.bible || null,
+    visualBible: value.visualBible || null,
+    createdAt: value.createdAt || null,
+    updatedAt: value.updatedAt || null,
+  };
+}
+
 function serializeV1Book(req, book) {
   const bookId = book?._id?.toString?.() || book?.id || "";
+  const publicBook = serializePublicBook(book);
 
   return {
     object: "book",
     id: bookId,
     status: book?.generation?.status || "manual",
-    book,
+    book: publicBook,
     downloads: buildBookDownloadLinks(req, bookId),
   };
 }
@@ -225,6 +289,7 @@ module.exports = {
   getBookV1,
   getGenerationJobV1,
   retryGenerationJobV1,
+  serializePublicBook,
   serializeV1Book,
   serializeV1GenerationJob,
 };

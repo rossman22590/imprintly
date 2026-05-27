@@ -18,11 +18,11 @@ router.get("/generation-jobs/:jobId", getGenerationJobV1);
 router.delete("/generation-jobs/:jobId", cancelGenerationJobV1);
 router.post("/generation-jobs/:jobId/retry", retryGenerationJobV1);
 
-router.get("/ebooks/:bookId", getBookV1);
 router.get("/ebooks/:bookId/pdf", exportBookPdfV1);
 router.get("/ebooks/:bookId/epub", exportBookEpubV1);
-router.get("/books/:bookId", getBookV1);
+router.get("/ebooks/:bookId", getBookV1);
 router.get("/books/:bookId/pdf", exportBookPdfV1);
 router.get("/books/:bookId/epub", exportBookEpubV1);
+router.get("/books/:bookId", getBookV1);
 
 module.exports = router;

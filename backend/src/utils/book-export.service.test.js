@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
   assertBookReadyForApiExport,
+  prepareOwnedBookForExport,
   safeExportFilename,
 } = require("./book-export.service");
 
@@ -46,4 +47,11 @@ test("blocks API export after failed or cancelled generation", () => {
 
 test("sanitizes export filenames", () => {
   assert.equal(safeExportFilename("My Great Book!", "pdf"), "My_Great_Book_.pdf");
+});
+
+test("rejects invalid book IDs before querying exports", async () => {
+  await assert.rejects(
+    () => prepareOwnedBookForExport("507f1f77bcf86cd799439011", "not-an-id"),
+    (error) => error.statusCode === 400 && error.message === "Invalid book ID."
+  );
 });

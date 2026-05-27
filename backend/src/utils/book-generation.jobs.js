@@ -345,10 +345,28 @@ function getChapterGenerationStepCount(
 }
 
 async function saveJob(job) {
-  job.markModified("payload");
-  job.markModified("progress");
-  job.markModified("failedChapters");
-  await job.save();
+  if (!job?._id) return;
+
+  await GenerationJob.updateOne(
+    { _id: job._id },
+    {
+      $set: {
+        bookId: job.bookId?._id || job.bookId || null,
+        provider: job.provider,
+        payload: toPlainValue(job.payload || {}),
+        retryFailedOnly: Boolean(job.retryFailedOnly),
+        cancelled: Boolean(job.cancelled),
+        status: job.status,
+        progress: toPlainValue(job.progress || {}),
+        failedChapters: Array.isArray(job.failedChapters)
+          ? job.failedChapters.map(toPlainValue)
+          : [],
+        error: job.error || "",
+        startedAt: job.startedAt || null,
+        completedAt: job.completedAt || null,
+      },
+    }
+  );
 }
 
 async function createGenerationJob({ userId, payload, retryFailedOnly = false }) {
@@ -574,16 +592,21 @@ async function runGenerationJob(jobId) {
   activeJobs.add(jobId);
 
   try {
-    const job = await refreshJob(jobId);
+    const job = await GenerationJob.findOneAndUpdate(
+      { id: jobId, status: "queued" },
+      {
+        $set: {
+          status: "generating",
+          startedAt: new Date(),
+          completedAt: null,
+          error: "",
+          "progress.message": "Preparing book",
+        },
+      },
+      { new: true }
+    );
 
-    if (!job || !["queued", "failed"].includes(job.status)) return;
-
-    job.status = "generating";
-    job.startedAt = job.startedAt || new Date();
-    job.completedAt = null;
-    job.error = "";
-    job.progress.message = "Preparing book";
-    await saveJob(job);
+    if (!job) return;
 
     const payload = job.payload || {};
     const provider = job.provider;

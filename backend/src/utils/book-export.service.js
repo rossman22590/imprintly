@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Book = require("../models/Book");
 const { generateEpub } = require("./epub.generator");
 const { generatePdf } = require("./pdf.generator");
@@ -26,7 +27,17 @@ function setNoStoreHeaders(res) {
 }
 
 async function prepareOwnedBookForExport(userId, bookId) {
-  const book = await Book.findById(bookId);
+  const normalizedBookId = String(bookId || "").trim();
+
+  if (
+    !mongoose.Types.ObjectId.isValid(normalizedBookId) ||
+    new mongoose.Types.ObjectId(normalizedBookId).toString() !==
+      normalizedBookId.toLowerCase()
+  ) {
+    throw buildHttpError(400, "Invalid book ID.");
+  }
+
+  const book = await Book.findById(normalizedBookId);
 
   if (!book) {
     throw buildHttpError(404, "No such book exists!");

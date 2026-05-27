@@ -17,6 +17,8 @@ services:
         sync: false
       - key: JWT_SECRET_KEY
         generateValue: true
+      - key: API_KEY_HASH_SECRET
+        generateValue: true
       - key: GEMINI_API_KEY
         sync: false
       - key: GROQ_API_KEY
@@ -35,10 +37,7 @@ services:
     staticPublishPath: frontend/dist
     envVars:
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: bookify-api
-          envVarKey: RENDER_EXTERNAL_URL
+        value: https://api.bookify.myapps.ai
     routes:
       - type: rewrite
         source: "/*"

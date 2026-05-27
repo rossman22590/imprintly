@@ -5,6 +5,7 @@ const ApiKey = require("../models/ApiKey");
 const API_KEY_PREFIX = "book_sk_";
 const API_KEY_RANDOM_BYTES = 32;
 const API_KEY_SECRET_PATTERN = /^book_sk_[A-Za-z0-9_-]{43}$/;
+const LAST_USED_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
 
 function normalizeApiKeyName(name = "") {
   const normalized = String(name || "").trim().replace(/\s+/g, " ");
@@ -22,11 +23,36 @@ function isValidApiKeySecret(secret = "") {
   return API_KEY_SECRET_PATTERN.test(String(secret || ""));
 }
 
-function hashApiKey(secret = "") {
+function getPrimaryApiKeyHashSecret() {
+  if (ENV.API_KEY_HASH_SECRET) return ENV.API_KEY_HASH_SECRET;
+
+  if (ENV.NODE_ENV === "production") {
+    throw new Error("API_KEY_HASH_SECRET is not configured.");
+  }
+
+  return ENV.JWT_SECRET_KEY || "imprintly-dev-api-keys";
+}
+
+function hashApiKey(secret = "", hashSecret = getPrimaryApiKeyHashSecret()) {
   return crypto
-    .createHmac("sha256", ENV.JWT_SECRET_KEY || "imprintly-dev-api-keys")
+    .createHmac("sha256", hashSecret)
     .update(String(secret))
     .digest("hex");
+}
+
+function getApiKeyHashCandidates(secret = "") {
+  const primaryHash = hashApiKey(secret);
+  const hashes = [primaryHash];
+
+  if (ENV.API_KEY_HASH_SECRET && ENV.JWT_SECRET_KEY) {
+    const legacyHash = hashApiKey(secret, ENV.JWT_SECRET_KEY);
+
+    if (legacyHash !== primaryHash) {
+      hashes.push(legacyHash);
+    }
+  }
+
+  return hashes;
 }
 
 function getApiKeyDisplayParts(secret = "") {
@@ -124,7 +150,18 @@ async function revokeUserApiKey({ userId, apiKeyId }) {
   return serializeApiKey(apiKey);
 }
 
-async function markApiKeyUsed(apiKey, now = new Date()) {
+function shouldUpdateLastUsedAt(apiKey, now = new Date()) {
+  if (!apiKey?.lastUsedAt) return true;
+
+  return now.getTime() - new Date(apiKey.lastUsedAt).getTime() >=
+    LAST_USED_UPDATE_INTERVAL_MS;
+}
+
+async function markApiKeyUsed(apiKey, now = new Date(), options = {}) {
+  if (!options.force && !shouldUpdateLastUsedAt(apiKey, now)) {
+    return apiKey;
+  }
+
   apiKey.lastUsedAt = now;
   await apiKey.save({ validateBeforeSave: false });
 
@@ -134,23 +171,31 @@ async function markApiKeyUsed(apiKey, now = new Date()) {
 async function authenticateApiKeySecret(secret = "") {
   if (!isValidApiKeySecret(secret)) return null;
 
+  const hashes = getApiKeyHashCandidates(secret);
   const apiKey = await ApiKey.findOne({
-    keyHash: hashApiKey(secret),
+    keyHash: { $in: hashes },
     revokedAt: null,
   }).select("+keyHash");
 
   if (!apiKey) return null;
 
-  await markApiKeyUsed(apiKey);
+  if (apiKey.keyHash !== hashes[0]) {
+    apiKey.keyHash = hashes[0];
+    await markApiKeyUsed(apiKey, new Date(), { force: true });
+  } else {
+    await markApiKeyUsed(apiKey);
+  }
 
   return apiKey;
 }
 
 module.exports = {
   API_KEY_PREFIX,
+  LAST_USED_UPDATE_INTERVAL_MS,
   authenticateApiKeySecret,
   createApiKeySecret,
   createUserApiKey,
+  getApiKeyHashCandidates,
   getApiKeyDisplayParts,
   hashApiKey,
   isValidApiKeySecret,
@@ -160,4 +205,5 @@ module.exports = {
   renameUserApiKey,
   revokeUserApiKey,
   serializeApiKey,
+  shouldUpdateLastUsedAt,
 };
