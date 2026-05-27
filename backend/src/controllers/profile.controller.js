@@ -46,6 +46,7 @@ function serializeProfileUser(user) {
     publicShareImageUrl: user.publicShareImageUrl || "",
     publicShareTheme: user.publicShareTheme || "",
     role: user.role,
+    status: user.status || "active",
     credits: serializeCredits(user),
     bookshelfShare: serializeBookshelfShare(user),
   };

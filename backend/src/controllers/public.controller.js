@@ -9,6 +9,17 @@ function setPublicShareHeaders(res) {
   res.setHeader("Expires", "0");
 }
 
+function activeOwnerQuery(query = {}) {
+  return {
+    ...query,
+    $or: [{ status: "active" }, { status: { $exists: false } }],
+  };
+}
+
+function isBannedOwner(user) {
+  return user?.status === "banned";
+}
+
 function firstPreviewChapter(book) {
   const chapters = Array.isArray(book?.chapters) ? book.chapters : [];
 
@@ -92,7 +103,9 @@ function serializePublicPreview(book) {
 async function getPublicBookshelf(req, res) {
   try {
     const { shareToken } = req.params;
-    const user = await User.findOne({ "bookshelfShare.token": shareToken });
+    const user = await User.findOne(
+      activeOwnerQuery({ "bookshelfShare.token": shareToken })
+    );
 
     setPublicShareHeaders(res);
 
@@ -138,12 +151,12 @@ async function getPublicBookPreview(req, res) {
     const book = await Book.findOne({ "previewShare.token": shareToken }).populate({
       path: "userId",
       select:
-        "name avatar storeUrl shelfPageName shelfPhotoUrl publicShareMetaTitle publicShareMetaDescription publicShareImageUrl publicShareTheme",
+        "name avatar storeUrl shelfPageName shelfPhotoUrl publicShareMetaTitle publicShareMetaDescription publicShareImageUrl publicShareTheme status",
     });
 
     setPublicShareHeaders(res);
 
-    if (!book) {
+    if (!book || isBannedOwner(book.userId)) {
       return res.status(404).json({ error: "Preview link is not active." });
     }
 
@@ -166,6 +179,12 @@ async function getPublicBookPreviewPdf(req, res) {
     setPublicShareHeaders(res);
 
     if (!book) {
+      return res.status(404).json({ error: "Preview link is not active." });
+    }
+
+    const owner = await User.findById(book.userId).select("status");
+
+    if (isBannedOwner(owner)) {
       return res.status(404).json({ error: "Preview link is not active." });
     }
 

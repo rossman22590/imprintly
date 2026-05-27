@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Book = require("../models/Book");
 const CreditTransaction = require("../models/CreditTransaction");
+const GenerationJob = require("../models/GenerationJob");
 const User = require("../models/User");
 const {
   isConfiguredAdminEmail,
@@ -19,6 +20,7 @@ const {
   serializeTransaction,
   setMonthlyCreditAllowance,
 } = require("../utils/credits.service");
+const { deleteUploadFile } = require("../utils/upload-paths");
 
 function escapeRegex(value = "") {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -32,6 +34,60 @@ function normalizePage(value) {
   return Math.max(Number.parseInt(value, 10) || 1, 1);
 }
 
+function normalizeAccountStatus(value = "") {
+  return ["active", "banned"].includes(value) ? value : "";
+}
+
+function isBanned(user) {
+  return user?.status === "banned";
+}
+
+function deleteBookUploads(book) {
+  if (book.coverImage) {
+    deleteUploadFile(book.coverImage);
+  }
+
+  (book.chapters || []).forEach((chapter) => {
+    (chapter.images || []).forEach((image) => {
+      if (image?.url) {
+        deleteUploadFile(image.url);
+      }
+    });
+  });
+}
+
+function deleteUserUploads(user) {
+  [user.avatar, user.shelfPhotoUrl, user.publicShareImageUrl]
+    .filter(Boolean)
+    .forEach(deleteUploadFile);
+}
+
+async function assertCanModerateUser(user, admin, action) {
+  await syncUserAdminRole(user);
+
+  if (user._id.toString() === admin.id.toString()) {
+    const error = new Error(`You cannot ${action} your own account.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (isConfiguredAdminEmail(user.email)) {
+    const error = new Error("This email is hardcoded as an admin and cannot be changed this way.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (user.role === "admin") {
+    const adminCount = await User.countDocuments({ role: "admin" });
+
+    if (adminCount <= 1) {
+      const error = new Error(`You cannot ${action} the last admin account.`);
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+}
+
 async function serializeAdminUser(user) {
   const ensuredUser = await ensureUserCredits(user._id);
   await syncUserAdminRole(ensuredUser);
@@ -43,6 +99,10 @@ async function serializeAdminUser(user) {
     email: ensuredUser.email,
     avatar: ensuredUser.avatar,
     role: ensuredUser.role || "user",
+    status: ensuredUser.status || "active",
+    bannedAt: ensuredUser.bannedAt || null,
+    bannedReason: ensuredUser.bannedReason || "",
+    bannedBy: ensuredUser.bannedBy || null,
     credits: serializeCredits(ensuredUser),
     bookCount,
     createdAt: ensuredUser.createdAt,
@@ -51,9 +111,10 @@ async function serializeAdminUser(user) {
 }
 
 async function getAdminSummary() {
-  const [totalUsers, adminUsers, creditTotals] = await Promise.all([
+  const [totalUsers, adminUsers, bannedUsers, creditTotals] = await Promise.all([
     User.countDocuments({}),
     User.countDocuments({ role: "admin" }),
+    User.countDocuments({ status: "banned" }),
     User.aggregate([
       {
         $group: {
@@ -69,6 +130,7 @@ async function getAdminSummary() {
   return {
     totalUsers,
     adminUsers,
+    bannedUsers,
     outstandingCredits: Math.round(Number(totals.outstandingCredits || 0) * 100) / 100,
     lifetimeSpent: Math.round(Number(totals.lifetimeSpent || 0) * 100) / 100,
   };
@@ -241,6 +303,104 @@ async function updateUser(req, res) {
   }
 }
 
+async function updateUserStatus(req, res) {
+  try {
+    const { userId } = req.params;
+    const status = normalizeAccountStatus(req.body?.status);
+    const reason = String(req.body?.reason || "").trim().slice(0, 300);
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: "Invalid user ID." });
+    }
+
+    if (!status) {
+      return res.status(400).json({ error: "Status must be active or banned." });
+    }
+
+    const user = await User.findById(userId).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    if (status === "banned") {
+      await assertCanModerateUser(user, req.admin, "ban");
+    }
+
+    if (status === "banned") {
+      user.status = "banned";
+      user.bannedAt = isBanned(user) ? user.bannedAt || new Date() : new Date();
+      user.bannedReason = reason;
+      user.bannedBy = req.admin.id;
+    } else {
+      user.status = "active";
+      user.bannedAt = null;
+      user.bannedReason = "";
+      user.bannedBy = null;
+    }
+
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json({
+      message: status === "banned" ? "User banned." : "User unbanned.",
+      user: await serializeAdminUser(user),
+    });
+  } catch (error) {
+    console.error("Error updating admin user status:", error);
+
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.message || "Internal Server Error!" });
+  }
+}
+
+async function deleteUser(req, res) {
+  try {
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: "Invalid user ID." });
+    }
+
+    const user = await User.findById(userId).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    await assertCanModerateUser(user, req.admin, "delete");
+
+    const books = await Book.find({ userId: user._id });
+
+    deleteUserUploads(user);
+    books.forEach(deleteBookUploads);
+
+    const [deletedBooks, deletedTransactions, deletedJobs] = await Promise.all([
+      Book.deleteMany({ userId: user._id }),
+      CreditTransaction.deleteMany({ userId: user._id }),
+      GenerationJob.deleteMany({ userId: user._id }),
+    ]);
+
+    await user.deleteOne();
+
+    return res.status(200).json({
+      message: "User deleted.",
+      deletedUserId: user._id.toString(),
+      deleted: {
+        books: deletedBooks.deletedCount || 0,
+        creditTransactions: deletedTransactions.deletedCount || 0,
+        generationJobs: deletedJobs.deletedCount || 0,
+      },
+    });
+  } catch (error) {
+    console.error("Error deleting admin user:", error);
+
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.message || "Internal Server Error!" });
+  }
+}
+
 async function adjustCredits(req, res) {
   try {
     const { userId } = req.params;
@@ -305,10 +465,12 @@ async function updateMonthlyCredits(req, res) {
 
 module.exports = {
   adjustCredits,
+  deleteUser,
   getPlanSettings,
   getUserDetails,
   listUsers,
   updatePlanSettings,
   updateMonthlyCredits,
   updateUser,
+  updateUserStatus,
 };

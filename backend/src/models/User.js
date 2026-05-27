@@ -98,6 +98,27 @@ const userSchema = new mongoose.Schema(
       default: "user",
       index: true,
     },
+    status: {
+      type: String,
+      enum: ["active", "banned"],
+      default: "active",
+      index: true,
+    },
+    bannedAt: {
+      type: Date,
+      default: null,
+    },
+    bannedReason: {
+      type: String,
+      default: "",
+      trim: true,
+      maxLength: [300, "Ban reason cannot exceed 300 characters"],
+    },
+    bannedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     passwordResetTokenHash: {
       type: String,
       default: "",

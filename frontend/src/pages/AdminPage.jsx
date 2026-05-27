@@ -2,6 +2,7 @@ import { createElement, useCallback, useEffect, useMemo, useState } from "react"
 import toast from "react-hot-toast";
 import {
   BadgeDollarSign,
+  Ban,
   CalendarClock,
   Coins,
   Crown,
@@ -16,6 +17,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
+  Trash2,
   UserCog,
   Users,
 } from "lucide-react";
@@ -151,6 +153,27 @@ function CreditActionButton({ active, icon, children, ...props }) {
   );
 }
 
+function AccountStatusBadge({ status = "active" }) {
+  const isBanned = status === "banned";
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
+        isBanned
+          ? "bg-rose-100 text-rose-700"
+          : "bg-emerald-100 text-emerald-700"
+      }`}
+    >
+      {isBanned ? (
+        <Ban className="size-3" />
+      ) : (
+        <ShieldCheck className="size-3" />
+      )}
+      {isBanned ? "Banned" : "Active"}
+    </span>
+  );
+}
+
 function PlanSettingsPanel({
   plans,
   planForm,
@@ -254,10 +277,14 @@ function UserDetailsModal({
   isSavingUser,
   isAdjustingCredits,
   isSavingMonthlyCredits,
+  isUpdatingStatus,
+  isDeletingUser,
   transactionHistoryDays,
   onSaveUser,
   onAdjustCredits,
   onSaveMonthlyCredits,
+  onToggleUserBan,
+  onDeleteUser,
 }) {
   const currentBalance = Number(user?.credits?.balance || 0);
   const monthlyAllowance = Number(user?.credits?.monthlyAllowance || 0);
@@ -300,6 +327,7 @@ function UserDetailsModal({
                     >
                       {user.role}
                     </span>
+                    <AccountStatusBadge status={user.status} />
                   </div>
                   <p className="mt-1 text-slate-500 text-sm flex items-center gap-2">
                     <Mail className="size-4" />
@@ -323,6 +351,15 @@ function UserDetailsModal({
               <DetailRow label="Books" value={user.bookCount} />
               <DetailRow label="Joined" value={formatDate(user.createdAt)} />
               <DetailRow label="Last updated" value={formatDate(user.updatedAt)} />
+              <DetailRow label="Account status" value={user.status || "active"} />
+              <DetailRow
+                label="Banned at"
+                value={user.status === "banned" ? formatDate(user.bannedAt) : "Not banned"}
+              />
+              <DetailRow
+                label="Ban reason"
+                value={user.status === "banned" ? user.bannedReason || "No reason saved" : "Not banned"}
+              />
               <DetailRow
                 label="Lifetime spent"
                 value={formatCredits(user.credits?.lifetimeSpent)}
@@ -463,6 +500,40 @@ function UserDetailsModal({
                   className="w-full"
                 >
                   Save identity
+                </Button>
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-rose-200 bg-rose-50/40 p-4">
+              <h3 className="text-slate-950 text-sm font-semibold mb-2 flex items-center gap-2">
+                <ShieldAlert className="size-4 text-rose-600" />
+                Account access
+              </h3>
+              <p className="text-xs text-slate-600 mb-3">
+                Banned users cannot sign in or use existing sessions.
+              </p>
+              <div className="grid grid-cols-1 gap-2">
+                <Button
+                  type="button"
+                  variant={user.status === "banned" ? "secondary" : "destructive"}
+                  icon={user.status === "banned" ? ShieldCheck : Ban}
+                  onClick={onToggleUserBan}
+                  isLoading={isUpdatingStatus}
+                  size="sm"
+                  className="w-full"
+                >
+                  {user.status === "banned" ? "Unban user" : "Ban user"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  icon={Trash2}
+                  onClick={onDeleteUser}
+                  isLoading={isDeletingUser}
+                  size="sm"
+                  className="w-full"
+                >
+                  Delete user
                 </Button>
               </div>
             </section>
@@ -703,6 +774,8 @@ function AdminPage() {
   const [isPlansLoading, setIsPlansLoading] = useState(true);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [isSavingUser, setIsSavingUser] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [isAdjustingCredits, setIsAdjustingCredits] = useState(false);
   const [isSavingMonthlyCredits, setIsSavingMonthlyCredits] = useState(false);
   const [isSavingPlans, setIsSavingPlans] = useState(false);
@@ -879,6 +952,12 @@ function AdminPage() {
     );
   };
 
+  const removeSelectedUserFromList = (deletedUserId) => {
+    setUsersList((current) =>
+      current.filter((item) => item._id !== deletedUserId)
+    );
+  };
+
   const handleSavePlans = async (event) => {
     event.preventDefault();
 
@@ -942,6 +1021,89 @@ function AdminPage() {
       toast.error(error.response?.data?.error || "Failed to update user.");
     } finally {
       setIsSavingUser(false);
+    }
+  };
+
+  const handleToggleUserBan = async () => {
+    if (!selectedUser) return;
+
+    const shouldBan = selectedUser.status !== "banned";
+    const reason = shouldBan
+      ? window.prompt("Ban reason (optional)", "")
+      : "";
+
+    if (shouldBan && reason === null) return;
+
+    if (!window.confirm(
+      shouldBan
+        ? `Ban ${selectedUser.email}? They will be signed out and blocked from public shares.`
+        : `Unban ${selectedUser.email}? They will be able to sign in again.`
+    )) {
+      return;
+    }
+
+    setIsUpdatingStatus(true);
+
+    try {
+      const { data } = await axiosInstance.patch(
+        `${API_ENDPOINTS.ADMIN.USERS}/${selectedUser._id}/status`,
+        {
+          status: shouldBan ? "banned" : "active",
+          reason: reason || "",
+        }
+      );
+
+      setSelectedUser(data.user);
+      updateSelectedUserInList(data.user);
+      fetchUsers();
+      toast.success(shouldBan ? "User banned." : "User unbanned.");
+    } catch (error) {
+      console.error("Error updating user status:", error);
+      toast.error(error.response?.data?.error || "Failed to update status.");
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+
+    const typedEmail = window.prompt(
+      `Type ${selectedUser.email} to permanently delete this user.`
+    );
+
+    if (typedEmail !== selectedUser.email) {
+      if (typedEmail !== null) {
+        toast.error("Email did not match. User was not deleted.");
+      }
+
+      return;
+    }
+
+    if (!window.confirm(
+      `Permanently delete ${selectedUser.email}, their books, generation jobs, and credit history?`
+    )) {
+      return;
+    }
+
+    setIsDeletingUser(true);
+
+    try {
+      const { data } = await axiosInstance.delete(
+        `${API_ENDPOINTS.ADMIN.USERS}/${selectedUser._id}`
+      );
+
+      removeSelectedUserFromList(data.deletedUserId || selectedUser._id);
+      setSelectedUser(null);
+      setTransactions([]);
+      setIsUserModalOpen(false);
+      fetchUsers();
+      toast.success("User deleted.");
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      toast.error(error.response?.data?.error || "Failed to delete user.");
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -1071,7 +1233,7 @@ function AdminPage() {
           onSavePlans={handleSavePlans}
         />
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
           <StatBlock
             icon={Users}
             label="Users"
@@ -1081,6 +1243,11 @@ function AdminPage() {
             icon={ShieldCheck}
             label="Admins"
             value={summary?.adminUsers || 0}
+          />
+          <StatBlock
+            icon={Ban}
+            label="Banned"
+            value={summary?.bannedUsers || 0}
           />
           <StatBlock
             icon={Coins}
@@ -1127,6 +1294,9 @@ function AdminPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
                     Role
                   </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                    Status
+                  </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
                     Credits
                   </th>
@@ -1145,7 +1315,7 @@ function AdminPage() {
                 {isLoading ? (
                   <tr>
                     <td
-                      colSpan="6"
+                      colSpan="7"
                       className="px-4 py-10 text-center text-slate-500 text-sm"
                     >
                       Loading users...
@@ -1154,7 +1324,7 @@ function AdminPage() {
                 ) : usersList.length === 0 ? (
                   <tr>
                     <td
-                      colSpan="6"
+                      colSpan="7"
                       className="px-4 py-10 text-center text-slate-500 text-sm"
                     >
                       No users found.
@@ -1199,6 +1369,9 @@ function AdminPage() {
                         >
                           {item.role}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <AccountStatusBadge status={item.status} />
                       </td>
                       <td className="px-4 py-3 text-right text-slate-950 text-sm font-semibold tabular-nums">
                         {formatCredits(item.credits?.balance)}
@@ -1270,10 +1443,14 @@ function AdminPage() {
         isSavingUser={isSavingUser}
         isAdjustingCredits={isAdjustingCredits}
         isSavingMonthlyCredits={isSavingMonthlyCredits}
+        isUpdatingStatus={isUpdatingStatus}
+        isDeletingUser={isDeletingUser}
         transactionHistoryDays={transactionHistoryDays}
         onSaveUser={handleSaveUser}
         onAdjustCredits={handleAdjustCredits}
         onSaveMonthlyCredits={handleSaveMonthlyCredits}
+        onToggleUserBan={handleToggleUserBan}
+        onDeleteUser={handleDeleteUser}
       />
     </DashboardLayout>
   );

@@ -112,6 +112,7 @@ async function registerUser(req, res) {
         publicShareImageUrl: user.publicShareImageUrl || "",
         publicShareTheme: user.publicShareTheme || "",
         role: user.role,
+        status: user.status || "active",
         credits: serializeCredits(user),
       },
       token: generateToken(user._id),
@@ -137,6 +138,10 @@ async function signInUser(req, res) {
       return res.status(401).json({ error: "Invalid credentials!" });
     }
 
+    if (user.status === "banned") {
+      return res.status(403).json({ error: "This account has been banned." });
+    }
+
     await ensureUserCredits(user._id);
     await syncUserAdminRole(user);
 
@@ -155,6 +160,7 @@ async function signInUser(req, res) {
         publicShareImageUrl: user.publicShareImageUrl || "",
         publicShareTheme: user.publicShareTheme || "",
         role: user.role,
+        status: user.status || "active",
         credits: serializeCredits(user),
       },
       token: generateToken(user._id),
