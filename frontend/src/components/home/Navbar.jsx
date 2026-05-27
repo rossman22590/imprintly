@@ -9,7 +9,7 @@ import LogoIcon from "../LogoIcon";
 const navLinks = [
   { label: "Features", href: "/#features", hash: "#features" },
   { label: "Pricing", to: "/pricing" },
-  { label: "Testimonials", href: "/#testimonials", hash: "#testimonials" },
+  { label: "AI Tutor", href: "https://account.myapps.ai/", external: true },
 ];
 
 function Navbar() {
@@ -73,7 +73,7 @@ function Navbar() {
 
         {/* Desktop navigation */}
         <nav className="hidden lg:flex items-center gap-x-1">
-          {navLinks.map(({ label, href, hash, to }) => {
+          {navLinks.map(({ label, href, hash, to, external }) => {
             const isActive = to
               ? location.pathname === to
               : location.pathname === "/" && activeUrlHash === hash;
@@ -96,6 +96,8 @@ function Navbar() {
               <a
                 key={label}
                 href={href}
+                target={external ? "_blank" : undefined}
+                rel={external ? "noopener noreferrer" : undefined}
                 className="relative px-4 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors duration-200 group"
               >
                 {label}
@@ -190,7 +192,7 @@ function Navbar() {
             className="lg:hidden overflow-hidden bg-white/98 backdrop-blur-md border-t border-zinc-100"
           >
             <nav className="p-4 grid grid-cols-1 gap-y-1">
-              {navLinks.map(({ label, href, hash, to }) => {
+              {navLinks.map(({ label, href, hash, to, external }) => {
                 const isActive = to
                   ? location.pathname === to
                   : location.pathname === "/" && activeUrlHash === hash;
@@ -213,6 +215,8 @@ function Navbar() {
                   <a
                     key={label}
                     href={href}
+                    target={external ? "_blank" : undefined}
+                    rel={external ? "noopener noreferrer" : undefined}
                     onClick={() => setIsMobileMenuOpen(false)}
                     className={className}
                   >

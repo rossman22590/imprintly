@@ -8,6 +8,7 @@ import {
   DocsPage,
   EditBookPage,
   ErrorPage,
+  ForgotPasswordPage,
   KDPStudioPage,
   LandingPage,
   PricingPage,
@@ -16,6 +17,7 @@ import {
   PublicBookPreviewPage,
   PublicSharePage,
   JobsPage,
+  ResetPasswordPage,
   SignInPage,
   SignUpPage,
 } from "../pages";
@@ -52,6 +54,18 @@ const router = createBrowserRouter([
             <SignInPage />
           </PublicRoute>
         ),
+      },
+      {
+        path: "forgot-password",
+        element: (
+          <PublicRoute>
+            <ForgotPasswordPage />
+          </PublicRoute>
+        ),
+      },
+      {
+        path: "reset-password/:token",
+        element: <ResetPasswordPage />,
       },
       {
         path: "shelf/:shareToken",

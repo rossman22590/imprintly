@@ -34,7 +34,7 @@ const Button = ({
 }) => (
   <button
     disabled={isLoading || disabled}
-    aria-label={ariaLabel}
+    aria-label={ariaLabel || undefined}
     className={`font-medium whitespace-nowrap inline-flex justify-center items-center ${
       children ? "gap-2" : ""
     } transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${

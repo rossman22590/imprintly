@@ -46,6 +46,11 @@ const ENV = {
   CLIENT_URL: process.env.CLIENT_URL ?? "",
   CLIENT_URLS: process.env.CLIENT_URLS ?? "",
   CORS_ALLOW_ALL: process.env.CORS_ALLOW_ALL ?? "",
+  RESEND_API_KEY: process.env.RESEND_API_KEY ?? "",
+  MAIL_FROM_NAME: process.env.MAIL_FROM_NAME ?? "Bookify",
+  MAIL_FROM_EMAIL: process.env.MAIL_FROM_EMAIL ?? "bookify@myapps.ai",
+  PASSWORD_RESET_TOKEN_TTL_MINUTES:
+    process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES ?? "60",
 };
 
 module.exports = ENV;

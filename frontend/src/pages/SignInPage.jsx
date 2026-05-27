@@ -144,6 +144,15 @@ function SignInPage() {
               error={errors.password}
             />
 
+            <div className="-mt-2 flex justify-end">
+              <Link
+                to="/forgot-password"
+                className="text-xs sm:text-sm text-violet-600 font-medium transition-all duration-200 hover:text-violet-700 hover:underline focus-visible:text-violet-700 focus-visible:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
+
             <Button
               type="submit"
               isLoading={isLoading}

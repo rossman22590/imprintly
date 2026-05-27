@@ -98,6 +98,37 @@ const userSchema = new mongoose.Schema(
       default: "user",
       index: true,
     },
+    status: {
+      type: String,
+      enum: ["active", "banned"],
+      default: "active",
+      index: true,
+    },
+    bannedAt: {
+      type: Date,
+      default: null,
+    },
+    bannedReason: {
+      type: String,
+      default: "",
+      trim: true,
+      maxLength: [300, "Ban reason cannot exceed 300 characters"],
+    },
+    bannedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    passwordResetTokenHash: {
+      type: String,
+      default: "",
+      select: false,
+    },
+    passwordResetTokenExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
     credits: {
       balance: {
         type: Number,
@@ -172,6 +203,12 @@ userSchema.index(
   {
     unique: true,
     partialFilterExpression: { "bookshelfShare.token": { $gt: "" } },
+  }
+);
+userSchema.index(
+  { passwordResetTokenHash: 1 },
+  {
+    partialFilterExpression: { passwordResetTokenHash: { $gt: "" } },
   }
 );
 

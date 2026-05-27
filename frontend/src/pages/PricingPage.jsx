@@ -1,10 +1,12 @@
 import { Footer, Navbar } from "../components";
-import { Link } from "react-router";
 import {
   ArrowRight,
   BadgeCheck,
   Check,
   CircleDollarSign,
+  ExternalLink,
+  Gift,
+  GraduationCap,
   Sparkles,
   Star,
   WandSparkles,
@@ -26,6 +28,7 @@ const proofPoints = [
 ];
 
 const PRO_PLAN_CHECKOUT_URL = "https://buy.stripe.com/fZucMY8FS1Wz9Ki4MIgjC0x";
+const AI_TUTOR_URL = "https://account.myapps.ai/";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 28 },
@@ -99,13 +102,16 @@ function PricingPage() {
                 </motion.div>
 
                 <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}>
-                  <Link
-                    to="/login"
-                    className="group text-zinc-700 font-semibold rounded-xl px-7 py-4 border border-zinc-200 inline-flex items-center gap-x-2 transition-all duration-200 hover:border-zinc-300 hover:bg-zinc-50"
+                  <a
+                    href={AI_TUTOR_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative overflow-hidden bg-linear-to-r from-violet-600 via-fuchsia-600 to-pink-600 text-white font-bold rounded-xl px-7 py-4 shadow-xl shadow-fuchsia-500/25 ring-1 ring-fuchsia-400/30 inline-flex items-center gap-x-2 transition-all duration-200 hover:shadow-2xl hover:shadow-fuchsia-500/35"
                   >
-                    <Sparkles className="size-4 text-violet-600" />
-                    <span>AI Tutor member sign in</span>
-                  </Link>
+                    <span className="absolute inset-0 bg-white/0 transition-colors duration-200 group-hover:bg-white/10" />
+                    <GraduationCap className="relative z-10 size-5 text-yellow-200" />
+                    <span className="relative z-10">Get AI Tutor</span>
+                  </a>
                 </motion.div>
               </motion.div>
             </motion.div>
@@ -186,10 +192,69 @@ function PricingPage() {
                     Already have AI Tutor? Your Bookify access is covered, so
                     you can move straight into the writing workspace.
                   </p>
+
+                  <a
+                    href={AI_TUTOR_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group mt-7 w-full bg-white text-zinc-950 font-semibold rounded-xl px-5 py-3.5 inline-flex items-center justify-center gap-x-2 transition-colors duration-200 hover:bg-zinc-100"
+                  >
+                    <span>Get AI Tutor</span>
+                    <ExternalLink className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                  </a>
                 </div>
               </section>
             </motion.div>
           </div>
+        </div>
+      </section>
+
+      <section className="bg-white pb-10 lg:pb-14">
+        <div className="max-w-7xl px-6 lg:px-8 mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 28 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+            className="relative overflow-hidden rounded-3xl bg-zinc-950 px-6 py-7 sm:px-8 lg:px-10 text-white shadow-2xl shadow-zinc-950/15"
+          >
+            <div className="absolute inset-0 bg-dot-grid opacity-[0.05]" />
+            <div className="absolute inset-x-0 top-0 h-1.5 bg-linear-to-r from-yellow-300 via-pink-500 to-violet-500" />
+
+            <div className="relative grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6 lg:gap-10 items-center">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+                <span className="size-14 rounded-2xl bg-yellow-300 text-zinc-950 inline-flex items-center justify-center shrink-0 shadow-lg shadow-yellow-300/20">
+                  <Gift className="size-7" />
+                </span>
+                <div>
+                  <p className="inline-flex items-center gap-x-2 text-yellow-300 text-xs font-bold uppercase tracking-widest">
+                    <Sparkles className="size-4" />
+                    AI Tutor bonus
+                  </p>
+                  <h2 className="font-headline text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight mt-2">
+                    Get AI Tutor and your Bookify plan is free.
+                  </h2>
+                  <p className="text-zinc-300 leading-relaxed mt-3 max-w-2xl">
+                    Start with AI Tutor at MyApps and Bookify Pro access is
+                    included, so you can learn, write, and publish from the same
+                    membership.
+                  </p>
+                </div>
+              </div>
+
+              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}>
+                <a
+                  href={AI_TUTOR_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group w-full sm:w-auto bg-white text-zinc-950 font-bold rounded-xl px-7 py-4 inline-flex items-center justify-center gap-x-2 transition-colors duration-200 hover:bg-zinc-100"
+                >
+                  <span>Get AI Tutor</span>
+                  <ExternalLink className="size-5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </a>
+              </motion.div>
+            </div>
+          </motion.div>
         </div>
       </section>
 

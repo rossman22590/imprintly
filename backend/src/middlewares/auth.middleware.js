@@ -5,6 +5,7 @@ const {
   getCsrfTokensFromRequest,
   setAuthCookie,
 } = require("../utils/auth-cookie");
+const User = require("../models/User");
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -17,6 +18,16 @@ async function authenticate(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, ENV.JWT_SECRET_KEY);
+    const user = await User.findById(decoded.id).select("status");
+
+    if (!user) {
+      return res.status(401).json({ error: "Invalid or expired token!" });
+    }
+
+    if (user.status === "banned") {
+      return res.status(403).json({ error: "This account has been banned." });
+    }
+
     req.user = { id: decoded.id };
 
     if (source === "cookie" && !SAFE_METHODS.has(req.method)) {
