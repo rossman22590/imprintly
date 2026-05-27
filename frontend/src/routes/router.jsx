@@ -16,6 +16,7 @@ import {
   PublicBookPreviewPage,
   PublicSharePage,
   ResetPasswordPage,
+  RunsPage,
   SignInPage,
   SignUpPage,
 } from "../pages";
@@ -90,6 +91,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <DocsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "runs",
+        element: (
+          <ProtectedRoute>
+            <RunsPage />
           </ProtectedRoute>
         ),
       },
