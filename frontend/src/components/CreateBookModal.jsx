@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Bot,
   BookOpen,
+  ChevronDown,
   FileText,
   Hash,
   Image as ImageIcon,
@@ -107,6 +108,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   const [useGoogleSearch, setUseGoogleSearch] = useState(false);
   const [generateCover, setGenerateCover] = useState(true);
   const [includeImages, setIncludeImages] = useState(false);
+  const [isVisualBibleExpanded, setIsVisualBibleExpanded] = useState(false);
   const [includeTextGraphics, setIncludeTextGraphics] = useState(false);
   const [visualBible, setVisualBible] = useState(EMPTY_VISUAL_BIBLE);
   const [uploadingReferenceId, setUploadingReferenceId] = useState("");
@@ -118,6 +120,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
 
   const chaptersContainerRef = useRef(null);
   const activePollRef = useRef(null);
+  const modalScrollRef = useRef(null);
 
   const { user } = useAuthContext();
 
@@ -138,6 +141,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setUseGoogleSearch(false);
     setGenerateCover(true);
     setIncludeImages(false);
+    setIsVisualBibleExpanded(false);
     setIncludeTextGraphics(false);
     setVisualBible(EMPTY_VISUAL_BIBLE);
     setUploadingReferenceId("");
@@ -261,6 +265,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
       ...current,
       [sectionKey]: [...(current[sectionKey] || []), createVisualReference()],
     }));
+    setIsVisualBibleExpanded(true);
   };
 
   const removeVisualReference = (sectionKey, index) => {
@@ -546,6 +551,12 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!includeImages && modalScrollRef.current) {
+      modalScrollRef.current.scrollTop = 0;
+    }
+  }, [includeImages]);
+
   return (
     <Modal
       isOpen={isOpen}
@@ -555,11 +566,29 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
       }}
       sizeClassName="max-w-[min(64rem,calc(100vw-1rem))]"
       title="Create AI Book"
+      contentRef={modalScrollRef}
+      footer={
+        step === 1 ? (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-slate-500 text-xs">
+              Step 1 of 2 &middot; Review the outline before generating the book
+            </p>
+            <Button
+              type="button"
+              onClick={handleGenerateOutline}
+              isLoading={isGeneratingOutline}
+              icon={Sparkles}
+            >
+              Generate Outline with AI
+            </Button>
+          </div>
+        ) : null
+      }
     >
       {step === 1 && (
-        <div className="space-y-4 md:space-y-5">
+        <div className="space-y-3 md:space-y-3.5">
           {/* Progress indicator */}
-          <ol className="flex items-center gap-2 mb-4 md:mb-6">
+          <ol className="flex items-center gap-2 mb-3 md:mb-4">
             <li
               aria-label="Step 1"
               className="size-7 md:size-8 bg-violet-100 text-violet-600 text-xs md:text-sm font-semibold rounded-full flex justify-center items-center"
@@ -659,20 +688,31 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                 id="book-topic"
                 value={topic}
                 onChange={(event) => setTopic(event.target.value)}
-                rows={4}
-                className="w-full min-h-28 resize-y bg-white text-gray-900 text-sm placeholder-gray-400 pl-10 pr-3 py-3 border border-gray-200 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                rows={3}
+                className="w-full min-h-20 resize-y bg-white text-gray-900 text-sm placeholder-gray-400 pl-10 pr-3 py-3 border border-gray-200 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="Describe the book idea, angle, audience needs, must-cover points, or anything the AI should know."
               />
             </div>
           </div>
 
-          <Select
-            value={writingStyle}
-            onChange={(event) => setWritingStyle(event.target.value)}
-            options={WRITING_STYLES}
-            icon={Palette}
-            label="Writing Style"
-          />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Select
+              value={writingStyle}
+              onChange={(event) => setWritingStyle(event.target.value)}
+              options={WRITING_STYLES}
+              icon={Palette}
+              label="Writing Style"
+            />
+
+            <Input
+              type="text"
+              value={audience}
+              onChange={(event) => setAudience(event.target.value)}
+              icon={Users}
+              label="Audience"
+              placeholder="General readers, founders, beginners..."
+            />
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Select
@@ -739,15 +779,6 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
               </span>
             </label>
           )}
-
-          <Input
-            type="text"
-            value={audience}
-            onChange={(event) => setAudience(event.target.value)}
-            icon={Users}
-            label="Audience"
-            placeholder="General readers, founders, beginners..."
-          />
 
           <label className="flex items-center justify-between gap-4 rounded-xl border border-violet-200 bg-violet-50/60 px-4 py-3 cursor-pointer">
             <span className="flex items-start gap-3 min-w-0">
@@ -823,22 +854,14 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           </label>
 
           {includeImages && (
-            <section className="rounded-2xl border border-slate-200 bg-slate-950 text-white overflow-hidden">
-              <div className="p-4 md:p-5 border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.35),transparent_34%),linear-gradient(135deg,rgba(15,23,42,1),rgba(30,41,59,1))]">
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <p className="text-white text-sm font-semibold">
-                      Visual Bible
-                    </p>
-                    <p className="text-slate-300 text-xs mt-1 max-w-2xl leading-relaxed">
-                      Optional. Upload or store image links for recurring
-                      characters, style, and locations. Bookify uses them as
-                      image inputs, then still uses the first chapter image for
-                      overall art continuity.
-                    </p>
-                  </div>
+            <section className="rounded-xl border border-slate-200 bg-slate-950 text-white overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.3),transparent_40%),linear-gradient(135deg,rgba(15,23,42,1),rgba(30,41,59,1))] flex items-center justify-between gap-3">
+                <p className="text-white text-sm font-semibold shrink-0">
+                  Visual Bible
+                </p>
 
-                  <label className="flex items-center gap-2 text-xs text-slate-200 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
+                  <label className="hidden md:flex items-center gap-2 text-xs text-slate-200">
                     <input
                       type="checkbox"
                       checked={visualBible.matchBookStyle !== false}
@@ -850,35 +873,55 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                       }
                       className="size-4 accent-violet-500"
                     />
-                    Match generated book style
+                    Match book style
                   </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsVisualBibleExpanded((value) => !value)}
+                    aria-expanded={isVisualBibleExpanded}
+                    aria-label={
+                      isVisualBibleExpanded
+                        ? "Hide Visual Bible references"
+                        : "Show Visual Bible references"
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+                  >
+                    {isVisualBibleExpanded ? "Hide" : "Add references"}
+                    <ChevronDown
+                      className={`size-3.5 transition-transform ${
+                        isVisualBibleExpanded ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
                 </div>
               </div>
 
-              <div className="p-4 md:p-5 space-y-5 bg-slate-50 text-slate-900">
-                {VISUAL_REFERENCE_SECTIONS.map((section) => (
-                  <div key={section.key} className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <h4 className="text-sm font-semibold text-slate-900">
-                        {section.label}
-                      </h4>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        icon={Plus}
-                        onClick={() => addVisualReference(section.key)}
-                      >
-                        {section.addLabel}
-                      </Button>
-                    </div>
+              {isVisualBibleExpanded && (
+              <div className="p-3 md:p-4 space-y-3 bg-slate-50 text-slate-900">
+                  {VISUAL_REFERENCE_SECTIONS.map((section) => (
+                    <div key={section.key} className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <h4 className="text-sm font-semibold text-slate-900">
+                          {section.label}
+                        </h4>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          icon={Plus}
+                          onClick={() => addVisualReference(section.key)}
+                        >
+                          {section.addLabel}
+                        </Button>
+                      </div>
 
                     {(visualBible[section.key] || []).length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-4 text-xs text-slate-500">
+                      <div className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2.5 text-xs text-slate-500">
                         No {section.label.toLowerCase()} references yet.
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 gap-3">
+                      <div className="grid grid-cols-1 gap-2">
                         {(visualBible[section.key] || []).map(
                           (reference, index) => {
                             const uploadKey = `${section.key}-${reference.id || index}`;
@@ -888,10 +931,10 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                             return (
                               <div
                                 key={reference.id || index}
-                                className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+                                className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm"
                               >
-                                <div className="grid grid-cols-1 lg:grid-cols-[7rem,1fr] gap-3">
-                                  <div className="h-28 rounded-lg bg-slate-100 overflow-hidden border border-slate-200 flex items-center justify-center">
+                                <div className="grid grid-cols-1 lg:grid-cols-[5rem,1fr] gap-2.5">
+                                  <div className="h-20 rounded-lg bg-slate-100 overflow-hidden border border-slate-200 flex items-center justify-center">
                                     {reference.imageUrl ? (
                                       <img
                                         src={reference.imageUrl}
@@ -1018,9 +1061,10 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                         )}
                       </div>
                     )}
-                  </div>
-                ))}
-              </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
 
@@ -1061,17 +1105,6 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
             </span>
           </label>
 
-          {/* Action button */}
-          <div className="pt-3 md:pt-4 flex justify-end">
-            <Button
-              type="button"
-              onClick={handleGenerateOutline}
-              isLoading={isGeneratingOutline}
-              icon={Sparkles}
-            >
-              Generate Outline with AI
-            </Button>
-          </div>
         </div>
       )}
 

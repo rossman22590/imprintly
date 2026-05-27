@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuthContext } from "../../contexts/AuthContext";
 import { Link, useNavigate } from "react-router";
 import { LogOut, Menu, X } from "lucide-react";
+import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion";
 import ProfileMenu from "../ProfileMenu";
 import LogoIcon from "../LogoIcon";
 
@@ -17,73 +18,81 @@ function Navbar() {
   const [activeUrlHash, setActiveUrlHash] = useState(window.location.hash);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
 
-  // Listen for URL hash change
+  const { scrollY } = useScroll();
+
+  useMotionValueEvent(scrollY, "change", (latest) => {
+    setIsScrolled(latest > 50);
+  });
+
   useEffect(() => {
     const updateUrlHash = () => setActiveUrlHash(window.location.hash);
-
     window.addEventListener("hashchange", updateUrlHash);
-
     return () => window.removeEventListener("hashchange", updateUrlHash);
   }, []);
 
-  // Close profile dropdown menu when clicked outside
   useEffect(() => {
     const handleOutsideClicks = () => {
-      if (isProfileMenuOpen) {
-        setIsProfileMenuOpen(false);
-      }
+      if (isProfileMenuOpen) setIsProfileMenuOpen(false);
     };
-
     document.addEventListener("click", handleOutsideClicks);
-
     return () => document.removeEventListener("click", handleOutsideClicks);
   }, [isProfileMenuOpen]);
-
-  const getLgScrNavLinkClass = (hash) => {
-    return `${
-      activeUrlHash === hash
-        ? "bg-violet-50/50 text-violet-500"
-        : "bg-transparent text-gray-600"
-    } text-sm font-medium rounded-lg px-4 py-2 transition-colors duration-200 hover:bg-violet-50/50 hover:text-violet-500 focus-visible:bg-violet-50 focus-visible:text-violet-600`;
-  };
-
-  const getSmScrNavLinkClass = (hash) => {
-    return `${
-      activeUrlHash === hash
-        ? "bg-violet-50 text-violet-600"
-        : "bg-transparent text-gray-700"
-    } text-sm font-medium rounded-lg px-4 py-2.5 transition-colors duration-200 hover:bg-violet-50 hover:text-violet-600 focus-visible:bg-violet-50 focus-visible:text-violet-600`;
-  };
 
   const handleSignout = () => {
     unauthenticateUser(() => navigate("/", { replace: true }));
   };
 
   return (
-    <header className="bg-white/60 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50">
+    <motion.header
+      className="sticky top-0 z-50 border-b transition-colors duration-300"
+      animate={{
+        backgroundColor: isScrolled ? "rgba(255,255,255,0.97)" : "rgba(255,255,255,0)",
+        borderColor: isScrolled ? "rgba(228,228,231,1)" : "rgba(228,228,231,0)",
+        boxShadow: isScrolled ? "0 1px 20px rgba(0,0,0,0.06)" : "none",
+      }}
+      transition={{ duration: 0.3 }}
+    >
       <div className="max-w-7xl h-16 px-6 lg:px-8 mx-auto flex justify-between items-center gap-4">
         {/* Logo */}
         <Link to="/" className="inline-flex items-center gap-x-2.5 group">
-          <span className="size-9 bg-linear-to-br from-violet-400 to-purple-500 rounded-xl shadow-lg shadow-violet-500/20 inline-flex justify-center items-center transition-all duration-300 group-hover:shadow-violet-500/40 group-focus-visible:shadow-violet-500/40 group-hover:scale-105 group-focus-visible:scale-105">
+          <motion.span
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.96 }}
+            className="size-9 bg-linear-to-br from-violet-600 to-purple-700 rounded-xl shadow-lg shadow-violet-500/20 inline-flex justify-center items-center"
+          >
             <LogoIcon className="size-5 text-white" />
-          </span>
-
-          <span className="text-xl font-semibold text-gray-900 tracking-tight">
+          </motion.span>
+          <span className="text-[1.05rem] font-bold text-zinc-900 tracking-tight font-headline">
             Bookify
           </span>
         </Link>
 
         {/* Desktop navigation */}
         <nav className="hidden lg:flex items-center gap-x-1">
-          {navLinks.map(({ label, hash }) => (
-            <a key={label} href={hash} className={getLgScrNavLinkClass(hash)}>
-              {label}
-            </a>
-          ))}
+          {navLinks.map(({ label, hash }) => {
+            const isActive = activeUrlHash === hash;
+            return (
+              <a
+                key={label}
+                href={hash}
+                className="relative px-4 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors duration-200 group"
+              >
+                {label}
+                <motion.span
+                  className="absolute bottom-0 left-4 right-4 h-px bg-violet-600 origin-left"
+                  initial={{ scaleX: 0 }}
+                  animate={{ scaleX: isActive ? 1 : 0 }}
+                  whileHover={{ scaleX: 1 }}
+                  transition={{ duration: 0.2 }}
+                />
+              </a>
+            );
+          })}
         </nav>
 
-        {/* Desktop profile menu & action buttons */}
+        {/* Desktop auth buttons */}
         <div className="hidden lg:flex items-center gap-x-3">
           {isAuthenticated ? (
             <ProfileMenu
@@ -101,107 +110,127 @@ function Navbar() {
             <>
               <Link
                 to="/login"
-                className="text-gray-600 text-sm font-medium rounded-lg px-4 py-2 transition-colors duration-200 hover:bg-gray-50 hover:text-gray-900 focus-visible:bg-gray-50 focus-visible:text-gray-900"
+                className="text-zinc-600 text-sm font-medium px-4 py-2 rounded-lg transition-colors duration-200 hover:bg-zinc-100 hover:text-zinc-900"
               >
                 Sign in
               </Link>
-
-              <Link
-                to="/register"
-                className="bg-linear-to-r from-violet-400 to-purple-500 text-white font-medium rounded-lg px-5 py-2 shadow-lg shadow-violet-500/30 transition-all duration-300 hover:from-violet-700 hover:to-purple-700 hover:shadow-violet-500/50 hover:scale-105 focus-visible:from-violet-700 focus-visible:to-purple-700 focus-visible:shadow-violet-500/50 focus-visible:scale-105"
-              >
-                Get Started
-              </Link>
+              <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.97 }}>
+                <Link
+                  to="/register"
+                  className="bg-zinc-900 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-md shadow-zinc-900/20 transition-all duration-200 hover:bg-zinc-800 inline-block"
+                >
+                  Get Started
+                </Link>
+              </motion.div>
             </>
           )}
         </div>
 
-        {/* Mobile menu toggler button */}
+        {/* Mobile menu toggler */}
         <button
           type="button"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
-          className="lg:hidden text-gray-600 rounded-full p-2 transition-colors duration-200 hover:bg-gray-100 hover:text-gray-900 focus-visible:bg-gray-100 focus-visible:text-gray-900"
+          className="lg:hidden text-zinc-600 rounded-full p-2 transition-colors duration-200 hover:bg-zinc-100 hover:text-zinc-900"
         >
-          {isMobileMenuOpen ? (
-            <X className="size-5" />
-          ) : (
-            <Menu className="size-5" />
-          )}
+          <AnimatePresence mode="wait" initial={false}>
+            {isMobileMenuOpen ? (
+              <motion.span
+                key="close"
+                initial={{ rotate: -90, opacity: 0 }}
+                animate={{ rotate: 0, opacity: 1 }}
+                exit={{ rotate: 90, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                <X className="size-5" />
+              </motion.span>
+            ) : (
+              <motion.span
+                key="menu"
+                initial={{ rotate: 90, opacity: 0 }}
+                animate={{ rotate: 0, opacity: 1 }}
+                exit={{ rotate: -90, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                <Menu className="size-5" />
+              </motion.span>
+            )}
+          </AnimatePresence>
         </button>
       </div>
 
       {/* Mobile menu */}
-      {isMobileMenuOpen && (
-        <div className="lg:hidden bg-white/80 backdrop-blur-md border-t border-gray-100 animate-in slide-in-from-top duration-200">
-          {/* Navigation */}
-          <nav className="p-4 grid grid-cols-1 gap-y-1">
-            {navLinks.map(({ label, hash }) => (
-              <a
-                key={label}
-                href={hash}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={getSmScrNavLinkClass(hash)}
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            key="mobile-menu"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="lg:hidden overflow-hidden bg-white/98 backdrop-blur-md border-t border-zinc-100"
+          >
+            <nav className="p-4 grid grid-cols-1 gap-y-1">
+              {navLinks.map(({ label, hash }) => (
+                <a
+                  key={label}
+                  href={hash}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`text-sm font-medium rounded-lg px-4 py-2.5 transition-colors duration-200 ${
+                    activeUrlHash === hash
+                      ? "bg-violet-50 text-violet-700"
+                      : "text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900"
+                  }`}
+                >
+                  {label}
+                </a>
+              ))}
+            </nav>
 
-          {/* User info & action buttons */}
-          <div className="p-4 border-t border-gray-100">
-            {isAuthenticated ? (
-              <div className="space-y-3">
-                {/* User info display */}
-                <div className="px-2 flex items-center gap-x-3">
-                  <div className="size-10 bg-linear-to-br from-violet-400 to-violet-500 rounded-xl flex justify-center items-center shrink-0">
-                    <span className="text-white text-sm font-semibold">
-                      {user?.name?.[0]?.toUpperCase() ?? "U"}
-                    </span>
+            <div className="p-4 border-t border-zinc-100">
+              {isAuthenticated ? (
+                <div className="space-y-3">
+                  <div className="px-2 flex items-center gap-x-3">
+                    <div className="size-10 bg-linear-to-br from-violet-500 to-purple-600 rounded-xl flex justify-center items-center shrink-0">
+                      <span className="text-white text-sm font-semibold">
+                        {user?.name?.[0]?.toUpperCase() ?? "U"}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-zinc-900 text-sm font-medium truncate">{user?.name ?? ""}</p>
+                      <p className="text-zinc-500 text-xs truncate">{user?.email ?? ""}</p>
+                    </div>
                   </div>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="text-gray-900 text-sm font-medium truncate">
-                      {user?.name ?? ""}
-                    </p>
-
-                    <p className="text-gray-500 text-xs truncate">
-                      {user?.email ?? ""}
-                    </p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSignout}
+                    className="w-full text-red-600 text-sm font-medium rounded-lg px-4 py-2.5 flex justify-center items-center gap-x-2 transition-colors duration-200 hover:bg-red-50"
+                  >
+                    <LogOut className="size-4" />
+                    <span>Sign Out</span>
+                  </button>
                 </div>
-
-                {/* Sign out button */}
-                <button
-                  type="button"
-                  onClick={handleSignout}
-                  className="w-full text-red-600 text-sm font-medium rounded-lg px-4 py-2.5 flex justify-center items-center gap-x-2 transition-colors duration-200 hover:bg-red-50 focus-visible:bg-red-50"
-                >
-                  <LogOut className="size-4" />
-                  <span>Sign Out</span>
-                </button>
-              </div>
-            ) : (
-              <div className="text-center grid grid-cols-1 gap-y-2">
-                <Link
-                  to="/login"
-                  className="text-gray-600 text-sm font-medium rounded-lg px-4 py-2.5 transition-colors duration-200 hover:bg-gray-50 hover:text-gray-900 focus-visible:bg-gray-50 focus-visible:text-gray-900"
-                >
-                  Sign in
-                </Link>
-
-                <Link
-                  to="/register"
-                  className="bg-linear-to-r from-violet-600 to-purple-600 text-white text-sm font-medium rounded-lg px-4 py-2.5 shadow-lg shadow-violet-500/30 transition-all duration-300 hover:from-violet-700 hover:to-purple-700 hover:shadow-violet-700/50 hover:scale-101 focus-visible:from-violet-700 focus-visible:to-purple-700 focus-visible:shadow-violet-500/50 focus-visible:scale-101"
-                >
-                  Get Started
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </header>
+              ) : (
+                <div className="grid grid-cols-1 gap-y-2">
+                  <Link
+                    to="/login"
+                    className="text-zinc-600 text-sm font-medium rounded-lg px-4 py-2.5 text-center transition-colors duration-200 hover:bg-zinc-50 hover:text-zinc-900"
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="bg-zinc-900 text-white text-sm font-semibold rounded-xl px-4 py-2.5 text-center shadow-md shadow-zinc-900/20 transition-colors duration-200 hover:bg-zinc-800"
+                  >
+                    Get Started
+                  </Link>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.header>
   );
 }
 

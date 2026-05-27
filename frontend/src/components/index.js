@@ -9,7 +9,9 @@ export { default as Input } from "./ui/Input";
 export { default as Navbar } from "./home/Navbar";
 export { default as Hero } from "./home/Hero";
 export { default as Features } from "./home/Features";
+export { default as Stats } from "./home/Stats";
 export { default as Testimonials } from "./home/Testimonials";
+export { default as CtaSection } from "./home/CtaSection";
 export { default as Footer } from "./home/Footer";
 
 // Dashboard page components
