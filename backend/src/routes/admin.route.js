@@ -1,8 +1,10 @@
 const express = require("express");
 const {
   adjustCredits,
+  getPlanSettings,
   getUserDetails,
   listUsers,
+  updatePlanSettings,
   updateMonthlyCredits,
   updateUser,
 } = require("../controllers/admin.controller");
@@ -14,6 +16,8 @@ const router = express.Router();
 router.use(authenticate);
 router.use(requireAdmin);
 
+router.get("/plans", getPlanSettings);
+router.put("/plans", updatePlanSettings);
 router.get("/users", listUsers);
 router.get("/users/:userId", getUserDetails);
 router.patch("/users/:userId", updateUser);

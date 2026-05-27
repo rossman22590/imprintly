@@ -1,6 +1,10 @@
 const ENV = require("../configs/env");
 const CreditTransaction = require("../models/CreditTransaction");
 const User = require("../models/User");
+const {
+  DEFAULT_MONTHLY_CREDIT_PRESETS,
+  getMonthlyCreditPlanAmounts,
+} = require("./monthly-credit-plans.service");
 
 function numberFromEnv(value, fallback) {
   const parsed = Number(value);
@@ -18,10 +22,7 @@ const CREDIT_CONFIG = {
 };
 
 const CREDIT_HISTORY_DAYS = 40;
-const MONTHLY_CREDIT_PRESETS = {
-  premium: 500,
-  ultra: 1000,
-};
+const MONTHLY_CREDIT_PRESETS = DEFAULT_MONTHLY_CREDIT_PRESETS;
 
 function roundMoney(value) {
   return Math.round(Number(value || 0) * 1_000_000) / 1_000_000;
@@ -579,7 +580,7 @@ async function setMonthlyCreditAllowance({
   if (
     normalizedPreset &&
     normalizedPreset !== "custom" &&
-    MONTHLY_CREDIT_PRESETS[normalizedPreset] !== numericAmount
+    (await getMonthlyCreditPlanAmounts())[normalizedPreset] !== numericAmount
   ) {
     const error = new Error("Monthly credit preset amount does not match.");
     error.statusCode = 400;

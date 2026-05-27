@@ -7,6 +7,10 @@ const {
   syncUserAdminRole,
 } = require("../utils/admin.service");
 const {
+  getMonthlyCreditPlanSettings,
+  updateMonthlyCreditPlanSettings,
+} = require("../utils/monthly-credit-plans.service");
+const {
   adjustUserCredits,
   buildCreditHistoryQuery,
   CREDIT_HISTORY_DAYS,
@@ -114,6 +118,38 @@ async function listUsers(req, res) {
     console.error("Error listing admin users:", error);
 
     return res.status(500).json({ error: "Internal Server Error!" });
+  }
+}
+
+async function getPlanSettings(req, res) {
+  try {
+    const settings = await getMonthlyCreditPlanSettings();
+
+    return res.status(200).json({
+      message: "Monthly credit plans retrieved.",
+      settings,
+    });
+  } catch (error) {
+    console.error("Error getting admin plan settings:", error);
+
+    return res.status(500).json({ error: "Internal Server Error!" });
+  }
+}
+
+async function updatePlanSettings(req, res) {
+  try {
+    const settings = await updateMonthlyCreditPlanSettings(req.body || {});
+
+    return res.status(200).json({
+      message: "Monthly credit plans updated.",
+      settings,
+    });
+  } catch (error) {
+    console.error("Error updating admin plan settings:", error);
+
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.message || "Internal Server Error!" });
   }
 }
 
@@ -269,8 +305,10 @@ async function updateMonthlyCredits(req, res) {
 
 module.exports = {
   adjustCredits,
+  getPlanSettings,
   getUserDetails,
   listUsers,
+  updatePlanSettings,
   updateMonthlyCredits,
   updateUser,
 };

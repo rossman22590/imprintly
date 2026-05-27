@@ -9,6 +9,7 @@ import {
   ErrorPage,
   KDPStudioPage,
   LandingPage,
+  PricingPage,
   ProfilePage,
   PublicBookshelfPage,
   PublicBookPreviewPage,
@@ -29,6 +30,10 @@ const router = createBrowserRouter([
       {
         index: true,
         element: <LandingPage />,
+      },
+      {
+        path: "pricing",
+        element: <PricingPage />,
       },
       {
         path: "register",

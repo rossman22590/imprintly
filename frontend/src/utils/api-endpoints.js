@@ -35,6 +35,7 @@ export const API_ENDPOINTS = {
     GET: "/api/credits",
   },
   ADMIN: {
+    PLANS: "/api/admin/plans",
     USERS: "/api/admin/users",
   },
   BOOKS: {

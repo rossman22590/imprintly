@@ -73,15 +73,23 @@ function Footer() {
               </li>
               <li>
                 <a
-                  href="#features"
+                  href="/#features"
                   className="text-zinc-500 text-sm transition-colors duration-200 hover:text-white inline-block"
                 >
                   Features
                 </a>
               </li>
               <li>
+                <Link
+                  to="/pricing"
+                  className="text-zinc-500 text-sm transition-colors duration-200 hover:text-white inline-block"
+                >
+                  Pricing
+                </Link>
+              </li>
+              <li>
                 <a
-                  href="#testimonials"
+                  href="/#testimonials"
                   className="text-zinc-500 text-sm transition-colors duration-200 hover:text-white inline-block"
                 >
                   Testimonials

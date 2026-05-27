@@ -11,6 +11,7 @@ import {
   Minus,
   Plus,
   RefreshCw,
+  Save,
   Search,
   ShieldAlert,
   ShieldCheck,
@@ -34,14 +35,42 @@ function formatCredits(value) {
   }).format(Number(value || 0));
 }
 
-const MONTHLY_CREDIT_PRESETS = [
+const DEFAULT_MONTHLY_CREDIT_PRESETS = [
   { id: "premium", label: "Premium", amount: 500, icon: Crown },
   { id: "ultra", label: "Ultra", amount: 1000, icon: Gem },
 ];
 
-function getMonthlyPresetForAmount(amount) {
+function normalizeMonthlyCreditPresets(plans = []) {
+  return DEFAULT_MONTHLY_CREDIT_PRESETS.map((defaultPlan) => {
+    const savedPlan = Array.isArray(plans)
+      ? plans.find((plan) => plan.id === defaultPlan.id)
+      : plans?.[defaultPlan.id];
+    const amount = Number(savedPlan?.amount ?? savedPlan?.monthlyCredits);
+
+    return {
+      ...defaultPlan,
+      amount:
+        Number.isFinite(amount) && amount > 0 ? amount : defaultPlan.amount,
+    };
+  });
+}
+
+function buildPlanForm(plans) {
+  return plans.reduce(
+    (form, plan) => ({
+      ...form,
+      [plan.id]: String(plan.amount),
+    }),
+    {}
+  );
+}
+
+function getMonthlyPresetForAmount(
+  amount,
+  presets = DEFAULT_MONTHLY_CREDIT_PRESETS
+) {
   const numericAmount = Number(amount || 0);
-  const preset = MONTHLY_CREDIT_PRESETS.find(
+  const preset = presets.find(
     (option) => option.amount === numericAmount
   );
 
@@ -122,6 +151,88 @@ function CreditActionButton({ active, icon, children, ...props }) {
   );
 }
 
+function PlanSettingsPanel({
+  plans,
+  planForm,
+  setPlanForm,
+  canSavePlans,
+  isPlansLoading,
+  isSavingPlans,
+  onSavePlans,
+}) {
+  return (
+    <form
+      onSubmit={onSavePlans}
+      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm mb-6"
+    >
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+        <div>
+          <p className="text-violet-600 text-xs font-semibold uppercase tracking-wide">
+            Plans
+          </p>
+          <h2 className="text-slate-950 text-xl font-bold mt-1">
+            Recurring monthly credits
+          </h2>
+        </div>
+        <Button
+          type="submit"
+          icon={Save}
+          isLoading={isSavingPlans}
+          disabled={!canSavePlans}
+          size="sm"
+          className="w-full sm:w-auto"
+        >
+          Save plans
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {plans.map((plan) => {
+          const PlanIcon = plan.icon;
+
+          return (
+            <section
+              key={plan.id}
+              className="rounded-xl border border-slate-200 bg-slate-50/70 p-4"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <span className="size-10 rounded-lg bg-slate-950 text-white flex items-center justify-center shrink-0">
+                  <PlanIcon className="size-5" />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-slate-950 text-sm font-bold">
+                    {plan.label}
+                  </h3>
+                  <p className="text-slate-500 text-xs">
+                    {formatCredits(plan.amount)} credits now
+                  </p>
+                </div>
+              </div>
+
+              <Input
+                label={`${plan.label} recurring amount`}
+                name={`admin-plan-${plan.id}`}
+                type="number"
+                min="1"
+                step="1"
+                value={planForm[plan.id] || ""}
+                onChange={(event) =>
+                  setPlanForm((current) => ({
+                    ...current,
+                    [plan.id]: event.target.value,
+                  }))
+                }
+                disabled={isPlansLoading}
+                required
+              />
+            </section>
+          );
+        })}
+      </div>
+    </form>
+  );
+}
+
 function UserDetailsModal({
   isOpen,
   onClose,
@@ -133,6 +244,7 @@ function UserDetailsModal({
   setCreditForm,
   monthlyCreditForm,
   setMonthlyCreditForm,
+  monthlyCreditPresets,
   creditPreview,
   canSaveUser,
   canApplyCredits,
@@ -368,7 +480,7 @@ function UserDetailsModal({
               </p>
 
               <div className="grid grid-cols-2 gap-2 mb-3">
-                {MONTHLY_CREDIT_PRESETS.map((preset) => (
+                {monthlyCreditPresets.map((preset) => (
                   <CreditActionButton
                     key={preset.id}
                     active={monthlyCreditForm.preset === preset.id}
@@ -398,7 +510,10 @@ function UserDetailsModal({
 
                     setMonthlyCreditForm({
                       amount,
-                      preset: getMonthlyPresetForAmount(amount),
+                      preset: getMonthlyPresetForAmount(
+                        amount,
+                        monthlyCreditPresets
+                      ),
                     });
                   }}
                   helperText="Set to 0 to disable monthly resets."
@@ -564,6 +679,12 @@ function AdminPage() {
   const [transactionHistoryDays, setTransactionHistoryDays] = useState(40);
   const [summary, setSummary] = useState(null);
   const [pagination, setPagination] = useState(null);
+  const [monthlyCreditPresets, setMonthlyCreditPresets] = useState(
+    DEFAULT_MONTHLY_CREDIT_PRESETS
+  );
+  const [planForm, setPlanForm] = useState(
+    buildPlanForm(DEFAULT_MONTHLY_CREDIT_PRESETS)
+  );
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [page, setPage] = useState(1);
@@ -579,12 +700,35 @@ function AdminPage() {
   });
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPlansLoading, setIsPlansLoading] = useState(true);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [isSavingUser, setIsSavingUser] = useState(false);
   const [isAdjustingCredits, setIsAdjustingCredits] = useState(false);
   const [isSavingMonthlyCredits, setIsSavingMonthlyCredits] = useState(false);
+  const [isSavingPlans, setIsSavingPlans] = useState(false);
 
   const isAdmin = user?.role === "admin";
+
+  const fetchPlans = useCallback(async () => {
+    if (!isAdmin) return;
+
+    setIsPlansLoading(true);
+
+    try {
+      const { data } = await axiosInstance.get(API_ENDPOINTS.ADMIN.PLANS);
+      const nextPresets = normalizeMonthlyCreditPresets(
+        data.settings?.plans || data.plans || []
+      );
+
+      setMonthlyCreditPresets(nextPresets);
+      setPlanForm(buildPlanForm(nextPresets));
+    } catch (error) {
+      console.error("Error fetching admin plans:", error);
+      toast.error(error.response?.data?.error || "Failed to load plans.");
+    } finally {
+      setIsPlansLoading(false);
+    }
+  }, [isAdmin]);
 
   const fetchUserDetails = useCallback(async (userId, shouldOpen = true) => {
     if (!userId) return;
@@ -613,7 +757,10 @@ function AdminPage() {
           : "",
         preset:
           data.user?.credits?.monthlyPreset ||
-          getMonthlyPresetForAmount(data.user?.credits?.monthlyAllowance || 0),
+          getMonthlyPresetForAmount(
+            data.user?.credits?.monthlyAllowance || 0,
+            monthlyCreditPresets
+          ),
       });
       setCreditForm({ action: "add", amount: "", note: "" });
     } catch (error) {
@@ -622,7 +769,7 @@ function AdminPage() {
     } finally {
       setIsDetailsLoading(false);
     }
-  }, []);
+  }, [monthlyCreditPresets]);
 
   const fetchUsers = useCallback(async () => {
     if (!isAdmin) return;
@@ -649,6 +796,15 @@ function AdminPage() {
       setIsLoading(false);
     }
   }, [isAdmin, page, roleFilter, search]);
+
+  const handleRefreshAdmin = useCallback(() => {
+    fetchPlans();
+    fetchUsers();
+  }, [fetchPlans, fetchUsers]);
+
+  useEffect(() => {
+    fetchPlans();
+  }, [fetchPlans]);
 
   useEffect(() => {
     const timer = window.setTimeout(fetchUsers, 250);
@@ -697,7 +853,8 @@ function AdminPage() {
   const hasValidMonthlyCreditAmount =
     Number.isFinite(numericMonthlyCreditAmount) && numericMonthlyCreditAmount >= 0;
   const normalizedMonthlyPreset = getMonthlyPresetForAmount(
-    numericMonthlyCreditAmount
+    numericMonthlyCreditAmount,
+    monthlyCreditPresets
   );
   const canSaveMonthlyCredits =
     selectedUser &&
@@ -705,11 +862,65 @@ function AdminPage() {
     (numericMonthlyCreditAmount !==
       Number(selectedUser.credits?.monthlyAllowance || 0) ||
       normalizedMonthlyPreset !== (selectedUser.credits?.monthlyPreset || ""));
+  const hasValidPlanAmounts = monthlyCreditPresets.every((plan) => {
+    const value = planForm[plan.id];
+    const numericValue = Number(value);
+
+    return value !== "" && Number.isFinite(numericValue) && numericValue > 0;
+  });
+  const plansChanged = monthlyCreditPresets.some(
+    (plan) => Number(planForm[plan.id]) !== Number(plan.amount)
+  );
+  const canSavePlans = hasValidPlanAmounts && plansChanged && !isPlansLoading;
 
   const updateSelectedUserInList = (nextUser) => {
     setUsersList((current) =>
       current.map((item) => (item._id === nextUser._id ? nextUser : item))
     );
+  };
+
+  const handleSavePlans = async (event) => {
+    event.preventDefault();
+
+    if (!canSavePlans) return;
+
+    setIsSavingPlans(true);
+
+    try {
+      const { data } = await axiosInstance.put(API_ENDPOINTS.ADMIN.PLANS, {
+        plans: monthlyCreditPresets.reduce(
+          (plans, plan) => ({
+            ...plans,
+            [plan.id]: {
+              amount: Number(planForm[plan.id]),
+            },
+          }),
+          {}
+        ),
+      });
+      const nextPresets = normalizeMonthlyCreditPresets(
+        data.settings?.plans || data.plans || []
+      );
+
+      setMonthlyCreditPresets(nextPresets);
+      setPlanForm(buildPlanForm(nextPresets));
+      setMonthlyCreditForm((current) => ({
+        ...current,
+        preset: getMonthlyPresetForAmount(current.amount, nextPresets),
+      }));
+
+      if (selectedUser) {
+        fetchUserDetails(selectedUser._id, false);
+      }
+
+      fetchUsers();
+      toast.success("Plan amounts updated.");
+    } catch (error) {
+      console.error("Error saving admin plans:", error);
+      toast.error(error.response?.data?.error || "Failed to save plans.");
+    } finally {
+      setIsSavingPlans(false);
+    }
   };
 
   const handleSaveUser = async () => {
@@ -843,12 +1054,22 @@ function AdminPage() {
             type="button"
             variant="secondary"
             icon={RefreshCw}
-            onClick={fetchUsers}
-            isLoading={isLoading}
+            onClick={handleRefreshAdmin}
+            isLoading={isLoading || isPlansLoading}
           >
             Refresh
           </Button>
         </header>
+
+        <PlanSettingsPanel
+          plans={monthlyCreditPresets}
+          planForm={planForm}
+          setPlanForm={setPlanForm}
+          canSavePlans={canSavePlans}
+          isPlansLoading={isPlansLoading}
+          isSavingPlans={isSavingPlans}
+          onSavePlans={handleSavePlans}
+        />
 
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <StatBlock
@@ -1039,6 +1260,7 @@ function AdminPage() {
         setCreditForm={setCreditForm}
         monthlyCreditForm={monthlyCreditForm}
         setMonthlyCreditForm={setMonthlyCreditForm}
+        monthlyCreditPresets={monthlyCreditPresets}
         creditPreview={creditPreview}
         canSaveUser={canSaveUser}
         canApplyCredits={canApplyCredits}

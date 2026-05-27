@@ -1,19 +1,21 @@
 import { useEffect, useState } from "react";
 import { useAuthContext } from "../../contexts/AuthContext";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { LogOut, Menu, X } from "lucide-react";
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion";
 import ProfileMenu from "../ProfileMenu";
 import LogoIcon from "../LogoIcon";
 
 const navLinks = [
-  { label: "Features", hash: "#features" },
-  { label: "Testimonials", hash: "#testimonials" },
+  { label: "Features", href: "/#features", hash: "#features" },
+  { label: "Pricing", to: "/pricing" },
+  { label: "Testimonials", href: "/#testimonials", hash: "#testimonials" },
 ];
 
 function Navbar() {
   const { isAuthenticated, user, unauthenticateUser } = useAuthContext();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [activeUrlHash, setActiveUrlHash] = useState(window.location.hash);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -71,12 +73,29 @@ function Navbar() {
 
         {/* Desktop navigation */}
         <nav className="hidden lg:flex items-center gap-x-1">
-          {navLinks.map(({ label, hash }) => {
-            const isActive = activeUrlHash === hash;
-            return (
+          {navLinks.map(({ label, href, hash, to }) => {
+            const isActive = to
+              ? location.pathname === to
+              : location.pathname === "/" && activeUrlHash === hash;
+            return to ? (
+              <Link
+                key={label}
+                to={to}
+                className="relative px-4 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors duration-200 group"
+              >
+                {label}
+                <motion.span
+                  className="absolute bottom-0 left-4 right-4 h-px bg-violet-600 origin-left"
+                  initial={{ scaleX: 0 }}
+                  animate={{ scaleX: isActive ? 1 : 0 }}
+                  whileHover={{ scaleX: 1 }}
+                  transition={{ duration: 0.2 }}
+                />
+              </Link>
+            ) : (
               <a
                 key={label}
-                href={hash}
+                href={href}
                 className="relative px-4 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors duration-200 group"
               >
                 {label}
@@ -171,20 +190,36 @@ function Navbar() {
             className="lg:hidden overflow-hidden bg-white/98 backdrop-blur-md border-t border-zinc-100"
           >
             <nav className="p-4 grid grid-cols-1 gap-y-1">
-              {navLinks.map(({ label, hash }) => (
-                <a
-                  key={label}
-                  href={hash}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`text-sm font-medium rounded-lg px-4 py-2.5 transition-colors duration-200 ${
-                    activeUrlHash === hash
-                      ? "bg-violet-50 text-violet-700"
-                      : "text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900"
-                  }`}
-                >
-                  {label}
-                </a>
-              ))}
+              {navLinks.map(({ label, href, hash, to }) => {
+                const isActive = to
+                  ? location.pathname === to
+                  : location.pathname === "/" && activeUrlHash === hash;
+                const className = `text-sm font-medium rounded-lg px-4 py-2.5 transition-colors duration-200 ${
+                  isActive
+                    ? "bg-violet-50 text-violet-700"
+                    : "text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900"
+                }`;
+
+                return to ? (
+                  <Link
+                    key={label}
+                    to={to}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={className}
+                  >
+                    {label}
+                  </Link>
+                ) : (
+                  <a
+                    key={label}
+                    href={href}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={className}
+                  >
+                    {label}
+                  </a>
+                );
+              })}
             </nav>
 
             <div className="p-4 border-t border-zinc-100">
