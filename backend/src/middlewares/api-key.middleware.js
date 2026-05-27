@@ -1,4 +1,5 @@
 const apiKeyService = require("../utils/api-key.service");
+const User = require("../models/User");
 
 function getBearerApiKey(req) {
   const authHeader = String(req.headers.authorization || "").trim();
@@ -24,6 +25,16 @@ async function authenticateApiKey(req, res, next) {
 
     if (!apiKey) {
       return res.status(401).json({ error: "Invalid API key." });
+    }
+
+    const user = await User.findById(apiKey.userId).select("status");
+
+    if (!user) {
+      return res.status(401).json({ error: "Invalid API key." });
+    }
+
+    if (user.status === "banned") {
+      return res.status(403).json({ error: "This account has been banned." });
     }
 
     req.user = { id: apiKey.userId.toString() };

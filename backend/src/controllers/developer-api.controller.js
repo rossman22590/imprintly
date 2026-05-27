@@ -12,6 +12,7 @@ const {
   retryGenerationJob,
   validateFullBookJobRequest,
 } = require("../utils/book-generation.jobs");
+const { getCreditSummary } = require("../utils/credits.service");
 
 function serializeV1GenerationJob(job) {
   const value = publicJob(job);
@@ -31,6 +32,24 @@ function serializeV1GenerationJob(job) {
     updatedAt: value.updatedAt || null,
     startedAt: value.startedAt || null,
     completedAt: value.completedAt || null,
+  };
+}
+
+function serializeV1Credits(summary = {}) {
+  const credits = summary.credits || {};
+
+  return {
+    object: "credits",
+    creditsLeft: credits.balance || 0,
+    credits: {
+      balance: credits.balance || 0,
+      lifetimeGranted: credits.lifetimeGranted || 0,
+      lifetimeSpent: credits.lifetimeSpent || 0,
+      monthlyAllowance: credits.monthlyAllowance || 0,
+      monthlyPreset: credits.monthlyPreset || "",
+      monthlyResetAt: credits.monthlyResetAt || null,
+      nextMonthlyResetAt: credits.nextMonthlyResetAt || null,
+    },
   };
 }
 
@@ -177,6 +196,22 @@ async function createGenerationJobV1(req, res) {
   }
 }
 
+async function getCreditsV1(req, res) {
+  try {
+    const summary = await getCreditSummary(req.user.id, {
+      includeTransactions: false,
+    });
+
+    return res.status(200).json(serializeV1Credits(summary));
+  } catch (error) {
+    console.error("Error getting developer API credits:", error);
+
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.message || "Internal Server Error!" });
+  }
+}
+
 async function getGenerationJobV1(req, res) {
   try {
     const job = await getGenerationJob(req.params.jobId, req.user.id);
@@ -287,9 +322,11 @@ module.exports = {
   exportBookEpubV1,
   exportBookPdfV1,
   getBookV1,
+  getCreditsV1,
   getGenerationJobV1,
   retryGenerationJobV1,
   serializePublicBook,
   serializeV1Book,
+  serializeV1Credits,
   serializeV1GenerationJob,
 };

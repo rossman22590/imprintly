@@ -4,6 +4,7 @@ const {
   buildBookDownloadLinks,
   serializePublicBook,
   serializeV1Book,
+  serializeV1Credits,
   serializeV1GenerationJob,
 } = require("./developer-api.controller");
 
@@ -26,6 +27,27 @@ test("serializes developer API generation jobs without user IDs", () => {
   assert.equal(serialized.bookId, "book_123");
   assert.equal(serialized.status, "queued");
   assert.equal(Object.hasOwn(serialized, "userId"), false);
+});
+
+test("serializes developer API credit balances with credits left", () => {
+  const serialized = serializeV1Credits({
+    credits: {
+      balance: 42.5,
+      lifetimeGranted: 100,
+      lifetimeSpent: 57.5,
+      monthlyAllowance: 750,
+      monthlyPreset: "premium",
+      monthlyResetAt: new Date("2026-05-01T00:00:00.000Z"),
+      nextMonthlyResetAt: "2026-06-01T00:00:00.000Z",
+    },
+    transactions: [{ id: "hidden" }],
+  });
+
+  assert.equal(serialized.object, "credits");
+  assert.equal(serialized.creditsLeft, 42.5);
+  assert.equal(serialized.credits.balance, 42.5);
+  assert.equal(serialized.credits.monthlyPreset, "premium");
+  assert.equal(Object.hasOwn(serialized, "transactions"), false);
 });
 
 test("builds absolute PDF and EPUB download links for retrieved books", () => {

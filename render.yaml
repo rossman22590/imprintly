@@ -2,7 +2,7 @@ services:
   - type: web
     name: bookify-api
     runtime: node
-    buildCommand: corepack enable && cd backend && pnpm install
+    buildCommand: corepack enable && cd backend && pnpm install && cd ../frontend && pnpm install && pnpm run build
     startCommand: cd backend && pnpm start
     healthCheckPath: /healthz
     envVars:

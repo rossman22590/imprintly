@@ -8,6 +8,7 @@ import {
   Clipboard,
   Code2,
   Copy,
+  CreditCard,
   Download,
   FileArchive,
   FileText,
@@ -31,6 +32,7 @@ const API_KEY = "book_sk_your_key_here";
 const ON_THIS_PAGE = [
   { id: "overview", label: "Overview" },
   { id: "authentication", label: "Authentication" },
+  { id: "credits", label: "Check credits" },
   { id: "generate", label: "Generate ebook" },
   { id: "poll", label: "Poll job" },
   { id: "retrieve", label: "Retrieve book" },
@@ -49,6 +51,7 @@ const NAV_GROUPS = [
   {
     title: "Endpoints",
     items: [
+      { id: "credits", label: "Check credits", icon: CreditCard },
       { id: "generate", label: "Generate ebook", icon: BookOpen },
       { id: "poll", label: "Poll generation", icon: RefreshCw },
       { id: "retrieve", label: "Retrieve book", icon: Library },
@@ -97,6 +100,23 @@ const GENERATE_RESPONSE = `{
 
 const POLL_CURL = `curl "${API_BASE}/api/v1/generation-jobs/JOB_ID" \\
   -H "Authorization: Bearer ${API_KEY}"`;
+
+const CREDITS_CURL = `curl "${API_BASE}/api/v1/credits" \\
+  -H "Authorization: Bearer ${API_KEY}"`;
+
+const CREDITS_RESPONSE = `{
+  "object": "credits",
+  "creditsLeft": 42.5,
+  "credits": {
+    "balance": 42.5,
+    "lifetimeGranted": 100,
+    "lifetimeSpent": 57.5,
+    "monthlyAllowance": 0,
+    "monthlyPreset": "",
+    "monthlyResetAt": null,
+    "nextMonthlyResetAt": "2026-06-01T00:00:00.000Z"
+  }
+}`;
 
 const RETRIEVE_CURL = `curl "${API_BASE}/api/v1/ebooks/BOOK_ID" \\
   -H "Authorization: Bearer ${API_KEY}"`;
@@ -147,8 +167,23 @@ const ENDPOINTS = [
   },
   {
     method: "GET",
+    path: "/api/v1/credits",
+    purpose: "Check the API key owner's remaining credit balance.",
+  },
+  {
+    method: "GET",
     path: "/api/v1/generation-jobs/:jobId",
     purpose: "Poll status until `status` is `complete` and `bookId` is set.",
+  },
+  {
+    method: "DELETE",
+    path: "/api/v1/generation-jobs/:jobId",
+    purpose: "Request cancellation for a queued or running generation job.",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/generation-jobs/:jobId/retry",
+    purpose: "Retry failed generation steps for an existing job.",
   },
   {
     method: "GET",
@@ -167,6 +202,12 @@ const ENDPOINTS = [
   },
 ];
 
+function findEndpoint(method, path) {
+  return ENDPOINTS.find(
+    (endpoint) => endpoint.method === method && endpoint.path === path
+  );
+}
+
 const ERRORS = [
   {
     code: "401",
@@ -177,6 +218,11 @@ const ERRORS = [
     code: "402",
     title: "Insufficient credits",
     text: "API generations spend the same account credits as the normal app.",
+  },
+  {
+    code: "403",
+    title: "Account disabled or resource forbidden",
+    text: "Banned accounts cannot use API keys. Books and jobs must belong to the user who owns the key.",
   },
   {
     code: "404",
@@ -418,6 +464,23 @@ function ApiDocsPage() {
             </section>
 
             <section
+              id="credits"
+              className="scroll-mt-24 mt-14 border-t border-slate-100 pt-14"
+            >
+              <SectionHeader
+                eyebrow="Credits"
+                title="Check credits left"
+                description="Use this endpoint before starting a generation job when your integration needs to confirm the account has credits available."
+              />
+
+              <EndpointCard endpoint={findEndpoint("GET", "/api/v1/credits")} />
+              <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                <CodeBlock label="curl" code={CREDITS_CURL} />
+                <CodeBlock label="200 response" code={CREDITS_RESPONSE} />
+              </div>
+            </section>
+
+            <section
               id="generate"
               className="scroll-mt-24 mt-14 border-t border-slate-100 pt-14"
             >
@@ -427,7 +490,7 @@ function ApiDocsPage() {
                 description="This endpoint starts the same full-book job system used by the app. It returns immediately with a job ID."
               />
 
-              <EndpointCard endpoint={ENDPOINTS[0]} />
+              <EndpointCard endpoint={findEndpoint("POST", "/api/v1/ebooks")} />
               <div className="mt-4 space-y-4">
                 <CodeBlock label="curl" code={GENERATE_CURL} />
                 <CodeBlock label="202 response" code={GENERATE_RESPONSE} />
@@ -444,7 +507,9 @@ function ApiDocsPage() {
                 description="Poll the job until the response has `status: complete`. Use the returned `bookId` for retrieval and downloads."
               />
 
-              <EndpointCard endpoint={ENDPOINTS[2]} />
+              <EndpointCard
+                endpoint={findEndpoint("GET", "/api/v1/generation-jobs/:jobId")}
+              />
               <div className="mt-4">
                 <CodeBlock label="curl" code={POLL_CURL} />
               </div>
@@ -460,7 +525,7 @@ function ApiDocsPage() {
                 description="The retrieve endpoint returns the saved book JSON and authenticated PDF/EPUB URLs."
               />
 
-              <EndpointCard endpoint={ENDPOINTS[3]} />
+              <EndpointCard endpoint={findEndpoint("GET", "/api/v1/ebooks/:bookId")} />
               <div className="mt-4 space-y-4">
                 <CodeBlock label="curl" code={RETRIEVE_CURL} />
                 <CodeBlock label="200 response" code={RETRIEVE_RESPONSE} />
@@ -478,8 +543,8 @@ function ApiDocsPage() {
               />
 
               <div className="grid gap-4 md:grid-cols-2">
-                <EndpointCard endpoint={ENDPOINTS[4]} />
-                <EndpointCard endpoint={ENDPOINTS[5]} />
+                <EndpointCard endpoint={findEndpoint("GET", "/api/v1/books/:bookId/pdf")} />
+                <EndpointCard endpoint={findEndpoint("GET", "/api/v1/books/:bookId/epub")} />
               </div>
               <div className="mt-4 grid gap-4 xl:grid-cols-2">
                 <CodeBlock label="PDF" code={PDF_CURL} />
@@ -494,7 +559,7 @@ function ApiDocsPage() {
               <SectionHeader
                 eyebrow="Reference"
                 title="Endpoint reference and errors"
-                description="All `/api/v1` routes require the same bearer key. Downloads return `409` while generated books are still running or failed."
+                description="All `/api/v1` routes require the same bearer key. Jobs can be polled, cancelled, or retried; downloads return `409` while generated books are still running or failed."
               />
 
               <div className="grid gap-3">
@@ -551,9 +616,11 @@ function ApiDocsPage() {
                 </p>
                 <div className="space-y-2.5">
                   {[
+                    { icon: CreditCard, text: "Credits balance JSON" },
                     { icon: Code2, text: "JSON for jobs and books" },
                     { icon: FileText, text: "PDF binary download" },
                     { icon: FileArchive, text: "EPUB zip download" },
+                    { icon: RefreshCw, text: "Cancel and retry job controls" },
                     { icon: ListChecks, text: "409 for running or failed jobs" },
                   ].map((item) => (
                     <div key={item.text} className="flex items-start gap-2">

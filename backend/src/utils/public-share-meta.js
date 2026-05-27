@@ -4,6 +4,17 @@ const User = require("../models/User");
 const DEFAULT_SHARE_IMAGE = "/images/hero-image.png";
 const DEFAULT_SITE_NAME = "Bookify";
 
+function activeOwnerQuery(query = {}) {
+  return {
+    ...query,
+    $or: [{ status: "active" }, { status: { $exists: false } }],
+  };
+}
+
+function isBannedOwner(user) {
+  return user?.status === "banned";
+}
+
 function compactText(value = "", maxLength = 180) {
   const text = String(value || "")
     .replace(/```[\s\S]*?```/g, " ")
@@ -81,7 +92,9 @@ function buildMeta({
 }
 
 async function getShelfMeta(token, options = {}) {
-  const user = await User.findOne({ "bookshelfShare.token": token }).lean();
+  const user = await User.findOne(
+    activeOwnerQuery({ "bookshelfShare.token": token })
+  ).lean();
 
   if (!user) return null;
 
@@ -123,11 +136,11 @@ async function getPreviewMeta(token, options = {}) {
     .populate({
       path: "userId",
       select:
-        "name avatar shelfPageName shelfPhotoUrl publicShareMetaTitle publicShareMetaDescription publicShareImageUrl",
+        "name avatar shelfPageName shelfPhotoUrl publicShareMetaTitle publicShareMetaDescription publicShareImageUrl status",
     })
     .lean();
 
-  if (!book) return null;
+  if (!book || isBannedOwner(book.userId)) return null;
 
   const owner = book.userId || {};
   const kdpAssets = book.kdp?.assets || {};

@@ -5,12 +5,15 @@ const {
   exportBookEpubV1,
   exportBookPdfV1,
   getBookV1,
+  getCreditsV1,
   getGenerationJobV1,
   retryGenerationJobV1,
 } = require("../controllers/developer-api.controller");
 const { authenticateApiKey } = require("../middlewares/api-key.middleware");
 
 router.use(authenticateApiKey);
+
+router.get("/credits", getCreditsV1);
 
 router.post("/ebooks", createGenerationJobV1);
 router.post("/generation-jobs", createGenerationJobV1);
