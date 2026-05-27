@@ -2,6 +2,8 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
   buildCreditHistoryQuery,
+  calculateImageCharge,
+  calculateTokenCharge,
   CREDIT_CONFIG,
   CREDIT_HISTORY_DAYS,
   getCreditHistorySince,
@@ -13,8 +15,71 @@ const {
   normalizeMonthlyCreditPlanPayload,
 } = require("./monthly-credit-plans.service");
 
-test("new users default to 50 starting credits", () => {
-  assert.equal(CREDIT_CONFIG.startingCredits, 50);
+function roundUsd(value) {
+  return Math.round(Number(value || 0) * 1_000_000) / 1_000_000;
+}
+
+test("new users default to 500 starting credits", () => {
+  assert.equal(CREDIT_CONFIG.startingCredits, 500);
+});
+
+test("one Bookify credit is worth one cent", () => {
+  assert.equal(CREDIT_CONFIG.usdPerCredit, 0.01);
+});
+
+test("$50 paid value maps to $25 raw provider budget", () => {
+  assert.equal(roundUsd(50 / CREDIT_CONFIG.tokenMarkupMultiplier), 25);
+});
+
+test("token charges use provider and model pricing with 50 percent gross margin", () => {
+  const charge = calculateTokenCharge(
+    {
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      modelName: "openai/gpt-oss-120b",
+    },
+    { provider: "groq" }
+  );
+
+  assert.equal(CREDIT_CONFIG.tokenMarkupMultiplier, 2);
+  assert.equal(charge.baseUsd, 0.75);
+  assert.equal(charge.usdCost, 1.5);
+  assert.equal(charge.credits, 150);
+  assert.equal(roundUsd(charge.credits * CREDIT_CONFIG.usdPerCredit), charge.usdCost);
+});
+
+test("Gemini thinking tokens are billed as output tokens", () => {
+  const charge = calculateTokenCharge(
+    {
+      inputTokens: 1_000_000,
+      outputTokens: 500_000,
+      thinkingTokens: 500_000,
+      modelName: "gemini-3.5-flash",
+    },
+    { provider: "gemini" }
+  );
+
+  assert.equal(charge.visibleOutputTokens, 500_000);
+  assert.equal(charge.thinkingTokens, 500_000);
+  assert.equal(charge.outputTokens, 1_000_000);
+  assert.equal(charge.baseUsd, 10.5);
+  assert.equal(charge.usdCost, 21);
+  assert.equal(charge.credits, 2100);
+  assert.equal(roundUsd(charge.credits * CREDIT_CONFIG.usdPerCredit), charge.usdCost);
+});
+
+test("default Gemini image charges are based on model and size", () => {
+  const charge = calculateImageCharge({
+    provider: "gemini",
+    model: "gemini-3.1-flash-image-preview",
+    imageSize: "1K",
+  });
+
+  assert.equal(charge.baseUsd, 0.067);
+  assert.equal(charge.usdCost, 0.134);
+  assert.equal(charge.credits, 13.4);
+  assert.equal(CREDIT_CONFIG.imageCredits, 13.4);
+  assert.equal(roundUsd(charge.credits * CREDIT_CONFIG.usdPerCredit), charge.usdCost);
 });
 
 test("credit history window defaults to the last 40 days", () => {

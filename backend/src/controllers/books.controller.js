@@ -25,9 +25,9 @@ const {
   migrateChapterPayloadImagesToStorage,
 } = require("../utils/image-asset-migration");
 const {
-  CREDIT_CONFIG,
   assertHasCredits,
   chargeImageUsage,
+  getImageCreditEstimate,
 } = require("../utils/credits.service");
 const { generateShareToken } = require("../utils/share-token");
 const { normalizeChapterLength } = require("../utils/chapter-length");
@@ -312,7 +312,14 @@ async function createBook(req, res) {
 
     if (isEnabled(generateCover)) {
       try {
-        await assertHasCredits(req.user.id, CREDIT_CONFIG.imageCredits);
+        await assertHasCredits(
+          req.user.id,
+          getImageCreditEstimate({
+            provider: "gemini",
+            model: normalizeImageModel(coverModel),
+            imageSize: normalizeImageSize(coverImageSize),
+          })
+        );
         const image = await generateInitialCover(book, {
           coverPrompt,
           coverModel,

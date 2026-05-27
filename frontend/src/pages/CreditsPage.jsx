@@ -32,6 +32,13 @@ function formatUsd(value) {
   }).format(Number(value || 0));
 }
 
+function formatMargin(value) {
+  const multiplier = Number(value || 1);
+  const margin = multiplier > 0 ? (1 - 1 / multiplier) * 100 : 0;
+
+  return `${Math.max(0, margin).toFixed(0)}%`;
+}
+
 function formatDate(value) {
   return value ? new Date(value).toLocaleString() : "Not scheduled";
 }
@@ -205,7 +212,8 @@ function CreditsPage() {
                   Image: {formatCredits(credits?.imageCredits)} credits
                 </p>
                 <p className="text-slate-500 text-xs mt-1">
-                  Tokens: API cost as per model 
+                  Tokens: provider/model cost,{" "}
+                  {formatMargin(credits?.tokenMarkupMultiplier)} margin
                 </p>
               </div>
             </section>
@@ -222,7 +230,7 @@ function CreditsPage() {
                   </p>
                 </div>
                 <span className="text-slate-500 text-xs text-right">
-                  1 credit = {formatUsd(credits?.usdPerCredit)}
+                  1 Bookify credit = {formatUsd(credits?.usdPerCredit)}
                 </span>
               </div>
 

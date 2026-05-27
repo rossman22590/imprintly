@@ -38,10 +38,10 @@ const {
   validateFullBookJobRequest,
 } = require("../utils/book-generation.jobs");
 const {
-  CREDIT_CONFIG,
   assertHasCredits,
   chargeImageUsage,
   chargeTokenUsage,
+  getImageCreditEstimate,
   serializeBilling,
 } = require("../utils/credits.service");
 const { deleteUploadFile } = require("../utils/upload-paths");
@@ -913,7 +913,14 @@ async function generateCoverImage(req, res) {
       referenceImages = [await getCoverReferenceImage(book), ...referenceImages];
     }
 
-    await assertHasCredits(req.user.id, CREDIT_CONFIG.imageCredits);
+    await assertHasCredits(
+      req.user.id,
+      getImageCreditEstimate({
+        provider: "gemini",
+        model: normalizeImageModel(model),
+        imageSize: normalizeImageSize(imageSize),
+      })
+    );
     const image = await generateGeminiImage({
       prompt: finalPrompt,
       model: normalizeImageModel(model),
@@ -1024,7 +1031,14 @@ async function generateChapterImage(req, res) {
       hasVisualReferences: referenceImages.length > 0,
       visualReferenceContext,
     });
-    await assertHasCredits(req.user.id, CREDIT_CONFIG.imageCredits);
+    await assertHasCredits(
+      req.user.id,
+      getImageCreditEstimate({
+        provider: "gemini",
+        model: normalizeImageModel(model),
+        imageSize: normalizeImageSize(imageSize),
+      })
+    );
     const image = await generateGeminiImage({
       prompt: finalPrompt,
       model: normalizeImageModel(model),

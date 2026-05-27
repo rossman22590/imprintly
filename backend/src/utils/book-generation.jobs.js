@@ -23,10 +23,10 @@ const {
   isGeneratedUploadUrl,
 } = require("./chapter-image-markdown");
 const {
-  CREDIT_CONFIG,
   assertHasCredits,
   chargeImageUsage,
   chargeTokenUsage,
+  getImageCreditEstimate,
 } = require("./credits.service");
 const { normalizeChapterLength } = require("./chapter-length");
 const {
@@ -401,10 +401,25 @@ async function createGenerationJob({ userId, payload, retryFailedOnly = false })
 async function validateFullBookJobRequest({ userId, payload = {} }) {
   const includesImages = isEnabled(payload.includeImages ?? payload.generateImages);
   const includesCover = isEnabled(payload.generateCover ?? payload.includeCover);
+  const chapterCountEstimate = Math.max(
+    1,
+    Number.parseInt(payload.chapterCount, 10) ||
+      (Array.isArray(payload.outline) ? payload.outline.length : 0) ||
+      1
+  );
+  const imageCountEstimate =
+    (includesCover ? 1 : 0) +
+    (includesImages ? chapterCountEstimate : 0);
 
   await assertHasCredits(
     userId,
-    includesImages || includesCover ? CREDIT_CONFIG.imageCredits : 0.0001
+    imageCountEstimate > 0
+      ? getImageCreditEstimate({
+          provider: "gemini",
+          model: payload.coverModel || payload.imageModel,
+          imageSize: payload.coverImageSize || payload.imageSize,
+        }) * imageCountEstimate
+      : 0.0001
   );
 
   if (!payload.bookId) return;
@@ -643,16 +658,24 @@ async function runGenerationJob(jobId) {
         payload.generation?.chapterLength ||
         book.generation?.chapterLength
     );
-    await assertHasCredits(
-      job.userId,
-      includeChapterImages || includeCover ? CREDIT_CONFIG.imageCredits : 0.0001
-    );
-
     let chapters = normalizeOutlineChapters(
       !job.retryFailedOnly && payload.outline?.length
         ? payload.outline
         : book.chapters || []
     );
+    const imageCountEstimate =
+      (includeCover ? 1 : 0) + (includeChapterImages ? chapters.length : 0);
+    await assertHasCredits(
+      job.userId,
+      imageCountEstimate > 0
+        ? getImageCreditEstimate({
+            provider: "gemini",
+            model: payload.coverModel,
+            imageSize: payload.coverImageSize || "1K",
+          }) * imageCountEstimate
+        : 0.0001
+    );
+
     let outlineTree = payload.outline || book.generation?.outlineTree || null;
     let outlineGrounding = book.generation?.grounding || null;
     const visualBible = normalizeVisualBiblePayload(
@@ -769,7 +792,14 @@ async function runGenerationJob(jobId) {
           book,
           customPrompt: sanitizeInput(payload.coverPrompt, 4000),
         });
-        await assertHasCredits(job.userId, CREDIT_CONFIG.imageCredits);
+        await assertHasCredits(
+          job.userId,
+          getImageCreditEstimate({
+            provider: "gemini",
+            model: payload.coverModel,
+            imageSize: payload.coverImageSize || "1K",
+          })
+        );
         const coverReferenceImages = await getCoverImageReferences(book);
         const image = await generateGeminiImage({
           prompt: finalPrompt,
@@ -906,7 +936,13 @@ async function runGenerationJob(jobId) {
           await updateBookProgress(book, job);
 
           try {
-            await assertHasCredits(job.userId, CREDIT_CONFIG.imageCredits);
+            await assertHasCredits(
+              job.userId,
+              getImageCreditEstimate({
+                provider: "gemini",
+                imageSize: "1K",
+              })
+            );
             const visualReferenceContext = buildVisualReferencePromptContext(
               visualBible,
               {

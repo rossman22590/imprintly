@@ -48,14 +48,21 @@ function getGeminiClient() {
 function normalizeGeminiStats(response, modelName = "") {
   const usage = response?.usageMetadata || {};
   const inputTokens = Number(usage.promptTokenCount || 0);
-  const outputTokens = Number(usage.candidatesTokenCount || 0);
-  const totalTokens = Number(usage.totalTokenCount || inputTokens + outputTokens);
+  const visibleOutputTokens = Number(usage.candidatesTokenCount || 0);
+  const thinkingTokens = Number(usage.thoughtsTokenCount || 0);
+  const billableOutputTokens = visibleOutputTokens + thinkingTokens;
+  const totalTokens = Number(
+    usage.totalTokenCount || inputTokens + billableOutputTokens
+  );
 
   return {
     ...emptyStats(modelName),
     modelName,
     inputTokens,
-    outputTokens,
+    outputTokens: visibleOutputTokens,
+    visibleOutputTokens,
+    thinkingTokens,
+    billableOutputTokens,
     totalTokens,
   };
 }
