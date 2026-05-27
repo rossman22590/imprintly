@@ -1587,221 +1587,234 @@ function EditBookPage() {
 
       <main className="flex-1 h-full flex flex-col">
         {/* Header */}
-        <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200 p-3 sm:p-4 flex justify-between items-center sticky top-0 z-10">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsSidebarOpen(true)}
-              aria-label="Open sidebar"
-              className="md:hidden text-slate-500 p-2 rounded-lg transition-colors duration-200 hover:text-slate-800 hover:bg-slate-100 focus-visible:text-slate-800 focus-visible:bg-slate-100"
-            >
-              <Menu className="size-6" />
-            </button>
+        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-3 py-3 shadow-sm shadow-slate-200/40 backdrop-blur-sm sm:px-5">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSidebarOpen(true)}
+                  aria-label="Open sidebar"
+                  className="md:hidden text-slate-500 p-2 rounded-lg transition-colors duration-200 hover:text-slate-800 hover:bg-slate-100 focus-visible:text-slate-800 focus-visible:bg-slate-100"
+                >
+                  <Menu className="size-6" />
+                </button>
 
-            {/* Tab switcher */}
-            <nav className="hidden sm:flex items-center gap-x-1 bg-slate-100 rounded-lg p-1">
-              <button
-                type="button"
-                onClick={() => setActiveTab("editor")}
-                className={`flex-1 ${
-                  activeTab === "editor"
-                    ? "bg-white text-slate-800 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700 focus-visible:text-slate-700"
-                } text-sm font-medium rounded-md px-3 sm:px-4 py-2 flex justify-center items-center gap-2 transition-all duration-200`}
-              >
-                <Edit className="size-4" />
-                <span className="hidden sm:inline">Editor</span>
-              </button>
+                {/* Tab switcher */}
+                <nav className="hidden sm:flex items-center gap-x-1 rounded-lg border border-slate-200 bg-slate-50 p-1 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("editor")}
+                    className={`flex-1 ${
+                      activeTab === "editor"
+                        ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                        : "text-slate-500 hover:text-slate-700 focus-visible:text-slate-700"
+                    } text-sm font-medium rounded-md px-3 sm:px-4 py-2 flex justify-center items-center gap-2 transition-all duration-200`}
+                  >
+                    <Edit className="size-4" />
+                    <span className="hidden sm:inline">Editor</span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab("bible")}
-                className={`flex-1 ${
-                  activeTab === "bible"
-                    ? "bg-white text-slate-800 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700 focus-visible:text-slate-700"
-                } text-sm font-medium whitespace-nowrap rounded-md px-3 sm:px-4 py-2 flex justify-center items-center gap-2 transition-all duration-200`}
-              >
-                <BookMarked className="size-4" />
-                <span className="hidden sm:inline">Bible</span>
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("bible")}
+                    className={`flex-1 ${
+                      activeTab === "bible"
+                        ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                        : "text-slate-500 hover:text-slate-700 focus-visible:text-slate-700"
+                    } text-sm font-medium whitespace-nowrap rounded-md px-3 sm:px-4 py-2 flex justify-center items-center gap-2 transition-all duration-200`}
+                  >
+                    <BookMarked className="size-4" />
+                    <span className="hidden sm:inline">Bible</span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab("details")}
-                className={`flex-1 ${
-                  activeTab === "details"
-                    ? "bg-white text-slate-800 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700 focus-visible:text-slate-700"
-                } text-sm font-medium whitespace-nowrap rounded-md px-3 sm:px-4 py-2 flex justify-center items-center gap-2 transition-all duration-200`}
-              >
-                <NotebookText className="size-4" />
-                <span className="hidden sm:inline">Details</span>
-              </button>
-            </nav>
-          </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("details")}
+                    className={`flex-1 ${
+                      activeTab === "details"
+                        ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                        : "text-slate-500 hover:text-slate-700 focus-visible:text-slate-700"
+                    } text-sm font-medium whitespace-nowrap rounded-md px-3 sm:px-4 py-2 flex justify-center items-center gap-2 transition-all duration-200`}
+                  >
+                    <NotebookText className="size-4" />
+                    <span className="hidden sm:inline">Details</span>
+                  </button>
+                </nav>
+              </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2">
-            <CreditBalancePill compact />
+              <div className="ml-auto flex items-center gap-2">
+                <CreditBalancePill compact />
 
-            <Dropdown
-              trigger={
                 <Button
                   type="button"
-                  variant="secondary"
-                  icon={WandSparkles}
+                  isLoading={isSaving}
+                  onClick={() => handleSaveChanges()}
+                  icon={Save}
                   size="sm"
+                  className="h-9 px-3 shadow-md shadow-violet-500/20"
                 >
-                  <span className="hidden lg:inline">AI Tools</span>
+                  Save
                 </Button>
-              }
-            >
-              <DropdownItem onClick={() => handleAiTool("rewrite")}>
-                Rewrite chapter
-              </DropdownItem>
-              <DropdownItem onClick={() => handleAiTool("expand")}>
-                Expand chapter
-              </DropdownItem>
-              <DropdownItem onClick={() => handleAiTool("shorten")}>
-                Shorten chapter
-              </DropdownItem>
-              <DropdownItem onClick={() => handleAiTool("continue")}>
-                Continue writing
-              </DropdownItem>
-              <DropdownItem onClick={() => handleAiTool("tone", "clear, warm, and commercially polished")}>
-                Adjust tone
-              </DropdownItem>
-              <DropdownItem onClick={() => handleAiTool("consistency")}>
-                Consistency check
-              </DropdownItem>
-              <DropdownItem onClick={() => handleAiTool("sources")}>
-                Source warnings
-              </DropdownItem>
-              <DropdownItem onClick={() => handleAiTool("cover")}>
-                Cover prompt
-              </DropdownItem>
-              <DropdownItem onClick={() => handleBibleTool("continuity_check")}>
-                <BookMarked className="text-slate-500 size-4" />
-                Check book continuity
-              </DropdownItem>
-            </Dropdown>
+              </div>
+            </div>
 
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleGenerateFullBook}
-              isLoading={isGenerating}
-              icon={Sparkles}
-              size="sm"
-            >
-              <span className="hidden lg:inline">Generate Full Book</span>
-              <span className="lg:hidden">AI Book</span>
-            </Button>
-
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => navigate(`/books/${bookId}/kdp`)}
-              icon={Store}
-              size="sm"
-            >
-              <span className="hidden lg:inline">KDP Studio</span>
-              <span className="lg:hidden">KDP</span>
-            </Button>
-
-            <Dropdown
-              trigger={
-                <Button
-                  type="button"
-                  variant="secondary"
-                  icon={Share2}
-                  size="sm"
-                  isLoading={isPreviewShareSaving}
-                >
-                  <span className="hidden sm:inline-flex items-center gap-1">
-                    Preview
-                    <ChevronDown className="size-4" />
-                  </span>
-
-                  <span className="sm:hidden">
-                    <ChevronDown className="size-4" />
-                  </span>
-                </Button>
-              }
-            >
-              {book?.previewShare?.token ? (
-                <>
-                  <DropdownItem onClick={handleCopyPreviewShare}>
-                    <Copy className="text-slate-500 size-4" />
-                    Copy preview link
-                  </DropdownItem>
-                  <DropdownItem onClick={handleOpenPreviewShare}>
-                    <ExternalLink className="text-slate-500 size-4" />
-                    Open preview page
-                  </DropdownItem>
-                  <DropdownItem onClick={handleRevokePreviewShare}>
-                    <Unlink className="text-red-500 size-4" />
-                    Revoke preview link
-                  </DropdownItem>
-                </>
-              ) : (
-                <DropdownItem onClick={handleCreatePreviewShare}>
-                  <Share2 className="text-slate-500 size-4" />
-                  Create preview link
+            {/* Action buttons */}
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3">
+              <Dropdown
+                trigger={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    icon={WandSparkles}
+                    size="sm"
+                    ariaLabel="Open AI tools"
+                    className="h-9 px-3"
+                  >
+                    AI Tools
+                  </Button>
+                }
+              >
+                <DropdownItem onClick={() => handleAiTool("rewrite")}>
+                  Rewrite chapter
                 </DropdownItem>
-              )}
-            </Dropdown>
-
-            <Dropdown
-              trigger={
-                <Button
-                  type="button"
-                  variant="secondary"
-                  icon={FileDown}
-                  size="sm"
+                <DropdownItem onClick={() => handleAiTool("expand")}>
+                  Expand chapter
+                </DropdownItem>
+                <DropdownItem onClick={() => handleAiTool("shorten")}>
+                  Shorten chapter
+                </DropdownItem>
+                <DropdownItem onClick={() => handleAiTool("continue")}>
+                  Continue writing
+                </DropdownItem>
+                <DropdownItem
+                  onClick={() =>
+                    handleAiTool("tone", "clear, warm, and commercially polished")
+                  }
                 >
-                  <span className="hidden sm:inline-flex items-center gap-1">
-                    Export
-                    <ChevronDown className="size-4" />
-                  </span>
+                  Adjust tone
+                </DropdownItem>
+                <DropdownItem onClick={() => handleAiTool("consistency")}>
+                  Consistency check
+                </DropdownItem>
+                <DropdownItem onClick={() => handleAiTool("sources")}>
+                  Source warnings
+                </DropdownItem>
+                <DropdownItem onClick={() => handleAiTool("cover")}>
+                  Cover prompt
+                </DropdownItem>
+                <DropdownItem onClick={() => handleBibleTool("continuity_check")}>
+                  <BookMarked className="text-slate-500 size-4" />
+                  Check book continuity
+                </DropdownItem>
+              </Dropdown>
 
-                  <span className="sm:hidden">
-                    <ChevronDown className="size-4" />
-                  </span>
-                </Button>
-              }
-            >
-              <DropdownItem onClick={handleExportPDF}>
-                <FileText className="text-slate-500 size-4" />
-                Export as PDF
-              </DropdownItem>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleGenerateFullBook}
+                isLoading={isGenerating}
+                icon={Sparkles}
+                size="sm"
+                ariaLabel="Generate full book"
+                title="Generate full book"
+                className="h-9 px-3"
+              >
+                Full Book
+              </Button>
 
-              <DropdownItem onClick={handleExportDocx}>
-                <FileCode className="text-slate-500 size-4" />
-                Export as Docx
-              </DropdownItem>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate(`/books/${bookId}/kdp`)}
+                icon={Store}
+                size="sm"
+                ariaLabel="Open KDP Studio"
+                title="Open KDP Studio"
+                className="h-9 px-3"
+              >
+                KDP
+              </Button>
 
-              <DropdownItem onClick={handleExportEpub}>
-                <FileArchive className="text-slate-500 size-4" />
-                Export as EPUB
-              </DropdownItem>
+              <Dropdown
+                trigger={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    icon={Share2}
+                    size="sm"
+                    isLoading={isPreviewShareSaving}
+                    ariaLabel="Preview sharing"
+                    className="h-9 px-3"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Preview
+                      <ChevronDown className="size-4" />
+                    </span>
+                  </Button>
+                }
+              >
+                {book?.previewShare?.token ? (
+                  <>
+                    <DropdownItem onClick={handleCopyPreviewShare}>
+                      <Copy className="text-slate-500 size-4" />
+                      Copy preview link
+                    </DropdownItem>
+                    <DropdownItem onClick={handleOpenPreviewShare}>
+                      <ExternalLink className="text-slate-500 size-4" />
+                      Open preview page
+                    </DropdownItem>
+                    <DropdownItem onClick={handleRevokePreviewShare}>
+                      <Unlink className="text-red-500 size-4" />
+                      Revoke preview link
+                    </DropdownItem>
+                  </>
+                ) : (
+                  <DropdownItem onClick={handleCreatePreviewShare}>
+                    <Share2 className="text-slate-500 size-4" />
+                    Create preview link
+                  </DropdownItem>
+                )}
+              </Dropdown>
 
-              <DropdownItem onClick={handleExportMarkdown}>
-                <FileType className="text-slate-500 size-4" />
-                Export as Markdown
-              </DropdownItem>
-            </Dropdown>
+              <Dropdown
+                trigger={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    icon={FileDown}
+                    size="sm"
+                    ariaLabel="Export book"
+                    className="h-9 px-3"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Export
+                      <ChevronDown className="size-4" />
+                    </span>
+                  </Button>
+                }
+              >
+                <DropdownItem onClick={handleExportPDF}>
+                  <FileText className="text-slate-500 size-4" />
+                  Export as PDF
+                </DropdownItem>
 
-            <Button
-              type="button"
-              isLoading={isSaving}
-              onClick={() => handleSaveChanges()}
-              icon={Save}
-              size="sm"
-            >
-              Save
-            </Button>
+                <DropdownItem onClick={handleExportDocx}>
+                  <FileCode className="text-slate-500 size-4" />
+                  Export as Docx
+                </DropdownItem>
+
+                <DropdownItem onClick={handleExportEpub}>
+                  <FileArchive className="text-slate-500 size-4" />
+                  Export as EPUB
+                </DropdownItem>
+
+                <DropdownItem onClick={handleExportMarkdown}>
+                  <FileType className="text-slate-500 size-4" />
+                  Export as Markdown
+                </DropdownItem>
+              </Dropdown>
+            </div>
           </div>
         </header>
 

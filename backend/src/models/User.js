@@ -98,6 +98,16 @@ const userSchema = new mongoose.Schema(
       default: "user",
       index: true,
     },
+    passwordResetTokenHash: {
+      type: String,
+      default: "",
+      select: false,
+    },
+    passwordResetTokenExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
     credits: {
       balance: {
         type: Number,
@@ -172,6 +182,12 @@ userSchema.index(
   {
     unique: true,
     partialFilterExpression: { "bookshelfShare.token": { $gt: "" } },
+  }
+);
+userSchema.index(
+  { passwordResetTokenHash: 1 },
+  {
+    partialFilterExpression: { passwordResetTokenHash: { $gt: "" } },
   }
 );
 

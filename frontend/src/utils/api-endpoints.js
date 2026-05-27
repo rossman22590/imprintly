@@ -23,6 +23,8 @@ export const API_ENDPOINTS = {
   AUTH: {
     REGISTER: "/api/auth/register",
     LOGIN: "/api/auth/login",
+    REQUEST_PASSWORD_RESET: "/api/auth/password-reset/request",
+    RESET_PASSWORD: "/api/auth/password-reset/confirm",
   },
   PROFILE: {
     GET: "/api/profile",
