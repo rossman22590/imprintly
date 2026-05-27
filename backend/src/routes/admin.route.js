@@ -4,6 +4,7 @@ const {
   deleteUser,
   getPlanSettings,
   getUserDetails,
+  listRuns,
   listUsers,
   updatePlanSettings,
   updateMonthlyCredits,
@@ -20,6 +21,7 @@ router.use(requireAdmin);
 
 router.get("/plans", getPlanSettings);
 router.put("/plans", updatePlanSettings);
+router.get("/runs", listRuns);
 router.get("/users", listUsers);
 router.get("/users/:userId", getUserDetails);
 router.patch("/users/:userId", updateUser);
