@@ -4,12 +4,14 @@ import {
   AlertTriangle,
   BookOpen,
   Brush,
+  CalendarClock,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   CircleHelp,
-  ClipboardCheck,
+  Coins,
+  CreditCard,
   Cpu,
   Download,
   ExternalLink,
@@ -35,7 +37,6 @@ import {
   Type,
   UserRound,
   WandSparkles,
-  Wrench,
   Zap,
 } from "lucide-react";
 import DashboardLayout from "../layouts/DashboardLayout";
@@ -56,6 +57,7 @@ const NAV_GROUPS = [
       { id: "editor", label: "Book editor", icon: PenLine },
       { id: "kdp-studio", label: "KDP Studio", icon: FileText },
       { id: "exports", label: "Exports", icon: Download },
+      { id: "credits", label: "Credits", icon: Coins },
       { id: "ai-models", label: "AI models", icon: Cpu },
     ],
   },
@@ -75,6 +77,7 @@ const ON_THIS_PAGE = [
   { id: "quick-start", label: "Quick start" },
   { id: "workflow-map", label: "How it connects" },
   { id: "core-guides", label: "Feature guides" },
+  { id: "credits", label: "Credits" },
   { id: "ai-models", label: "AI models" },
   { id: "field-reference", label: "Field reference" },
   { id: "checklists", label: "Checklists" },
@@ -83,6 +86,7 @@ const ON_THIS_PAGE = [
 
 const QUICK_LINKS = [
   { label: "Open Dashboard", to: "/dashboard", icon: Library },
+  { label: "Credits", to: "/credits", icon: CreditCard },
   { label: "Edit Profile", to: "/profile", icon: Settings2 },
 ];
 
@@ -286,6 +290,47 @@ const GUIDES = [
     ],
     callout:
       "If an exported file looks stale, the usual fix is to save the manuscript and generate the export again.",
+  },
+  {
+    id: "credits",
+    group: "Usage",
+    title: "Credits and billing",
+    icon: Coins,
+    description:
+      "Credits are the metered balance used for AI work inside Bookify. Text generation spends credits based on billed token usage, image generation spends a fixed image amount, and the Credits page shows the running ledger.",
+    useWhen:
+      "Use this page when you need to understand your balance, buy more credits, review a transaction, or check whether a monthly plan reset changed the available amount.",
+    sections: [
+      {
+        heading: "Where to manage credits",
+        bullets: [
+          "The credit pill in the app header shows the current balance and opens Credits and transactions.",
+          "The Credits page shows available balance, lifetime spent, current rates, and recent transaction history.",
+          "Buy Credits opens the Stripe checkout link for one-time purchases.",
+          "Balances refresh after successful AI requests and when the app window regains focus.",
+        ],
+      },
+      {
+        heading: "What spends credits",
+        bullets: [
+          "Chapter and structure generation debit credits from the actual token cost after the configured markup.",
+          "Image generation uses the fixed image credit amount shown on the Credits page.",
+          "If the balance is lower than the required charge, generation is blocked before spending.",
+          "Transaction rows show whether a charge came from text tokens, images, grants, admin adjustments, or monthly resets.",
+        ],
+      },
+      {
+        heading: "Monthly plans",
+        bullets: [
+          "Premium and Ultra accounts can have recurring monthly credit allowances.",
+          "Monthly credits reset on the 1st of each month to the plan allowance.",
+          "A reset sets the balance to the allowance; it is not a top-up added on top of leftover credits.",
+          "Admins can also assign a custom monthly amount or disable monthly resets.",
+        ],
+      },
+    ],
+    callout:
+      "The Credits page is the source of truth for live rates and balances because admins and environment settings can change credit amounts.",
   },
   {
     id: "public-sharing",
@@ -561,6 +606,43 @@ const FIELD_REFERENCE = [
       },
     ],
   },
+  {
+    id: "credit-fields",
+    title: "Credit fields",
+    icon: Coins,
+    rows: [
+      {
+        term: "Available balance",
+        detail:
+          "Credits currently available for text generation, image generation, and other metered AI work.",
+      },
+      {
+        term: "Lifetime spent",
+        detail:
+          "Total credits debited from the account over time. This does not include credits that were granted or reset.",
+      },
+      {
+        term: "Image credits",
+        detail:
+          "The fixed credit amount charged for each AI image generation request.",
+      },
+      {
+        term: "Token charges",
+        detail:
+          "Text generation charges are calculated from billed input and output tokens, converted through the configured credit rate.",
+      },
+      {
+        term: "Monthly allowance",
+        detail:
+          "Recurring plan amount that resets the account balance on the 1st of each month when enabled.",
+      },
+      {
+        term: "Transaction history",
+        detail:
+          "Recent ledger of debits, grants, adjustments, image charges, token charges, and monthly resets.",
+      },
+    ],
+  },
 ];
 
 const CHECKLISTS = [
@@ -572,6 +654,16 @@ const CHECKLISTS = [
       "Pick a clear genre and outcome.",
       "Start with fewer chapters if you are testing a concept.",
       "Confirm you have enough credits for generation.",
+    ],
+  },
+  {
+    title: "Before spending credits",
+    icon: Coins,
+    items: [
+      "Check the credit pill or Credits page before a large generation run.",
+      "Use fewer chapters while testing a new idea or prompt style.",
+      "Expect images to spend the fixed image credit amount shown on the Credits page.",
+      "Review transaction history after a run if the balance changed more than expected.",
     ],
   },
   {
@@ -625,20 +717,89 @@ const TROUBLESHOOTING = [
       "The first-chapter PDF preview may not exist yet or the PDF export is stale.",
     fix: "Regenerate or refresh the preview source after saving the latest book content.",
   },
+  {
+    problem: "Generation says not enough credits.",
+    icon: Coins,
+    cause:
+      "The requested text or image generation costs more credits than the current account balance.",
+    fix: "Open Credits and transactions, buy credits if needed, then retry the generation after the balance refreshes.",
+  },
+  {
+    problem: "Monthly credits changed my balance.",
+    icon: CalendarClock,
+    cause:
+      "Recurring plans reset the balance to the monthly allowance on the 1st instead of adding the allowance on top of leftovers.",
+    fix: "Check the monthly reset transaction in Credits and transactions. It shows the previous balance and the plan allowance used for the reset.",
+  },
 ];
 
 function normalizeText(value = "") {
-  return String(value).toLowerCase().trim();
+  return String(value)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/[^\w\s./:]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function toSearchText(value) {
+  if (Array.isArray(value)) return value.map(toSearchText).join(" ");
+  if (value && typeof value === "object") {
+    return Object.values(value).map(toSearchText).join(" ");
+  }
+  return value == null ? "" : String(value);
 }
 
 function matchesQuery(values, query) {
-  if (!query) return true;
-  return values
-    .flat(Infinity)
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-    .includes(query);
+  const normalizedQuery = normalizeText(query);
+
+  if (!normalizedQuery) return true;
+
+  const haystack = normalizeText(toSearchText(values));
+  const terms = normalizedQuery.split(" ").filter(Boolean);
+
+  return terms.every((term) => haystack.includes(term));
+}
+
+function filterGroupRowsByQuery(group, query) {
+  if (!query || matchesQuery([group.id, group.title], query)) return group;
+
+  const rows = group.rows.filter((row) => matchesQuery(row, query));
+  return rows.length ? { ...group, rows } : null;
+}
+
+function filterChecklistByQuery(checklist, query) {
+  if (!query || matchesQuery([checklist.title], query)) return checklist;
+
+  const items = checklist.items.filter((item) => matchesQuery(item, query));
+  return items.length ? { ...checklist, items } : null;
+}
+
+function filterProviderByQuery(provider, query) {
+  if (!query) return provider;
+
+  const providerMatch = matchesQuery(
+    [
+      provider.id,
+      provider.name,
+      provider.badge,
+      provider.tagline,
+      provider.description,
+      provider.searchGrounding,
+      provider.note,
+    ],
+    query
+  );
+  const models = provider.models.filter((model) => matchesQuery(model, query));
+
+  if (!providerMatch && models.length === 0) return null;
+
+  return {
+    ...provider,
+    models: providerMatch ? provider.models : models,
+  };
 }
 
 function DocIcon({ icon: Icon, className = "size-5" }) {
@@ -769,6 +930,30 @@ function DocsPage() {
   const [query, setQuery] = useState("");
   const normalizedQuery = normalizeText(query);
 
+  const overviewMatches = useMemo(
+    () =>
+      matchesQuery(
+        [
+          "overview what Bookify does documentation",
+          "AI-assisted book production workspace",
+          "book idea manuscript publishing assets export files public reader links",
+          "Write the book Package the launch Share with readers",
+        ],
+        normalizedQuery
+      ),
+    [normalizedQuery]
+  );
+
+  const filteredStartSteps = useMemo(
+    () => START_STEPS.filter((step) => matchesQuery(step, normalizedQuery)),
+    [normalizedQuery]
+  );
+
+  const filteredWorkflowLanes = useMemo(
+    () => WORKFLOW_LANES.filter((lane) => matchesQuery(lane, normalizedQuery)),
+    [normalizedQuery]
+  );
+
   const filteredGuides = useMemo(
     () =>
       GUIDES.filter((guide) =>
@@ -788,14 +973,27 @@ function DocsPage() {
     [normalizedQuery]
   );
 
+  const filteredAiProviders = useMemo(
+    () =>
+      AI_PROVIDERS.map((provider) =>
+        filterProviderByQuery(provider, normalizedQuery)
+      ).filter(Boolean),
+    [normalizedQuery]
+  );
+
   const filteredReference = useMemo(
     () =>
-      FIELD_REFERENCE.filter((group) =>
-        matchesQuery(
-          [group.title, group.rows.map((r) => [r.term, r.detail])],
-          normalizedQuery
-        )
-      ),
+      FIELD_REFERENCE.map((group) =>
+        filterGroupRowsByQuery(group, normalizedQuery)
+      ).filter(Boolean),
+    [normalizedQuery]
+  );
+
+  const filteredChecklists = useMemo(
+    () =>
+      CHECKLISTS.map((checklist) =>
+        filterChecklistByQuery(checklist, normalizedQuery)
+      ).filter(Boolean),
     [normalizedQuery]
   );
 
@@ -809,9 +1007,24 @@ function DocsPage() {
 
   const hasSearch = Boolean(normalizedQuery);
   const searchResultCount =
+    (overviewMatches ? 1 : 0) +
+    filteredStartSteps.length +
+    filteredWorkflowLanes.length +
     filteredGuides.length +
+    filteredAiProviders.length +
     filteredReference.length +
+    filteredChecklists.length +
     filteredTroubleshooting.length;
+  const hasSearchResults = !hasSearch || searchResultCount > 0;
+  const showOverview = !hasSearch || overviewMatches;
+  const showQuickStart = !hasSearch || filteredStartSteps.length > 0;
+  const showWorkflowMap = !hasSearch || filteredWorkflowLanes.length > 0;
+  const showGuides = !hasSearch || filteredGuides.length > 0;
+  const showAiModels = !hasSearch || filteredAiProviders.length > 0;
+  const showReference = !hasSearch || filteredReference.length > 0;
+  const showChecklists = !hasSearch || filteredChecklists.length > 0;
+  const showTroubleshooting =
+    !hasSearch || filteredTroubleshooting.length > 0;
 
   return (
     <DashboardLayout>
@@ -915,7 +1128,21 @@ function DocsPage() {
               </div>
             )}
 
+            {!hasSearchResults && (
+              <div className="rounded-xl border border-slate-200 py-14 text-center">
+                <Search className="mx-auto size-7 text-slate-300" />
+                <p className="mt-3 text-sm font-semibold text-slate-900">
+                  No docs matched
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Try credits, dashboard, preview, KDP, SEO, themes, or image
+                  generation.
+                </p>
+              </div>
+            )}
+
             {/* ── Overview ──────────────────────────────────────────── */}
+            {showOverview && (
             <section>
               <SectionHeader
                 id="overview"
@@ -961,8 +1188,10 @@ function DocsPage() {
                 ))}
               </div>
             </section>
+            )}
 
             {/* ── Quick start ───────────────────────────────────────── */}
+            {showQuickStart && (
             <section className="mt-14 border-t border-slate-100 pt-14">
               <SectionHeader
                 id="quick-start"
@@ -972,9 +1201,9 @@ function DocsPage() {
               />
 
               <div className="space-y-0">
-                {START_STEPS.map((item, idx) => (
+                {filteredStartSteps.map((item, idx) => (
                   <div key={item.step} className="relative flex gap-4">
-                    {idx < START_STEPS.length - 1 && (
+                    {idx < filteredStartSteps.length - 1 && (
                       <div className="absolute left-[19px] top-10 h-full w-px bg-slate-200" />
                     )}
                     <div className="relative z-10 mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full border-2 border-violet-200 bg-white text-xs font-black text-violet-600">
@@ -1002,8 +1231,10 @@ function DocsPage() {
                 ))}
               </div>
             </section>
+            )}
 
             {/* ── Workflow map ──────────────────────────────────────── */}
+            {showWorkflowMap && (
             <section className="mt-14 border-t border-slate-100 pt-14">
               <SectionHeader
                 id="workflow-map"
@@ -1013,7 +1244,7 @@ function DocsPage() {
               />
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {WORKFLOW_LANES.map((lane) => (
+                {filteredWorkflowLanes.map((lane) => (
                   <div
                     key={lane.title}
                     className="rounded-xl border border-slate-200 bg-white p-5"
@@ -1044,8 +1275,10 @@ function DocsPage() {
                 ))}
               </div>
             </section>
+            )}
 
             {/* ── Feature guides ────────────────────────────────────── */}
+            {showGuides && (
             <section className="mt-14 border-t border-slate-100 pt-14">
               <SectionHeader
                 id="core-guides"
@@ -1072,8 +1305,10 @@ function DocsPage() {
                 </div>
               )}
             </section>
+            )}
 
             {/* ── AI models ────────────────────────────────────────── */}
+            {showAiModels && (
             <section
               id="ai-models"
               className="scroll-mt-24 mt-14 border-t border-slate-100 pt-14"
@@ -1108,7 +1343,7 @@ function DocsPage() {
               </div>
 
               <div className="space-y-8">
-                {AI_PROVIDERS.map((provider) => {
+                {filteredAiProviders.map((provider) => {
                   const badgeClasses =
                     provider.badgeColor === "violet"
                       ? "bg-violet-50 text-violet-700 border-violet-200"
@@ -1254,8 +1489,10 @@ function DocsPage() {
                 })}
               </div>
             </section>
+            )}
 
             {/* ── Field reference ───────────────────────────────────── */}
+            {showReference && (
             <section
               id="field-reference"
               className="scroll-mt-24 mt-14 border-t border-slate-100 pt-14"
@@ -1305,8 +1542,10 @@ function DocsPage() {
                 </div>
               )}
             </section>
+            )}
 
             {/* ── Checklists ────────────────────────────────────────── */}
+            {showChecklists && (
             <section
               id="checklists"
               className="scroll-mt-24 mt-14 border-t border-slate-100 pt-14"
@@ -1318,7 +1557,7 @@ function DocsPage() {
               />
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {CHECKLISTS.map((checklist) => (
+                {filteredChecklists.map((checklist) => (
                   <div
                     key={checklist.title}
                     className="rounded-xl border border-slate-200 bg-white p-4"
@@ -1347,8 +1586,10 @@ function DocsPage() {
                 ))}
               </div>
             </section>
+            )}
 
             {/* ── Troubleshooting ───────────────────────────────────── */}
+            {showTroubleshooting && (
             <section
               id="troubleshooting"
               className="scroll-mt-24 mt-14 border-t border-slate-100 pt-14 pb-16"
@@ -1374,6 +1615,7 @@ function DocsPage() {
                 </div>
               )}
             </section>
+            )}
           </div>
 
           {/* ── Right sidebar ─────────────────────────────────────────── */}
