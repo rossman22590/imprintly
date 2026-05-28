@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   getChapterReferenceImageUrls,
+  getContinuityImageUrls,
   getCoverReferenceImageUrls,
   getPriorChapterImageUrls,
 } = require("./image-reference");
@@ -43,6 +44,89 @@ test("dedupes continuity references when only one prior image exists", () => {
   );
 
   assert.deepEqual(urls, ["https://example.com/chapter-1.png"]);
+});
+
+test("uses first and latest images generated in the current run as continuity fallback", () => {
+  const urls = getContinuityImageUrls([
+    "https://example.com/current-run-1.png",
+    "https://example.com/current-run-2.png",
+    "https://example.com/current-run-3.png",
+  ]);
+
+  assert.deepEqual(urls, [
+    "https://example.com/current-run-1.png",
+    "https://example.com/current-run-3.png",
+  ]);
+});
+
+test("full-book image generation prefers Visual Bible refs before generated continuity", () => {
+  const book = {
+    visualBible: {
+      characters: [
+        {
+          id: "mira",
+          name: "Mira",
+          imageUrl:
+            "https://pixiomedia.nyc3.digitaloceanspaces.com/uploads/mira.jpg",
+        },
+      ],
+    },
+    chapters: [{ title: "Mira opens the gate" }, { title: "Aftermath" }],
+  };
+
+  assert.deepEqual(
+    getChapterReferenceImageUrls(book, 1, {
+      generatedImageUrls: ["https://example.com/current-run-1.png"],
+      visualBibleFirstFallback: true,
+    }),
+    ["https://pixiomedia.nyc3.digitaloceanspaces.com/uploads/mira.jpg"]
+  );
+});
+
+test("full-book image generation falls back to current-run images when Visual Bible has no image refs", () => {
+  const book = {
+    visualBible: {
+      characters: [{ id: "mira", name: "Mira", description: "Pilot" }],
+      styleReferences: [],
+      worldReferences: [],
+    },
+    chapters: [{ title: "Opening" }, { title: "Second chapter" }],
+  };
+
+  assert.deepEqual(
+    getChapterReferenceImageUrls(book, 1, {
+      generatedImageUrls: [
+        "https://example.com/current-run-1.png",
+        "https://example.com/current-run-2.png",
+      ],
+      visualBibleFirstFallback: true,
+    }),
+    [
+      "https://example.com/current-run-1.png",
+      "https://example.com/current-run-2.png",
+    ]
+  );
+});
+
+test("full-book image fallback does not reuse old chapter art before current-run art exists", () => {
+  const book = {
+    visualBible: {},
+    chapters: [
+      {
+        title: "Old opening",
+        images: [{ url: "https://example.com/old-chapter-1.png" }],
+      },
+      { title: "New second chapter" },
+    ],
+  };
+
+  assert.deepEqual(
+    getChapterReferenceImageUrls(book, 1, {
+      generatedImageUrls: [],
+      visualBibleFirstFallback: true,
+    }),
+    []
+  );
 });
 
 test("cover references include supplied visual bible images", () => {

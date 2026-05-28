@@ -76,6 +76,7 @@ test("builds prompt context for selected visual references", () => {
 
   assert.match(context, /Mira/);
   assert.match(context, /visual canon/);
+  assert.match(context, /mandatory visual canon/);
 });
 
 test("serializes visual bible descriptions for chapter text prompts", () => {

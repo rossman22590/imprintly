@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useBlocker, useNavigate, useParams } from "react-router";
 import toast from "react-hot-toast";
 import axiosInstance from "../lib/axios";
 import { API_BASE_URL, API_ENDPOINTS } from "../utils/api-endpoints";
@@ -17,6 +17,7 @@ import {
   FileDown,
   FileText,
   FileType,
+  Image,
   Menu,
   NotebookText,
   Save,
@@ -36,7 +37,9 @@ import {
   CreditBalancePill,
   Dropdown,
   DropdownItem,
+  Input,
 } from "../components";
+import Modal from "../components/ui/Modal";
 import { arrayMove } from "@dnd-kit/sortable";
 
 function escapeRegExp(value = "") {
@@ -135,6 +138,96 @@ const BIBLE_JSON_KEYS = [
   "unresolvedThreads",
   "notes",
 ];
+
+function hasBibleContent(bible = {}) {
+  return BIBLE_JSON_KEYS.some((key) => String(bible?.[key] || "").trim());
+}
+
+function hasVisualBibleContent(visualBible = {}) {
+  return ["characters", "styleReferences", "worldReferences"].some((key) =>
+    (visualBible?.[key] || []).some(
+      (reference) =>
+        String(reference?.name || reference?.label || reference?.description || "").trim() ||
+        String(reference?.imageUrl || "").trim()
+    )
+  ) || String(visualBible?.notes || "").trim();
+}
+
+function excerptMarkdown(content = "", maxLength = 1200) {
+  return String(content || "")
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
+    .replace(/[#>*_`~|-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function cloneBookSnapshot(bookValue) {
+  return JSON.parse(JSON.stringify(bookValue || {}));
+}
+
+function buildChapterGenerationContext({
+  book,
+  targetIndex,
+  includeFutureOutline = true,
+}) {
+  const chapters = Array.isArray(book?.chapters) ? book.chapters : [];
+  const outline = chapters
+    .map(
+      (chapter, index) =>
+        `${index + 1}. ${chapter.title || `Chapter ${index + 1}`}: ${
+          chapter.description || ""
+        }`
+    )
+    .join("\n");
+  const priorChapters = chapters
+    .slice(0, Math.max(targetIndex, 0))
+    .filter((chapter) => String(chapter?.content || "").trim())
+    .slice(-4)
+    .map(
+      (chapter, index) =>
+        `Prior chapter ${index + 1}: ${chapter.title || "Untitled"}\n${
+          chapter.generationStats?.editorialMemory ||
+          excerptMarkdown(chapter.content, 1400)
+        }`
+    )
+    .join("\n\n");
+  const previousChapter = chapters
+    .slice(0, Math.max(targetIndex, 0))
+    .reverse()
+    .find((chapter) => String(chapter?.content || "").trim());
+  const nextOutline = includeFutureOutline
+    ? chapters
+        .slice(targetIndex + 1, targetIndex + 4)
+        .map(
+          (chapter, index) =>
+            `Next planned chapter ${index + 1}: ${
+              chapter.title || "Untitled"
+            } - ${chapter.description || ""}`
+        )
+        .join("\n")
+    : "";
+
+  return [
+    `Book title: ${book?.title || ""}`,
+    `Genre: ${book?.genre || "Nonfiction"}`,
+    `Audience: ${book?.audience || "General readers"}`,
+    "Planned outline:",
+    outline || "No outline provided.",
+    priorChapters
+      ? `\nPrior chapter continuity memory:\n${priorChapters}`
+      : "",
+    previousChapter
+      ? `\nImmediate previous chapter ending:\n${excerptMarkdown(
+          previousChapter.content,
+          1800
+        )}`
+      : "",
+    nextOutline ? `\nUpcoming outline context:\n${nextOutline}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 function stringifyBibleToolValue(value) {
   if (Array.isArray(value)) {
@@ -355,6 +448,8 @@ function EditBookPage() {
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] =
+    useState(false);
   const [activeTab, setActiveTab] = useState("editor"); // "editor" | "bible" | "details"
   const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -362,6 +457,7 @@ function EditBookPage() {
   const [isPreviewShareSaving, setIsPreviewShareSaving] = useState(false);
   const [isGeneratingChapterImage, setIsGeneratingChapterImage] =
     useState(false);
+  const [activeEditorLockMessage, setActiveEditorLockMessage] = useState("");
   const [pendingAiToolReview, setPendingAiToolReview] = useState(null);
   const [pendingBibleReview, setPendingBibleReview] = useState(null);
   const [continuityReport, setContinuityReport] = useState("");
@@ -369,14 +465,52 @@ function EditBookPage() {
     useState(false);
   const [runningBibleTool, setRunningBibleTool] = useState("");
   const [generationJob, setGenerationJob] = useState(null);
+  const [newChapterOptions, setNewChapterOptions] = useState(null);
+  const [regenerateOptions, setRegenerateOptions] = useState(null);
+  const [pendingRegenerationReview, setPendingRegenerationReview] =
+    useState(null);
   const skipNextAutosaveRef = useRef(false);
   const autosaveTimerRef = useRef(null);
   const activeGenerationPollRef = useRef(null);
+  const regenerationOriginalBookRef = useRef(null);
+  const allowRegenerationNavigationRef = useRef(false);
 
   const { bookId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthContext();
   const fileInputRef = useRef(null);
+  const shouldBlockRegenerationNavigation = useCallback(
+    ({ currentLocation, nextLocation }) =>
+      Boolean(pendingRegenerationReview) &&
+      !allowRegenerationNavigationRef.current &&
+      (currentLocation.pathname !== nextLocation.pathname ||
+        currentLocation.search !== nextLocation.search ||
+        currentLocation.hash !== nextLocation.hash),
+    [pendingRegenerationReview]
+  );
+  const regenerationNavigationBlocker = useBlocker(
+    shouldBlockRegenerationNavigation
+  );
+  const blockedRegenerationLocation = regenerationNavigationBlocker.location;
+
+  useEffect(() => {
+    if (regenerationNavigationBlocker.state !== "blocked") return;
+
+    const targetPath = [
+      blockedRegenerationLocation?.pathname || "/dashboard",
+      blockedRegenerationLocation?.search || "",
+      blockedRegenerationLocation?.hash || "",
+    ].join("");
+
+    setPendingRegenerationReview((review) =>
+      review ? { ...review, targetPath } : review
+    );
+  }, [
+    regenerationNavigationBlocker.state,
+    blockedRegenerationLocation?.pathname,
+    blockedRegenerationLocation?.search,
+    blockedRegenerationLocation?.hash,
+  ]);
 
   // Fetch book on mount
   useEffect(() => {
@@ -617,17 +751,81 @@ function EditBookPage() {
     }
   };
 
-  const handleAddChapter = () => {
-    const newChapter = {
-      title: `Chapter ${book.chapters.length + 1}`,
-      content: "",
+  const getDefaultNewChapterOptions = (bookValue = book) => {
+    const chapters = Array.isArray(bookValue?.chapters)
+      ? bookValue.chapters
+      : [];
+    const previousChapter = chapters.at(-1);
+    const nextTitle = `Chapter ${chapters.length + 1}`;
+    const description = previousChapter?.title
+      ? `Continue from "${previousChapter.title}" and carry its unresolved threads forward.`
+      : "";
+
+    return {
+      title: nextTitle,
+      description,
+      startBlank: false,
+      generateImage: false,
+      imagePrompt: previousChapter?.title
+        ? `Create a polished chapter illustration that continues visually from "${previousChapter.title}" while matching the book's established character, setting, and style.`
+        : "Create a polished chapter illustration that introduces this chapter's main scene while matching the book's style.",
     };
-    const updatedChapters = [...book.chapters, newChapter];
-    setBook((prev) => ({ ...prev, chapters: updatedChapters }));
-    setSelectedChapterIndex(updatedChapters.length - 1);
+  };
+
+  const openNewChapterModal = () => {
+    if (isGenerating || isGeneratingChapterImage) {
+      toast.error("Wait for the current AI update to finish first.");
+      return;
+    }
+
+    setNewChapterOptions(getDefaultNewChapterOptions());
+  };
+
+  const createChapterFromOptions = (
+    options = {},
+    chapterNumber = book.chapters.length + 1
+  ) => ({
+    title: String(options.title || "").trim() || `Chapter ${chapterNumber}`,
+    description: String(options.description || "").trim(),
+    content: "",
+  });
+
+  const getNewChapterSnapshot = (options = {}) => {
+    const chapters = Array.isArray(book.chapters) ? book.chapters : [];
+    const chapterIndex = chapters.length;
+    const newChapter = createChapterFromOptions(options, chapterIndex + 1);
+
+    return {
+      chapterIndex,
+      newChapter,
+      nextBook: {
+        ...book,
+        chapters: [...chapters, newChapter],
+      },
+    };
+  };
+
+  const handleStartBlankNewChapter = () => {
+    if (isGenerating || isGeneratingChapterImage) {
+      toast.error("Wait for the current AI update to finish first.");
+      return;
+    }
+
+    const chapters = Array.isArray(book.chapters) ? book.chapters : [];
+    const chapterNumber = chapters.length + 1;
+    const { chapterIndex, nextBook } = getNewChapterSnapshot({
+      title: `Chapter ${chapterNumber}`,
+      description: "",
+    });
+
+    setNewChapterOptions(null);
+    setBook(nextBook);
+    setSelectedChapterIndex(chapterIndex);
   };
 
   const handleEditChapter = (name, value) => {
+    if (isGenerating || isGeneratingChapterImage) return;
+
     const updatedChapters = [...book.chapters];
     updatedChapters[selectedChapterIndex][name] = value;
     setBook((prev) => ({ ...prev, chapters: updatedChapters }));
@@ -654,7 +852,7 @@ function EditBookPage() {
     setSelectedChapterIndex(newIndex);
   };
 
-  const handleSaveChanges = useCallback(async (bookToSave = book, showToast = true) => {
+  const saveBookSnapshot = useCallback(async (bookToSave, showToast = true) => {
     setIsSaving(true);
 
     try {
@@ -662,28 +860,156 @@ function EditBookPage() {
         `${API_ENDPOINTS.BOOKS.UPDATE_CONTENT}/${bookId}`,
         bookToSave
       );
+      const savedBook = normalizeBook(data?.book) || bookToSave;
 
-      if (data?.book) {
-        skipNextAutosaveRef.current = true;
-        setBook(normalizeBook(data?.book));
-      }
+      skipNextAutosaveRef.current = true;
+      setBook(savedBook);
 
       if (showToast) {
         toast.success("Changes saved successfully!");
       }
 
-      return true;
+      return savedBook;
     } catch (error) {
       console.error("Error saving chapter content:", error);
       toast.error("Failed to save changes! Please try again.", {
         duration: 5000,
       });
 
-      return false;
+      return null;
     } finally {
       setIsSaving(false);
     }
-  }, [book, bookId]);
+  }, [bookId]);
+
+  const handleSaveChanges = useCallback(async (bookToSave = book, showToast = true) => {
+    const savedBook = await saveBookSnapshot(bookToSave, showToast);
+
+    return Boolean(savedBook);
+  }, [book, saveBookSnapshot]);
+
+  const handleManualSave = async () => {
+    const saved = await handleSaveChanges();
+
+    if (saved && pendingRegenerationReview) {
+      setPendingRegenerationReview(null);
+      regenerationOriginalBookRef.current = null;
+      allowRegenerationNavigationRef.current = false;
+    }
+  };
+
+  const requestEditorNavigation = useCallback(
+    (path) => {
+      if (pendingRegenerationReview) {
+        setPendingRegenerationReview((review) => ({
+          ...review,
+          targetPath: path,
+        }));
+        return;
+      }
+
+      navigate(path);
+    },
+    [navigate, pendingRegenerationReview]
+  );
+
+  const handleCloseRegenerationLeavePrompt = useCallback(() => {
+    allowRegenerationNavigationRef.current = false;
+
+    if (regenerationNavigationBlocker.state === "blocked") {
+      regenerationNavigationBlocker.reset();
+    }
+
+    setPendingRegenerationReview((review) =>
+      review ? { ...review, targetPath: "" } : review
+    );
+  }, [regenerationNavigationBlocker]);
+
+  const continueAfterRegenerationDecision = useCallback(
+    (targetPath) => {
+      allowRegenerationNavigationRef.current = true;
+
+      if (regenerationNavigationBlocker.state === "blocked") {
+        regenerationNavigationBlocker.proceed();
+        return;
+      }
+
+      navigate(targetPath);
+    },
+    [navigate, regenerationNavigationBlocker]
+  );
+
+  const handleSaveRegeneratedAndContinue = async () => {
+    if (!pendingRegenerationReview) return;
+
+    const targetPath = pendingRegenerationReview.targetPath || "/dashboard";
+    const saved = await handleSaveChanges(book, false);
+
+    if (!saved) {
+      toast.error("Could not save the regenerated book yet.");
+      return;
+    }
+
+    setPendingRegenerationReview(null);
+    regenerationOriginalBookRef.current = null;
+    continueAfterRegenerationDecision(targetPath);
+  };
+
+  const handleSaveRegeneratedDraft = async () => {
+    if (!pendingRegenerationReview) return;
+
+    const saved = await handleSaveChanges(book, false);
+
+    if (!saved) {
+      toast.error("Could not save the regenerated book yet.");
+      return;
+    }
+
+    setPendingRegenerationReview(null);
+    regenerationOriginalBookRef.current = null;
+    allowRegenerationNavigationRef.current = false;
+    toast.success("Regenerated book saved.");
+  };
+
+  const restorePreviousRegenerationDraft = async ({ continueTo = "" } = {}) => {
+    if (!pendingRegenerationReview?.originalBook) return;
+
+    setIsSaving(true);
+
+    try {
+      const { data } = await axiosInstance.put(
+        `${API_ENDPOINTS.BOOKS.UPDATE_CONTENT}/${bookId}`,
+        pendingRegenerationReview.originalBook
+      );
+      const restoredBook =
+        normalizeBook(data?.book) || pendingRegenerationReview.originalBook;
+
+      skipNextAutosaveRef.current = true;
+      setBook(restoredBook);
+      setPendingRegenerationReview(null);
+      regenerationOriginalBookRef.current = null;
+      allowRegenerationNavigationRef.current = false;
+      toast.success("Previous book restored.");
+      if (continueTo) {
+        continueAfterRegenerationDecision(continueTo);
+      }
+    } catch (error) {
+      console.error("Error restoring previous book:", error);
+      toast.error(
+        error.response?.data?.error || "Failed to restore the previous book."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDiscardRegeneratedDraft = () =>
+    restorePreviousRegenerationDraft();
+
+  const handleDiscardRegeneratedAndContinue = () =>
+    restorePreviousRegenerationDraft({
+      continueTo: pendingRegenerationReview?.targetPath || "/dashboard",
+    });
 
   const handleCoverImgUpload = async (event) => {
     const file = event.target.files[0];
@@ -717,17 +1043,27 @@ function EditBookPage() {
     }
   };
 
-  const handleGenerateChapterContent = async (index, providerOverride = null) => {
-    const chapter = book.chapters[index];
+  const generateChapterContentForBook = async ({
+    sourceBook = book,
+    index,
+    providerOverride = null,
+    saveAfter = true,
+    lockMessage = "",
+  }) => {
+    const chapter = sourceBook.chapters[index];
 
     if (!chapter || !chapter.title) {
       toast.error("Chapter title is required to generate content!");
-      return;
+      return null;
     }
 
-    const provider = providerOverride || book.generation?.provider || "groq";
+    const provider = providerOverride || sourceBook.generation?.provider || "groq";
     const providerName = provider === "gemini" ? "Gemini" : "Groq";
 
+    setActiveEditorLockMessage(
+      lockMessage ||
+        `${providerName} is generating "${chapter.title}". Editing is paused so the chapter cannot change underneath the result.`
+    );
     setIsGenerating(true);
     const loadingToast = toast.loading(
       `Generating chapter with ${providerName}...`
@@ -739,37 +1075,37 @@ function EditBookPage() {
       } = await axiosInstance.post(API_ENDPOINTS.AI.GENERATE_CHAPTER_CONTENT, {
         chapterTitle: chapter.title,
         chapterDescription: chapter.description || "",
-        style: book.generation?.style || "Informative",
+        style: sourceBook.generation?.style || "Informative",
         provider,
-        model: provider === "groq" ? book.generation?.sectionModel : undefined,
+        model:
+          provider === "groq" ? sourceBook.generation?.sectionModel : undefined,
         useGoogleSearch:
-          provider === "gemini" && Boolean(book.generation?.useGoogleSearch),
-        includeTextGraphics: Boolean(book.generation?.includeTextGraphics),
-        chapterLength: book.generation?.chapterLength || "medium",
-        bookBible: book.bible,
-        visualBible: book.visualBible,
-        bookTitle: book.title,
-        genre: book.genre || "Nonfiction",
-        audience: book.audience || "General readers",
-        bookContext: book.chapters
-          .map(
-            (item, chapterIndex) =>
-              `${chapterIndex + 1}. ${item.title}: ${item.description || ""}`
-          )
-          .join("\n"),
+          provider === "gemini" &&
+          Boolean(sourceBook.generation?.useGoogleSearch),
+        includeTextGraphics: Boolean(sourceBook.generation?.includeTextGraphics),
+        chapterLength: sourceBook.generation?.chapterLength || "medium",
+        bookBible: sourceBook.bible,
+        visualBible: sourceBook.visualBible,
+        bookTitle: sourceBook.title,
+        genre: sourceBook.genre || "Nonfiction",
+        audience: sourceBook.audience || "General readers",
+        bookContext: buildChapterGenerationContext({
+          book: sourceBook,
+          targetIndex: index,
+        }),
       });
 
-      const updatedChapters = [...book.chapters];
-      updatedChapters[index].content = content;
-      updatedChapters[index].generationStatus = "complete";
-      updatedChapters[index].wordCount = content
-        .split(/\s+/)
-        .filter((word) => word.length > 0).length;
-      updatedChapters[index].generationStats = stats
-        ? { ...stats, provider }
-        : { provider };
-      const updatedBook = { ...book, chapters: updatedChapters };
+      const updatedChapters = [...sourceBook.chapters];
+      updatedChapters[index] = {
+        ...updatedChapters[index],
+        content,
+        generationStatus: "complete",
+        wordCount: countWords(content),
+        generationStats: stats ? { ...stats, provider } : { provider },
+      };
+      const updatedBook = { ...sourceBook, chapters: updatedChapters };
 
+      skipNextAutosaveRef.current = true;
       setBook(updatedBook);
 
       toast.dismiss(loadingToast);
@@ -777,14 +1113,33 @@ function EditBookPage() {
         duration: 3000,
       });
 
-      await handleSaveChanges(updatedBook, false);
+      if (saveAfter) {
+        return await saveBookSnapshot(updatedBook, false);
+      }
+
+      return updatedBook;
     } catch (error) {
       console.error("Error generating chapter content:", error);
       toast.dismiss(loadingToast);
       toast.error("Failed to generate chapter content.", { duration: 5000 });
+      return null;
     } finally {
       setIsGenerating(false);
+      setActiveEditorLockMessage("");
     }
+  };
+
+  const handleGenerateChapterContent = async (index, providerOverride = null) => {
+    if (isGenerating || isGeneratingChapterImage) {
+      toast.error("Wait for the current AI update to finish first.");
+      return;
+    }
+
+    await generateChapterContentForBook({
+      sourceBook: book,
+      index,
+      providerOverride,
+    });
   };
 
   const handleGenerateCoverImage = async ({
@@ -830,14 +1185,23 @@ function EditBookPage() {
     }
   };
 
-  const handleGenerateChapterImage = async (index, options = {}) => {
-    const chapter = book.chapters[index];
+  const generateChapterImageForBook = async ({
+    sourceBook = book,
+    index,
+    options = {},
+    lockMessage = "",
+  }) => {
+    const chapter = sourceBook.chapters[index];
 
     if (!chapter) {
       toast.error("Select a chapter before generating an image.");
-      return;
+      return null;
     }
 
+    setActiveEditorLockMessage(
+      lockMessage ||
+        `Generating an image for "${chapter.title || `Chapter ${index + 1}`}". Editing is paused until the image is inserted.`
+    );
     setIsGeneratingChapterImage(true);
     const loadingToast = toast.loading("Generating chapter image...");
 
@@ -847,26 +1211,108 @@ function EditBookPage() {
       } = await axiosInstance.post(API_ENDPOINTS.AI.GENERATE_CHAPTER_IMAGE, {
         bookId,
         chapterIndex: index,
-        visualBible: book.visualBible,
+        visualBible: sourceBook.visualBible,
         ...options,
       });
+      const normalizedNextBook = normalizeBook(nextBook) || sourceBook;
 
       skipNextAutosaveRef.current = true;
-      setBook(normalizeBook(nextBook));
+      setBook(normalizedNextBook);
       toast.dismiss(loadingToast);
       toast.success("Chapter image inserted into markdown.");
+
+      return normalizedNextBook;
     } catch (error) {
       console.error("Error generating chapter image:", error);
       toast.dismiss(loadingToast);
       toast.error(
         error.response?.data?.error || "Failed to generate chapter image."
       );
+      return null;
     } finally {
       setIsGeneratingChapterImage(false);
+      setActiveEditorLockMessage("");
     }
   };
 
+  const handleGenerateChapterImage = async (index, options = {}) => {
+    if (isGenerating || isGeneratingChapterImage) {
+      toast.error("Wait for the current AI update to finish first.");
+      return;
+    }
+
+    await generateChapterImageForBook({
+      sourceBook: book,
+      index,
+      options,
+    });
+  };
+
+  const handleCreateNewChapter = async (event) => {
+    event.preventDefault();
+
+    if (!newChapterOptions) return;
+
+    if (isGenerating || isGeneratingChapterImage) {
+      toast.error("Wait for the current AI update to finish first.");
+      return;
+    }
+
+    const options = newChapterOptions;
+
+    if (options.startBlank) {
+      handleStartBlankNewChapter();
+      return;
+    }
+
+    const shouldGenerateImage = Boolean(options.generateImage);
+    const { chapterIndex, newChapter, nextBook } = getNewChapterSnapshot(options);
+
+    setNewChapterOptions(null);
+    setSelectedChapterIndex(chapterIndex);
+
+    skipNextAutosaveRef.current = true;
+    setBook(nextBook);
+
+    const sourceBook = shouldGenerateImage
+      ? await saveBookSnapshot(nextBook, false)
+      : nextBook;
+
+    if (!sourceBook) return;
+
+    const generatedBook = await generateChapterContentForBook({
+      sourceBook,
+      index: chapterIndex,
+      lockMessage: shouldGenerateImage
+        ? `Generating text for "${newChapter.title}" before creating the chapter image.`
+        : `Generating text for "${newChapter.title}". Editing is paused while the new chapter is written.`,
+    });
+
+    if (!generatedBook) {
+      toast.error("New chapter was created, but text generation failed.");
+      return;
+    }
+
+    if (!shouldGenerateImage) return;
+
+    const imagePrompt =
+      String(options.imagePrompt || "").trim() ||
+      `Create a polished inline ebook illustration for "${newChapter.title}".`;
+
+    await generateChapterImageForBook({
+      sourceBook: generatedBook,
+      index: chapterIndex,
+      options: { prompt: imagePrompt },
+      lockMessage: `Generating an image for "${newChapter.title}" after writing the chapter.`,
+    });
+  };
+
   const handleGenerateInlineImageCommand = async (index, command) => {
+    if (isGenerating || isGeneratingChapterImage) {
+      toast.error("Wait for the current AI update to finish first.");
+      return;
+    }
+
     const chapter = book.chapters[index];
     const prompt = command?.prompt?.trim();
 
@@ -875,6 +1321,9 @@ function EditBookPage() {
       return;
     }
 
+    setActiveEditorLockMessage(
+      `Generating an image for "${chapter.title || `Chapter ${index + 1}`}". Editing is paused until the image is inserted.`
+    );
     setIsGeneratingChapterImage(true);
     const loadingToast = toast.loading("Generating image for this spot...");
 
@@ -928,11 +1377,12 @@ function EditBookPage() {
       );
     } finally {
       setIsGeneratingChapterImage(false);
+      setActiveEditorLockMessage("");
     }
   };
 
   useEffect(() => {
-    if (!book || isLoading) return;
+    if (!book || isLoading || pendingRegenerationReview) return;
 
     if (skipNextAutosaveRef.current) {
       skipNextAutosaveRef.current = false;
@@ -945,7 +1395,7 @@ function EditBookPage() {
     }, 1500);
 
     return () => clearTimeout(autosaveTimerRef.current);
-  }, [book, handleSaveChanges, isLoading]);
+  }, [book, handleSaveChanges, isLoading, pendingRegenerationReview]);
 
   useEffect(() => {
     return () => {
@@ -954,22 +1404,55 @@ function EditBookPage() {
     };
   }, []);
 
-  const handleGenerateFullBook = async () => {
+  useEffect(() => {
+    if (!pendingRegenerationReview) return undefined;
+
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [pendingRegenerationReview]);
+
+  const handleGenerateFullBook = () => {
     const hasExistingContent = book.chapters.some(
       (chapter) => chapter.content?.trim().length > 0
     );
+    const hasBible = hasBibleContent(book.bible);
+    const hasVisualBible = hasVisualBibleContent(book.visualBible);
 
-    if (
-      hasExistingContent &&
-      !window.confirm(
-        "Generate the full book with AI? This will replace existing chapter content."
-      )
-    ) {
+    setRegenerateOptions({
+      replaceExistingContent: hasExistingContent,
+      useBible: hasBible || hasVisualBible,
+      generateImages: Boolean(book.generation?.includeImages),
+      hasBible,
+      hasVisualBible,
+    });
+  };
+
+  const startFullBookGeneration = async (options = regenerateOptions) => {
+    if (!options) {
       return;
     }
 
+    setRegenerateOptions(null);
+    setActiveEditorLockMessage(
+      "Regenerating the full book. Editing is paused while chapters are being replaced."
+    );
     setIsGenerating(true);
     let pollKey = null;
+    const useBibleForInput = Boolean(options.useBible);
+    const generateImages = Boolean(options.generateImages);
+    const visualBibleForGeneration =
+      generateImages || useBibleForInput ? book.visualBible : { enabled: false };
+    const originalBookSnapshot = cloneBookSnapshot(book);
+
+    regenerationOriginalBookRef.current = originalBookSnapshot;
+    allowRegenerationNavigationRef.current = false;
+    setPendingRegenerationReview(null);
 
     try {
       const {
@@ -992,9 +1475,15 @@ function EditBookPage() {
             book.generation?.provider === "gemini" &&
             Boolean(book.generation?.useGoogleSearch),
           includeTextGraphics: Boolean(book.generation?.includeTextGraphics),
+          includeImages: generateImages,
+          generateImages,
+          includeCover: generateImages && !book.coverImage,
+          generateCover: generateImages && !book.coverImage,
           chapterLength: book.generation?.chapterLength || "medium",
-          bible: book.bible,
-          visualBible: book.visualBible,
+          useBibleForInput,
+          useBibleForImages: generateImages,
+          bible: useBibleForInput ? book.bible : undefined,
+          visualBible: visualBibleForGeneration,
         }
       );
 
@@ -1019,13 +1508,26 @@ function EditBookPage() {
         setGenerationJob(nextJob);
 
         if (nextBook) {
+          const normalizedNextBook = normalizeBook(nextBook) || book;
           skipNextAutosaveRef.current = true;
-          setBook(normalizeBook(nextBook));
+          setBook(normalizedNextBook);
+
+          if (["complete", "failed"].includes(nextJob.status)) {
+            setPendingRegenerationReview({
+              originalBook: originalBookSnapshot,
+              regeneratedBook: normalizedNextBook,
+              status: nextJob.status,
+              targetPath: "",
+            });
+          }
         }
 
         if (["complete", "failed", "cancelled"].includes(nextJob.status)) {
           activeGenerationPollRef.current = null;
           setIsGenerating(false);
+          if (nextJob.status === "cancelled") {
+            regenerationOriginalBookRef.current = null;
+          }
           toast.success(
             nextJob.status === "complete"
               ? "Full book generated successfully!"
@@ -1047,6 +1549,7 @@ function EditBookPage() {
       if (!pollKey || activeGenerationPollRef.current === pollKey) {
         activeGenerationPollRef.current = null;
         setIsGenerating(false);
+        setActiveEditorLockMessage("");
       }
     }
   };
@@ -1321,6 +1824,11 @@ function EditBookPage() {
   };
 
   const handleAiTool = async (action, tone = "") => {
+    if (isGenerating || isGeneratingChapterImage) {
+      toast.error("Wait for the current AI update to finish first.");
+      return;
+    }
+
     const currentChapter = book.chapters[selectedChapterIndex];
 
     if (!currentChapter?.content?.trim()) {
@@ -1328,8 +1836,12 @@ function EditBookPage() {
       return;
     }
 
+    const toolLabel = AI_TOOL_LABELS[action] || "AI tool";
+    setActiveEditorLockMessage(
+      `${toolLabel} is running on "${currentChapter.title || `Chapter ${selectedChapterIndex + 1}`}". Editing is paused so the review diff stays accurate.`
+    );
     setIsGenerating(true);
-    const loadingToast = toast.loading("Running AI tool...");
+    const loadingToast = toast.loading(`${toolLabel} is running...`);
 
     try {
       const {
@@ -1359,7 +1871,7 @@ function EditBookPage() {
         chapterIndex: selectedChapterIndex,
         chapterTitle: currentChapter.title,
         diffRows: buildLineDiff(currentChapter.content, proposedContent),
-        label: AI_TOOL_LABELS[action] || "AI tool",
+        label: toolLabel,
         originalContent: currentChapter.content,
         proposedContent,
         wordDelta: getWordDelta(currentChapter.content, proposedContent),
@@ -1372,6 +1884,7 @@ function EditBookPage() {
       toast.error(error.response?.data?.error || "AI tool failed.");
     } finally {
       setIsGenerating(false);
+      setActiveEditorLockMessage("");
     }
   };
 
@@ -1523,6 +2036,319 @@ function EditBookPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-display flex relative">
+      <Modal
+        isOpen={Boolean(newChapterOptions)}
+        onClose={() => setNewChapterOptions(null)}
+        title="Add new chapter"
+        sizeClassName="max-w-xl"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setNewChapterOptions(null)}
+              disabled={isGenerating || isGeneratingChapterImage}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="new-chapter-form"
+              icon={newChapterOptions?.startBlank ? Save : Sparkles}
+              isLoading={isGenerating || isGeneratingChapterImage}
+            >
+              {newChapterOptions?.startBlank
+                ? "Start Blank"
+                : newChapterOptions?.generateImage
+                  ? "Write Chapter & Image"
+                  : "Write Chapter"}
+            </Button>
+          </div>
+        }
+      >
+        {newChapterOptions && (
+          <form
+            id="new-chapter-form"
+            onSubmit={handleCreateNewChapter}
+            className="space-y-4"
+          >
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-violet-200 hover:bg-violet-50/40">
+              <input
+                type="checkbox"
+                checked={Boolean(newChapterOptions.startBlank)}
+                onChange={(event) =>
+                  setNewChapterOptions((current) => ({
+                    ...current,
+                    startBlank: event.target.checked,
+                    generateImage: event.target.checked
+                      ? false
+                      : current.generateImage,
+                  }))
+                }
+                className="mt-1 size-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="text-sm font-semibold text-slate-900">
+                  Start blank
+                </span>
+                <span className="mt-1 block text-sm text-slate-500">
+                  Creates {`Chapter ${(book.chapters || []).length + 1}`} with
+                  no AI text or image.
+                </span>
+              </span>
+            </label>
+
+            {!newChapterOptions.startBlank && (
+              <>
+                <Input
+                  label="Chapter title"
+                  name="new-chapter-title"
+                  value={newChapterOptions.title}
+                  onChange={(event) =>
+                    setNewChapterOptions((current) => ({
+                      ...current,
+                      title: event.target.value,
+                    }))
+                  }
+                  required
+                  placeholder="Chapter title"
+                />
+
+                <label className="grid grid-cols-1 gap-y-2">
+                  <span className="text-gray-700 text-sm font-medium">
+                    Chapter direction
+                  </span>
+                  <textarea
+                    value={newChapterOptions.description}
+                    onChange={(event) =>
+                      setNewChapterOptions((current) => ({
+                        ...current,
+                        description: event.target.value,
+                      }))
+                    }
+                    rows={4}
+                    maxLength={1200}
+                    placeholder="What should this chapter continue, resolve, or introduce?"
+                    className="w-full min-h-28 bg-white text-gray-900 text-sm placeholder-gray-400 px-3 py-2 border border-gray-200 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 resize-none"
+                  />
+                </label>
+
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-violet-200 hover:bg-violet-50/40">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(newChapterOptions.generateImage)}
+                    onChange={(event) =>
+                      setNewChapterOptions((current) => ({
+                        ...current,
+                        generateImage: event.target.checked,
+                      }))
+                    }
+                    className="mt-1 size-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <Image className="size-4 text-violet-600" />
+                      Generate image after writing
+                    </span>
+                    <span className="mt-1 block text-sm text-slate-500">
+                      Writes this chapter first, then inserts one chapter image
+                      using the direction below.
+                    </span>
+                  </span>
+                </label>
+
+                {newChapterOptions.generateImage && (
+                  <label className="grid grid-cols-1 gap-y-2">
+                    <span className="text-gray-700 text-sm font-medium">
+                      Image direction
+                    </span>
+                    <textarea
+                      value={newChapterOptions.imagePrompt}
+                      onChange={(event) =>
+                        setNewChapterOptions((current) => ({
+                          ...current,
+                          imagePrompt: event.target.value,
+                        }))
+                      }
+                      rows={4}
+                      maxLength={1200}
+                      placeholder="Scene, mood, characters, setting, camera angle, colors..."
+                      className="w-full min-h-28 bg-white text-gray-900 text-sm placeholder-gray-400 px-3 py-2 border border-gray-200 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 resize-none"
+                    />
+                    <span className="text-xs text-slate-500">
+                      Visual Bible references and generated chapter text will
+                      also be used when available.
+                    </span>
+                  </label>
+                )}
+              </>
+            )}
+          </form>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(regenerateOptions)}
+        onClose={() => setRegenerateOptions(null)}
+        title="Regenerate full book"
+        sizeClassName="max-w-xl"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setRegenerateOptions(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              icon={Sparkles}
+              isLoading={isGenerating}
+              onClick={() => startFullBookGeneration(regenerateOptions)}
+            >
+              Start Regeneration
+            </Button>
+          </div>
+        }
+      >
+        {regenerateOptions && (
+          <div className="space-y-4">
+            {regenerateOptions.replaceExistingContent && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                This will replace generated chapter content in the current
+                outline. Save anything you want to keep before starting.
+              </div>
+            )}
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-violet-200 hover:bg-violet-50/40">
+              <input
+                type="checkbox"
+                checked={Boolean(regenerateOptions.useBible)}
+                onChange={(event) =>
+                  setRegenerateOptions((prev) => ({
+                    ...prev,
+                    useBible: event.target.checked,
+                  }))
+                }
+                className="mt-1 size-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <BookMarked className="size-4 text-violet-600" />
+                  Use Book Bible as input
+                </span>
+                <span className="mt-1 block text-sm text-slate-500">
+                  Feeds saved canon, style notes, visual references, and
+                  unresolved threads into the regeneration.
+                </span>
+                {!regenerateOptions.hasBible &&
+                  !regenerateOptions.hasVisualBible && (
+                    <span className="mt-2 block text-xs text-slate-400">
+                      No saved Bible content detected yet.
+                    </span>
+                  )}
+              </span>
+            </label>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-violet-200 hover:bg-violet-50/40">
+              <input
+                type="checkbox"
+                checked={Boolean(regenerateOptions.generateImages)}
+                onChange={(event) =>
+                  setRegenerateOptions((prev) => ({
+                    ...prev,
+                    generateImages: event.target.checked,
+                  }))
+                }
+                className="mt-1 size-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <Image className="size-4 text-violet-600" />
+                  Generate images
+                </span>
+                <span className="mt-1 block text-sm text-slate-500">
+                  Uses Visual Bible references for chapter illustrations and
+                  creates a cover only when this book does not already have one.
+                </span>
+                {!regenerateOptions.hasVisualBible && (
+                  <span className="mt-2 block text-xs text-amber-600">
+                    Add Visual Bible references first for the strongest image
+                    consistency.
+                  </span>
+                )}
+              </span>
+            </label>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(pendingRegenerationReview?.targetPath)}
+        onClose={handleCloseRegenerationLeavePrompt}
+        title="Save regenerated book?"
+        sizeClassName="max-w-lg"
+        footer={
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleCloseRegenerationLeavePrompt}
+            >
+              Stay in Editor
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              isLoading={isSaving}
+              onClick={handleDiscardRegeneratedAndContinue}
+            >
+              Don't Save
+            </Button>
+            <Button
+              type="button"
+              icon={Save}
+              isLoading={isSaving}
+              onClick={handleSaveRegeneratedAndContinue}
+            >
+              Save & Continue
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
+            <p className="text-sm font-semibold text-violet-950">
+              The regenerated version has not been accepted yet.
+            </p>
+            <p className="mt-1 text-sm text-violet-800">
+              Save it to overwrite the previous book, or discard it to restore
+              the version from before regeneration and continue leaving.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <p className="text-xs font-semibold uppercase text-slate-400">
+                Save & Continue
+              </p>
+              <p className="mt-1 text-sm text-slate-700">
+                Keeps the regenerated chapters and moves forward.
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <p className="text-xs font-semibold uppercase text-slate-400">
+                Don't Save
+              </p>
+              <p className="mt-1 text-sm text-slate-700">
+                Restores the previous book, then moves forward.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
       {/* Mobile sidebar */}
       {isSidebarOpen && (
         <aside
@@ -1556,11 +2382,13 @@ function EditBookPage() {
                 setSelectedChapterIndex(index);
                 setIsSidebarOpen(false);
               }}
-              onAddChapter={handleAddChapter}
+              onAddChapter={openNewChapterModal}
               onDeleteChapter={handleDeleteChapter}
+              onBackToDashboard={() => requestEditorNavigation("/dashboard")}
               isGenerating={isGenerating}
               onGenerateChapterContent={handleGenerateChapterContent}
               onReorderChapters={handleReorderChapters}
+              isCollapsed={false}
             />
           </nav>
 
@@ -1577,11 +2405,16 @@ function EditBookPage() {
             setSelectedChapterIndex(index);
             setIsSidebarOpen(false);
           }}
-          onAddChapter={handleAddChapter}
+          onAddChapter={openNewChapterModal}
           onDeleteChapter={handleDeleteChapter}
+          onBackToDashboard={() => requestEditorNavigation("/dashboard")}
           isGenerating={isGenerating}
           onGenerateChapterContent={handleGenerateChapterContent}
           onReorderChapters={handleReorderChapters}
+          isCollapsed={isDesktopSidebarCollapsed}
+          onToggleCollapse={() =>
+            setIsDesktopSidebarCollapsed((isCollapsed) => !isCollapsed)
+          }
         />
       </aside>
 
@@ -1649,7 +2482,7 @@ function EditBookPage() {
                 <Button
                   type="button"
                   isLoading={isSaving}
-                  onClick={() => handleSaveChanges()}
+                  onClick={handleManualSave}
                   icon={Save}
                   size="sm"
                   className="h-9 px-3 shadow-md shadow-violet-500/20"
@@ -1726,7 +2559,7 @@ function EditBookPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate(`/books/${bookId}/kdp`)}
+                onClick={() => requestEditorNavigation(`/books/${bookId}/kdp`)}
                 icon={Store}
                 size="sm"
                 ariaLabel="Open KDP Studio"
@@ -1815,6 +2648,41 @@ function EditBookPage() {
                 </DropdownItem>
               </Dropdown>
             </div>
+
+            {pendingRegenerationReview && (
+              <section className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-amber-950">
+                      Review regenerated book before saving
+                    </p>
+                    <p className="mt-1 text-xs text-amber-800 sm:text-sm">
+                      Browse the chapters now. Autosave is paused until you save
+                      the regenerated version or restore the previous book.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      isLoading={isSaving}
+                      onClick={handleDiscardRegeneratedDraft}
+                    >
+                      Restore Previous
+                    </Button>
+                    <Button
+                      type="button"
+                      icon={Save}
+                      isLoading={isSaving}
+                      onClick={handleSaveRegeneratedDraft}
+                    >
+                      Save Regenerated
+                    </Button>
+                  </div>
+                </div>
+              </section>
+            )}
           </div>
         </header>
 
@@ -2044,6 +2912,11 @@ function EditBookPage() {
               isGeneratingImage={isGeneratingChapterImage}
               onGenerateChapterImage={handleGenerateChapterImage}
               onGenerateInlineImageCommand={handleGenerateInlineImageCommand}
+              isEditorLocked={isGenerating || isGeneratingChapterImage}
+              editorLockMessage={
+                activeEditorLockMessage ||
+                "AI is updating this chapter. Wait until it finishes before editing."
+              }
             />
           ) : activeTab === "bible" ? (
             <BookBibleTab

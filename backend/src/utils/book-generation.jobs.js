@@ -43,6 +43,10 @@ const {
   serializeVisualBible,
 } = require("./visual-bible");
 const { getBookTypeImageGuidance } = require("./book-type-guidance");
+const {
+  buildEnhancedBookContext,
+  runPremiumChapterPipeline,
+} = require("./book-editorial.pipeline");
 
 const activeJobs = new Set();
 
@@ -114,6 +118,10 @@ function shouldIncludeTextGraphics(payload = {}) {
   );
 }
 
+function shouldUseBibleForInput(payload = {}) {
+  return payload.useBibleForInput !== false && payload.useBible !== false;
+}
+
 function excerptContent(content = "", maxLength = 1200) {
   return String(content)
     .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
@@ -147,23 +155,6 @@ function normalizeOutlineChapters(outline = []) {
     }));
 }
 
-function createBookContext({ title, genre, audience, chapters }) {
-  const chapterList = chapters
-    .map(
-      (chapter, index) =>
-        `${index + 1}. ${chapter.title}: ${chapter.description || ""}`
-    )
-    .join("\n");
-
-  return [
-    `Book title: ${title}`,
-    `Genre: ${genre}`,
-    `Audience: ${audience}`,
-    "Planned book outline:",
-    chapterList,
-  ].join("\n");
-}
-
 function buildChapterImagePrompt({
   book,
   chapter,
@@ -171,11 +162,14 @@ function buildChapterImagePrompt({
   genre,
   audience,
   hasVisualReferences = false,
+  referenceMode = "visual",
   visualReferenceContext = "",
 }) {
   const excerpt = excerptContent(content);
   const continuityInstruction = hasVisualReferences
-    ? "\nVisual continuity: use the provided reference image(s) as the book's style bible. Preserve the same overall art direction, lighting logic, palette, character design language, and genre feel, but create a new scene that fits this chapter. Do not copy the previous scene unchanged."
+    ? referenceMode === "generated"
+      ? "\nGenerated art continuity: no Visual Bible image references were supplied, so use the provided earlier generated chapter image(s) as the book's visual seed. Preserve the same art direction, lighting logic, palette, design language, and genre feel while creating a new scene that fits this chapter. Do not copy the previous scene unchanged."
+      : "\nVisual Bible continuity: the provided reference image(s) are mandatory visual canon. Preserve character identity, setting/world cues, art direction, lighting logic, palette, design language, and genre feel while creating a new scene that fits this chapter. Do not copy the previous scene unchanged."
     : "";
   const bookTypeGuidance = getBookTypeImageGuidance(genre);
 
@@ -528,6 +522,7 @@ async function runGenerationJob(jobId) {
         ? payload.outline
         : book.chapters || []
     );
+    const generatedChapterImageUrls = [];
     const imageCountEstimate =
       (includeCover ? 1 : 0) + (includeChapterImages ? chapters.length : 0);
     await assertHasCredits(
@@ -543,19 +538,30 @@ async function runGenerationJob(jobId) {
 
     let outlineTree = payload.outline || book.generation?.outlineTree || null;
     let outlineGrounding = book.generation?.grounding || null;
-    const visualBible = normalizeVisualBiblePayload(
-      payload.visualBible || book.visualBible
-    );
-    const bookBible = serializeGenerationCanon(
-      payload.bible || book.bible,
-      visualBible
+    const useBibleForInput = shouldUseBibleForInput(payload);
+    const useVisualBibleForImages =
+      includeChapterImages ||
+      includeCover ||
+      isEnabled(payload.useBibleForImages);
+    const visualBibleForImages = useVisualBibleForImages
+      ? normalizeVisualBiblePayload(payload.visualBible || book.visualBible)
+      : normalizeVisualBiblePayload({ enabled: false });
+    const visualBibleForText = useBibleForInput
+      ? visualBibleForImages
+      : normalizeVisualBiblePayload({ enabled: false });
+    let currentBookBible = normalizeBookBiblePayload(
+      useBibleForInput ? payload.bible || book.bible || {} : {}
     );
 
-    if (payload.visualBible) {
+    if (payload.visualBible && (useBibleForInput || useVisualBibleForImages)) {
       book.visualBible = {
-        ...visualBible,
+        ...visualBibleForImages,
         updatedAt: new Date(),
       };
+    }
+
+    if (useBibleForInput && (payload.bible || !book.bible)) {
+      book.bible = currentBookBible;
     }
 
     await updateBookProgress(book, job, {
@@ -636,13 +642,6 @@ async function runGenerationJob(jobId) {
         : chapter
     );
     await updateBookProgress(book, job, { outlineTree });
-
-    const bookContext = createBookContext({
-      title: book.title,
-      genre: safeGenre,
-      audience: safeAudience,
-      chapters,
-    });
 
     if (shouldGenerateCover) {
       job.progress.message = "Generating cover";
@@ -749,6 +748,18 @@ async function runGenerationJob(jobId) {
         let chapterStatus = "complete";
 
         if (!retryImageOnly) {
+          const completedChapters = book.chapters.slice(0, chapterIndex);
+          const bookContext = buildEnhancedBookContext({
+            title: book.title,
+            genre: safeGenre,
+            audience: safeAudience,
+            chapters,
+            completedChapters,
+          });
+          const bookBible = serializeGenerationCanon(
+            currentBookBible,
+            visualBibleForText
+          );
           const result = await generateSectionForProvider(provider, {
             chapterTitle: chapter.title,
             chapterDescription: chapter.description,
@@ -787,6 +798,62 @@ async function runGenerationJob(jobId) {
             ...result.stats,
             ...(result.grounding ? { grounding: result.grounding } : {}),
           });
+
+          job.progress.message = `Editing ${chapter.title}`;
+          await updateBookProgress(book, job);
+
+          const premiumResult = await runPremiumChapterPipeline({
+            provider,
+            modelPayload,
+            bookTitle: book.title,
+            genre: safeGenre,
+            audience: safeAudience,
+            chapterTitle: chapter.title,
+            chapterDescription: chapter.description,
+            bookContext,
+            bookBible: currentBookBible,
+            draftContent: chapterContent,
+            includeTextGraphics,
+          });
+
+          for (const step of premiumResult.steps) {
+            totalStats = addStats(totalStats, step.result.stats);
+            await chargeTokenUsage({
+              userId: job.userId,
+              usage: step.result.stats,
+              reason: `full_book_${step.action}`,
+              description: `Ran ${step.action.replace(/_/g, " ")} for "${
+                chapter.title
+              }"`,
+              provider,
+              model: step.result.modelName,
+              metadata: {
+                jobId: job.id,
+                bookId: book._id.toString(),
+                chapterIndex,
+                chapterTitle: chapter.title,
+                action: step.action,
+              },
+            });
+          }
+
+          chapterContent = assertGeneratedChapterContent(
+            { content: premiumResult.content },
+            { provider, chapterTitle: chapter.title }
+          );
+          currentBookBible = premiumResult.bookBible || currentBookBible;
+          if (useBibleForInput) {
+            book.bible = currentBookBible;
+          }
+          chapterStats.editorial = {
+            critique: premiumResult.critique,
+            rewriteApplied: premiumResult.content !== result.content,
+            bibleUpdated: premiumResult.steps.some(
+              (step) => step.action === "book_bible_update"
+            ),
+            errors: premiumResult.errors,
+          };
+          chapterStats.editorialMemory = premiumResult.editorialMemory;
           job.progress.completed += 1;
         }
 
@@ -805,7 +872,7 @@ async function runGenerationJob(jobId) {
               })
             );
             const visualReferenceContext = buildVisualReferencePromptContext(
-              visualBible,
+              visualBibleForImages,
               {
                 ...chapter,
                 content: chapterContent,
@@ -813,8 +880,17 @@ async function runGenerationJob(jobId) {
             );
             const referenceImages = await getChapterImageReferences(
               book,
-              chapterIndex
+              chapterIndex,
+              {
+                generatedImageUrls: generatedChapterImageUrls,
+                visualBibleFirstFallback: true,
+              }
             );
+            const referenceMode = visualReferenceContext
+              ? "visual"
+              : generatedChapterImageUrls.length
+                ? "generated"
+                : "none";
             const image = await generateGeminiImage({
               prompt: buildChapterImagePrompt({
                 book,
@@ -823,6 +899,7 @@ async function runGenerationJob(jobId) {
                 genre: safeGenre,
                 audience: safeAudience,
                 hasVisualReferences: referenceImages.length > 0,
+                referenceMode,
                 visualReferenceContext,
               }),
               aspectRatio: "16:9",
@@ -873,6 +950,7 @@ async function runGenerationJob(jobId) {
               ),
               imageAsset,
             ];
+            generatedChapterImageUrls.push(image.url);
             chapterStats.image = imageAsset;
             delete chapterStats.imageError;
             delete chapterStats.imageStatus;

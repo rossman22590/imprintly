@@ -2,8 +2,13 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
   buildGroqSectionMessages,
+  getGroqModels,
   normalizeOutlineJson,
 } = require("./groqbook.generator");
+
+test("Groq defaults chapter writing to the strongest selectable model", () => {
+  assert.equal(getGroqModels({}).sectionModel, "openai/gpt-oss-120b");
+});
 
 test("Groq section prompt makes Novel chapters narrative", () => {
   const messages = buildGroqSectionMessages({
@@ -19,6 +24,29 @@ test("Groq section prompt makes Novel chapters narrative", () => {
   assert.match(prompt, /character objective, obstacle, conflict/);
   assert.match(prompt, /Do not use instructional headings/);
   assert.doesNotMatch(prompt, /reader takeaways/);
+});
+
+test("Groq prompt only allows text graphics when explicitly enabled", () => {
+  const defaultPrompt = buildGroqSectionMessages({
+    chapterTitle: "Scaling Operations",
+    bookTitle: "Operator's Manual",
+  })
+    .map((message) => message.content)
+    .join("\n\n");
+  const graphicsPrompt = buildGroqSectionMessages({
+    chapterTitle: "Scaling Operations",
+    bookTitle: "Operator's Manual",
+    includeTextGraphics: true,
+  })
+    .map((message) => message.content)
+    .join("\n\n");
+
+  assert.match(defaultPrompt, /Graphics mode is disabled/);
+  assert.match(defaultPrompt, /Do not include charts, graphs, diagrams/);
+  assert.match(defaultPrompt, /Mermaid/);
+  assert.match(graphicsPrompt, /Graphics mode is enabled/);
+  assert.match(graphicsPrompt, /only when the chapter brief or user request clearly asks/);
+  assert.match(graphicsPrompt, /Do not create ASCII art/);
 });
 
 test("Groq novel outlines strip textbook numbering from chapter titles", () => {

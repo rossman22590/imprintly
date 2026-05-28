@@ -42,7 +42,9 @@ test("Gemini section prompt bans generated graphs by default", () => {
     bookTitle: "Docker Guide",
   });
 
+  assert.match(prompt, /Graphics mode is disabled/);
   assert.match(prompt, /Do not include charts, graphs, diagrams/);
+  assert.match(prompt, /Mermaid/);
   assert.match(prompt, /Code blocks are only for real source code/);
 });
 
@@ -53,8 +55,10 @@ test("Gemini section prompt allows text graphics when requested", () => {
     includeTextGraphics: true,
   });
 
-  assert.match(prompt, /reader-friendly visual explainers/);
+  assert.match(prompt, /Graphics mode is enabled/);
+  assert.match(prompt, /reader-friendly text graphics/);
   assert.match(prompt, /Markdown tables/);
+  assert.match(prompt, /only when the chapter brief or user request clearly asks/);
   assert.doesNotMatch(prompt, /Do not include charts, graphs, diagrams/);
 });
 

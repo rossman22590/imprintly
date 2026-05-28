@@ -69,6 +69,10 @@ const {
   getBookTypeImageGuidance,
 } = require("../utils/book-type-guidance");
 const {
+  buildEnhancedBookContext,
+  runPremiumChapterPipeline,
+} = require("../utils/book-editorial.pipeline");
+const {
   buildEbookCoverEditPrompt,
   buildEbookCoverPrompt,
 } = require("../utils/book-image-prompts");
@@ -387,6 +391,10 @@ function shouldIncludeTextGraphics(payload = {}) {
   );
 }
 
+function shouldUseBibleForInput(payload = {}) {
+  return payload.useBibleForInput !== false && payload.useBible !== false;
+}
+
 function normalizeOutlineChapters(outline = []) {
   return outline
     .filter((chapter) => chapter && chapter.title)
@@ -401,23 +409,6 @@ function normalizeOutlineChapters(outline = []) {
         : [chapter.title || `Chapter ${index + 1}`],
       generationStats: chapter.generationStats || null,
     }));
-}
-
-function createBookContext({ title, genre, audience, chapters }) {
-  const chapterList = chapters
-    .map(
-      (chapter, index) =>
-        `${index + 1}. ${chapter.title}: ${chapter.description || ""}`
-    )
-    .join("\n");
-
-  return [
-    `Book title: ${title}`,
-    `Genre: ${genre}`,
-    `Audience: ${audience}`,
-    "Planned book outline:",
-    chapterList,
-  ].join("\n");
 }
 
 async function findOwnedBook(bookId, userId) {
@@ -482,7 +473,7 @@ function buildChapterImagePrompt({
         chapter.description || chapter.title
       }`;
   const continuityInstruction = hasVisualReferences
-    ? "\nVisual continuity: use the provided reference image(s) as the book's style bible. Preserve the same overall art direction, lighting logic, palette, character design language, and genre feel, but create a new scene that fits this chapter. Do not copy the previous scene unchanged."
+    ? "\nVisual Bible continuity: the provided reference image(s) are mandatory visual canon. Preserve character identity, setting/world cues, art direction, lighting logic, palette, design language, and genre feel while creating a new scene that fits this chapter. Do not copy the previous scene unchanged."
     : "";
   const bookTypeGuidance = getBookTypeImageGuidance(book.genre);
 
@@ -835,25 +826,30 @@ async function generateFullBook(req, res) {
       billingCharges.push(serializeBilling(outlineBilling));
     }
 
-    const bookContext = createBookContext({
-      title: workingTitle,
-      genre: safeGenre,
-      audience: safeAudience,
-      chapters,
-    });
-    const visualBible = normalizeVisualBiblePayload(
-      req.body.visualBible || book?.visualBible
-    );
-    const bookBible = serializeGenerationCanon(
-      req.body.bible || book?.bible,
-      visualBible
+    const useBibleForInput = shouldUseBibleForInput(req.body);
+    const visualBible = useBibleForInput
+      ? normalizeVisualBiblePayload(req.body.visualBible || book?.visualBible)
+      : normalizeVisualBiblePayload({ enabled: false });
+    let currentBookBible = normalizeBookBiblePayload(
+      useBibleForInput ? req.body.bible || book?.bible || {} : {}
     );
 
     const generatedChapters = [];
     let failedCount = 0;
 
-    for (const chapter of chapters) {
+    for (const [chapterIndex, chapter] of chapters.entries()) {
       try {
+        const bookContext = buildEnhancedBookContext({
+          title: workingTitle,
+          genre: safeGenre,
+          audience: safeAudience,
+          chapters,
+          completedChapters: generatedChapters,
+        });
+        const bookBible = serializeGenerationCanon(
+          currentBookBible,
+          visualBible
+        );
         const result = await generateSectionForProvider(selectedProvider, {
           chapterTitle: chapter.title,
           chapterDescription: chapter.description,
@@ -868,7 +864,7 @@ async function generateFullBook(req, res) {
           chapterLength,
           ...modelPayload,
         });
-        const content = assertGeneratedChapterContent(result, {
+        let content = assertGeneratedChapterContent(result, {
           provider: selectedProvider,
           chapterTitle: chapter.title,
         });
@@ -884,6 +880,50 @@ async function generateFullBook(req, res) {
           metadata: { title: workingTitle, chapterTitle: chapter.title },
         });
         billingCharges.push(serializeBilling(chapterBilling));
+
+        const premiumResult = await runPremiumChapterPipeline({
+          provider: selectedProvider,
+          modelPayload,
+          bookTitle: workingTitle,
+          genre: safeGenre,
+          audience: safeAudience,
+          chapterTitle: chapter.title,
+          chapterDescription: chapter.description,
+          bookContext,
+          bookBible: currentBookBible,
+          draftContent: content,
+          includeTextGraphics,
+        });
+
+        for (const step of premiumResult.steps) {
+          totalStats = addStats(totalStats, step.result.stats);
+          const stepBilling = await chargeGeneratedTokens({
+            req,
+            stats: step.result.stats,
+            reason: `full_book_${step.action}`,
+            description: `Ran ${step.action.replace(/_/g, " ")} for "${
+              chapter.title
+            }"`,
+            provider: selectedProvider,
+            model: step.result.modelName,
+            metadata: {
+              title: workingTitle,
+              chapterTitle: chapter.title,
+              chapterIndex,
+              action: step.action,
+            },
+          });
+          billingCharges.push(serializeBilling(stepBilling));
+        }
+
+        content = assertGeneratedChapterContent(
+          { content: premiumResult.content },
+          {
+            provider: selectedProvider,
+            chapterTitle: chapter.title,
+          }
+        );
+        currentBookBible = premiumResult.bookBible || currentBookBible;
         generatedChapters.push({
           ...chapter,
           content,
@@ -892,6 +932,15 @@ async function generateFullBook(req, res) {
           generationStats: {
             ...result.stats,
             ...(result.grounding ? { grounding: result.grounding } : {}),
+            editorial: {
+              critique: premiumResult.critique,
+              rewriteApplied: premiumResult.content !== result.content,
+              bibleUpdated: premiumResult.steps.some(
+                (step) => step.action === "book_bible_update"
+              ),
+              errors: premiumResult.errors,
+            },
+            editorialMemory: premiumResult.editorialMemory,
           },
         });
       } catch (error) {
@@ -933,8 +982,8 @@ async function generateFullBook(req, res) {
       book.audience = safeAudience;
       book.chapters = generatedChapters;
       book.generation = generation;
-      if (req.body.bible) {
-        book.bible = normalizeBookBiblePayload(req.body.bible);
+      if (useBibleForInput) {
+        book.bible = currentBookBible;
       }
       if (req.body.visualBible) {
         book.visualBible = {
@@ -953,6 +1002,7 @@ async function generateFullBook(req, res) {
         audience: safeAudience,
         chapters: generatedChapters,
         generation,
+        ...(useBibleForInput ? { bible: currentBookBible } : {}),
         ...(req.body.visualBible
           ? {
               visualBible: {
@@ -960,9 +1010,6 @@ async function generateFullBook(req, res) {
                 updatedAt: new Date(),
               },
             }
-          : {}),
-        ...(req.body.bible
-          ? { bible: normalizeBookBiblePayload(req.body.bible) }
           : {}),
       });
     }
