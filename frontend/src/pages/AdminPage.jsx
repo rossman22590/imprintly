@@ -108,7 +108,7 @@ function getInitials(name = "", email = "") {
 
 const ADMIN_TABS = [
   { id: "users", label: "Users", icon: Users },
-  { id: "jobs", label: "Jobs", icon: Activity },
+  { id: "runs", label: "Runs", icon: Activity },
 ];
 
 const RUN_STATUS_OPTIONS = [
@@ -454,7 +454,7 @@ function RunsPanel({
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
         <StatBlock
           icon={Activity}
-          label="Jobs"
+          label="Runs"
           value={runsSummary?.totalRuns || 0}
         />
         <StatBlock
@@ -483,11 +483,11 @@ function RunsPanel({
         <div className="p-4 border-b border-slate-200 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr),12rem,12rem] gap-3">
           <Input
             icon={Search}
-            label="Search jobs"
+            label="Search runs"
             name="admin-run-search"
             value={runSearch}
             onChange={(event) => setRunSearch(event.target.value)}
-            placeholder="Job ID, book, author, user, or error"
+            placeholder="Run ID, book, author, user, or error"
           />
           <Select
             label="Result"
@@ -510,7 +510,7 @@ function RunsPanel({
             <thead className="bg-slate-50">
               <tr>
                 <th className="w-[8.5rem] px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
-                  Job
+                  Run
                 </th>
                 <th className="w-[24%] px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
                   Book
@@ -536,7 +536,7 @@ function RunsPanel({
                     colSpan="6"
                     className="px-4 py-10 text-center text-slate-500 text-sm"
                   >
-                    Loading jobs...
+                    Loading runs...
                   </td>
                 </tr>
               ) : runsList.length === 0 ? (
@@ -545,7 +545,7 @@ function RunsPanel({
                     colSpan="6"
                     className="px-4 py-10 text-center text-slate-500 text-sm"
                   >
-                    No generation jobs found.
+                    No generation runs found.
                   </td>
                 </tr>
               ) : (
@@ -568,7 +568,7 @@ function RunsPanel({
                     </td>
                     <td className="px-4 py-4 overflow-hidden">
                       <p className="truncate text-sm font-semibold text-slate-950">
-                        {run.book?.title || run.payloadTitle || "Untitled job"}
+                        {run.book?.title || run.payloadTitle || "Untitled run"}
                       </p>
                       <p className="mt-1 truncate text-xs text-slate-500">
                         {run.book?.author || "Unknown author"}
@@ -652,11 +652,11 @@ function RunDetailsModal({ isOpen, onClose, run }) {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={run ? `Job ${formatRunId(run.id)}` : "Job details"}
+      title={run ? `Run ${formatRunId(run.id)}` : "Run details"}
       sizeClassName="max-w-[min(72rem,calc(100vw-1rem))]"
     >
       {!run ? (
-        <div className="py-16 text-center text-slate-500">Job not found.</div>
+        <div className="py-16 text-center text-slate-500">Run not found.</div>
       ) : (
         <div className="space-y-5">
           <section className="rounded-xl border border-slate-200 bg-white p-4">
@@ -674,7 +674,7 @@ function RunDetailsModal({ isOpen, onClose, run }) {
                   )}
                 </div>
                 <h2 className="mt-3 text-xl font-bold text-slate-950">
-                  {run.book?.title || run.payloadTitle || "Untitled job"}
+                  {run.book?.title || run.payloadTitle || "Untitled run"}
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
                   {run.user?.name || "Unknown user"} -{" "}
@@ -712,7 +712,7 @@ function RunDetailsModal({ isOpen, onClose, run }) {
           </section>
 
           <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            <DetailRow label="Full job ID" value={run.id} mono />
+            <DetailRow label="Full run ID" value={run.id} mono />
             <DetailRow label="Book ID" value={run.book?._id || "No book linked"} mono />
             <DetailRow label="Created" value={formatDate(run.createdAt)} />
             <DetailRow label="Completed" value={formatDate(run.completedAt)} />
@@ -789,7 +789,7 @@ function RunDetailsModal({ isOpen, onClose, run }) {
               </div>
             ) : (
               <p className="px-4 py-10 text-sm text-slate-500">
-                No failure reasons were logged for this job.
+                No failure reasons were logged for this run.
               </p>
             )}
           </section>
@@ -1022,7 +1022,7 @@ function UserDetailsModal({
                   Credit history
                 </h3>
                 <span className="text-xs text-slate-500">
-                  Last {transactionHistoryDays} days · all {transactions.length}
+                  Last {transactionHistoryDays} days - all {transactions.length}
                 </span>
               </header>
 
@@ -1512,7 +1512,7 @@ function AdminPage() {
     setIsRunsLoading(true);
 
     try {
-      const { data } = await axiosInstance.get(API_ENDPOINTS.ADMIN.JOBS, {
+      const { data } = await axiosInstance.get(API_ENDPOINTS.ADMIN.RUNS, {
         params: {
           search: runSearch,
           status: runStatusFilter,
@@ -1526,8 +1526,8 @@ function AdminPage() {
       setRunsSummary(data.summary || null);
       setRunsPagination(data.pagination || null);
     } catch (error) {
-      console.error("Error fetching admin jobs:", error);
-      toast.error(error.response?.data?.error || "Failed to load admin jobs.");
+      console.error("Error fetching admin runs:", error);
+      toast.error(error.response?.data?.error || "Failed to load admin runs.");
     } finally {
       setIsRunsLoading(false);
     }
@@ -1887,7 +1887,7 @@ function AdminPage() {
               Admin Console
             </p>
             <h1 className="text-slate-950 text-2xl md:text-3xl font-bold mt-1">
-              Users, credits, and jobs
+              Users, credits, and runs
             </h1>
           </div>
 

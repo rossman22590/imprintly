@@ -753,8 +753,8 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                   Add chapter images
                 </span>
                 <span className="block text-slate-500 text-xs mt-1">
-                  When generating the full book, Bookify will create one
-                  relevant inline image per chapter.
+                  When generating the full book, Bookify creates one inline
+                  image per chapter using Visual Bible references.
                 </span>
               </span>
             </span>
@@ -1116,7 +1116,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                 </p>
                 <p className="text-slate-600 text-xs mt-1 leading-relaxed">
                   Chapter images will use your character, style, and world
-                  references before matching generated chapter art.
+                  references as visual canon.
                 </p>
               </div>
             </section>

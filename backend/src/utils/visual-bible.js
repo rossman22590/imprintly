@@ -154,7 +154,7 @@ function buildVisualReferencePromptContext(
   return [
     "Visual Bible references provided:",
     ...lines,
-    "Use these references as visual canon for matching characters, recurring objects, settings, and style. The reference images are identity/style inputs, not a requirement to place every referenced person in the scene. Only include characters or places that belong in this chapter scene.",
+    "These references are mandatory visual canon for matching characters, recurring objects, settings, and style. The reference images are identity/style inputs, not a requirement to place every referenced person in the scene. Only include characters or places that belong in this chapter scene.",
   ].join("\n");
 }
 

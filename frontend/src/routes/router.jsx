@@ -23,6 +23,7 @@ const PublicBookPreviewPage = lazy(() =>
 );
 const PublicSharePage = lazy(() => import("../pages/PublicSharePage"));
 const ResetPasswordPage = lazy(() => import("../pages/ResetPasswordPage"));
+const RunsPage = lazy(() => import("../pages/RunsPage"));
 const SignInPage = lazy(() => import("../pages/SignInPage"));
 const SignUpPage = lazy(() => import("../pages/SignUpPage"));
 
@@ -120,6 +121,14 @@ const router = createBrowserRouter([
         element: routeElement(
           <ProtectedRoute>
             <JobsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "runs",
+        element: routeElement(
+          <ProtectedRoute>
+            <RunsPage />
           </ProtectedRoute>
         ),
       },

@@ -64,7 +64,7 @@ Hidden creative context, not cover text:
 - Book category for visual style only: ${category}
 - Audience for design taste only: ${book.audience || "General readers"}
 ${bookTypeGuidance}
-Visual references: If character, style, or world reference images are provided, use them as visual canon for the cover's people, setting, mood, and art direction. Do not ignore supplied references.
+Visual Bible references: When character, style, or world reference images are provided, they are mandatory visual canon for the cover's people, setting, mood, and art direction. Do not ignore, contradict, or replace supplied references.
 ${coverDirection}
 
 Requirements:
@@ -91,7 +91,7 @@ Hidden creative context, not cover text:
 - Book category for visual style only: ${category}
 - Audience for design taste only: ${book.audience || "General readers"}
 ${bookTypeGuidance}
-Visual references: If character, style, or world reference images are provided, use them as visual canon while editing the cover. Preserve supplied character identities and style cues unless the author explicitly asks otherwise.
+Visual Bible references: When character, style, or world reference images are provided, they are mandatory visual canon while editing the cover. Preserve supplied character identities and style cues unless the author explicitly asks otherwise.
 ${editDirection}
 
 Requirements:

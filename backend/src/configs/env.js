@@ -9,7 +9,7 @@ const ENV = {
   DEFAULT_AI_PROVIDER: process.env.DEFAULT_AI_PROVIDER ?? "groq",
   GROQ_STRUCTURE_MODEL:
     process.env.GROQ_STRUCTURE_MODEL ?? "openai/gpt-oss-120b",
-  GROQ_SECTION_MODEL: process.env.GROQ_SECTION_MODEL ?? "openai/gpt-oss-20b",
+  GROQ_SECTION_MODEL: process.env.GROQ_SECTION_MODEL ?? "openai/gpt-oss-120b",
   GROQ_STRUCTURE_MAX_TOKENS: process.env.GROQ_STRUCTURE_MAX_TOKENS ?? "12000",
   GROQ_SECTION_MAX_TOKENS: process.env.GROQ_SECTION_MAX_TOKENS ?? "9000",
   GEMINI_STRUCTURE_MODEL:

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Sparkles, TypeOutline } from "lucide-react";
+import { Lock, Loader2, Sparkles, TypeOutline } from "lucide-react";
 import MDEditor, { commands } from "@uiw/react-md-editor";
 import rehypeSanitize from "rehype-sanitize";
 
@@ -30,6 +30,8 @@ function SimpleMDEditor({
   options,
   isGeneratingImageCommand = false,
   onGenerateImageCommand,
+  isLocked = false,
+  lockMessage = "AI is updating this chapter.",
 }) {
   const [isLargeScreen, setIsLargeScreen] = useState(false);
   const [imageCommand, setImageCommand] = useState(null);
@@ -72,6 +74,8 @@ function SimpleMDEditor({
   const editorMode = isLargeScreen ? "live" : "edit";
 
   const handleEditorChange = (nextValue) => {
+    if (isLocked) return;
+
     onChange(nextValue);
 
     setImageCommand((currentCommand) => {
@@ -86,7 +90,9 @@ function SimpleMDEditor({
 
   return (
     <div
-      className="border border-slate-200 rounded-lg shadow-sm overflow-hidden h-full flex flex-col"
+      className={`border rounded-lg shadow-sm overflow-hidden h-full flex flex-col relative ${
+        isLocked ? "border-amber-200" : "border-slate-200"
+      }`}
       data-color-mode="light"
     >
       <header className="bg-slate-50 border-b border-slate-200 px-3 sm:px-4 py-2.5 shrink-0">
@@ -105,7 +111,7 @@ function SimpleMDEditor({
               <button
                 type="button"
                 onClick={handleGenerateImageCommand}
-                disabled={isGeneratingImageCommand}
+                disabled={isGeneratingImageCommand || isLocked}
                 className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-violet-600 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Sparkles className="size-3.5" />
@@ -149,6 +155,8 @@ function SimpleMDEditor({
           ]}
           textareaProps={{
             ...externalTextareaProps,
+            readOnly: isLocked || externalTextareaProps.readOnly,
+            "aria-readonly": isLocked || externalTextareaProps["aria-readonly"],
             placeholder:
               "Start writing your chapter content here...\n\nTip: Use ```language to create code blocks with syntax highlighting",
             onClick: (event) => {
@@ -166,6 +174,25 @@ function SimpleMDEditor({
           }}
         />
       </div>
+
+      {isLocked && (
+        <div className="absolute inset-0 z-10 flex items-start justify-center bg-white/65 px-4 py-6 backdrop-blur-[1px]">
+          <div className="max-w-md rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950 shadow-lg shadow-amber-950/5">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-lg bg-white p-2 text-amber-700 shadow-sm">
+                <Lock className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  <Loader2 className="size-4 animate-spin" />
+                  Editor locked
+                </p>
+                <p className="mt-1 text-sm text-amber-800">{lockMessage}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

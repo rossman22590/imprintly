@@ -1,6 +1,8 @@
 const fs = require("fs");
+const mongoose = require("mongoose");
 const ENV = require("../configs/env");
 const Book = require("../models/Book");
+const GenerationJob = require("../models/GenerationJob");
 const {
   addStats,
   createGroqChatCompletion,
@@ -69,6 +71,10 @@ const {
   getBookTypeImageGuidance,
 } = require("../utils/book-type-guidance");
 const {
+  buildEnhancedBookContext,
+  runPremiumChapterPipeline,
+} = require("../utils/book-editorial.pipeline");
+const {
   buildEbookCoverEditPrompt,
   buildEbookCoverPrompt,
 } = require("../utils/book-image-prompts");
@@ -87,6 +93,217 @@ function sanitizeInput(input, maxLength = 500) {
   sanitized = sanitized.replace(/<[^>]+>/g, "");
 
   return sanitized;
+}
+
+function escapeRegex(value = "") {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeLimit(value) {
+  return Math.min(Math.max(Number.parseInt(value, 10) || 25, 1), 100);
+}
+
+function normalizePage(value) {
+  return Math.max(Number.parseInt(value, 10) || 1, 1);
+}
+
+const RUN_STATUSES = [
+  "queued",
+  "generating",
+  "cancelling",
+  "cancelled",
+  "complete",
+  "failed",
+];
+const RUN_PROVIDERS = ["gemini", "groq"];
+
+function normalizeRunStatus(value = "") {
+  return RUN_STATUSES.includes(value) ? value : "";
+}
+
+function normalizeRunProvider(value = "") {
+  return RUN_PROVIDERS.includes(value) ? value : "";
+}
+
+function normalizeId(value) {
+  return value?._id?.toString?.() || value?.toString?.() || "";
+}
+
+function countByStatus(rows = []) {
+  return rows.reduce((counts, row) => {
+    counts[row._id || "unknown"] = row.count || 0;
+    return counts;
+  }, {});
+}
+
+function countBookChapterStatuses(chapters = []) {
+  return chapters.reduce(
+    (counts, chapter) => {
+      const status = chapter?.generationStatus || "empty";
+
+      counts.total += 1;
+      counts.wordCount += Number(chapter?.wordCount || 0);
+      counts[status] = Number(counts[status] || 0) + 1;
+
+      return counts;
+    },
+    {
+      total: 0,
+      empty: 0,
+      queued: 0,
+      generating: 0,
+      complete: 0,
+      failed: 0,
+      wordCount: 0,
+    }
+  );
+}
+
+function serializeRunBook(book) {
+  if (!book || !book.title) {
+    return {
+      _id: normalizeId(book),
+      title: "",
+      subtitle: "",
+      author: "",
+      genre: "",
+      status: "",
+      generationStatus: "",
+      generationProvider: "",
+      generationJobId: "",
+      chapterStatusCounts: countBookChapterStatuses([]),
+      createdAt: null,
+      updatedAt: null,
+    };
+  }
+
+  return {
+    _id: normalizeId(book),
+    title: book.title || "",
+    subtitle: book.subtitle || "",
+    author: book.author || "",
+    genre: book.genre || "",
+    status: book.status || "draft",
+    generationStatus: book.generation?.status || "manual",
+    generationProvider: book.generation?.provider || "",
+    generationJobId: book.generation?.jobId || "",
+    chapterStatusCounts: countBookChapterStatuses(book.chapters || []),
+    createdAt: book.createdAt || null,
+    updatedAt: book.updatedAt || null,
+  };
+}
+
+function serializeUserRun(job) {
+  return {
+    _id: normalizeId(job._id),
+    id: job.id,
+    provider: job.provider,
+    status: job.status,
+    retryFailedOnly: Boolean(job.retryFailedOnly),
+    cancelled: Boolean(job.cancelled),
+    payloadTitle: job.payload?.title || job.payload?.topic || "",
+    progress: job.progress || {},
+    failedChapters: Array.isArray(job.failedChapters) ? job.failedChapters : [],
+    error: job.error || "",
+    book: serializeRunBook(job.bookId),
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+  };
+}
+
+async function getUserRunsSummary(userId) {
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  const [runStatusRows, totalBooks, bookStatusRows] = await Promise.all([
+    GenerationJob.aggregate([
+      { $match: { userId: userObjectId } },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+    Book.countDocuments({ userId }),
+    Book.aggregate([
+      { $match: { userId: userObjectId } },
+      {
+        $group: {
+          _id: "$generation.status",
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+  ]);
+  const runStatuses = countByStatus(runStatusRows);
+  const bookStatuses = countByStatus(bookStatusRows);
+  const activeRuns =
+    Number(runStatuses.queued || 0) +
+    Number(runStatuses.generating || 0) +
+    Number(runStatuses.cancelling || 0);
+
+  return {
+    totalRuns: Object.values(runStatuses).reduce(
+      (total, count) => total + Number(count || 0),
+      0
+    ),
+    successfulRuns: Number(runStatuses.complete || 0),
+    failedRuns: Number(runStatuses.failed || 0),
+    activeRuns,
+    cancelledRuns: Number(runStatuses.cancelled || 0),
+    totalBooks,
+    successfulBooks: Number(bookStatuses.complete || 0),
+    failedBooks: Number(bookStatuses.failed || 0),
+  };
+}
+
+async function buildUserRunQuery({ userId, search, status, provider }) {
+  const query = { userId };
+
+  if (status) {
+    query.status = status;
+  }
+
+  if (provider) {
+    query.provider = provider;
+  }
+
+  if (!search) {
+    return query;
+  }
+
+  const pattern = new RegExp(escapeRegex(search), "i");
+  const matchingBooks = await Book.find({
+    userId,
+    $or: [{ title: pattern }, { subtitle: pattern }, { author: pattern }],
+  })
+    .select("_id")
+    .limit(1000)
+    .lean();
+  const bookIds = matchingBooks.map((book) => book._id);
+  const searchOr = [
+    { id: pattern },
+    { error: pattern },
+    { "progress.message": pattern },
+    { "progress.currentChapterTitle": pattern },
+    { "payload.title": pattern },
+    { "payload.topic": pattern },
+    { "payload.author": pattern },
+  ];
+
+  if (bookIds.length) {
+    searchOr.push({ bookId: { $in: bookIds } });
+  }
+
+  if (mongoose.Types.ObjectId.isValid(search)) {
+    const objectId = new mongoose.Types.ObjectId(search);
+    searchOr.push({ _id: objectId }, { bookId: objectId });
+  }
+
+  query.$or = searchOr;
+
+  return query;
 }
 
 function serializeGenerationCanon(bookBible = {}, visualBible = {}) {
@@ -176,6 +393,10 @@ function shouldIncludeTextGraphics(payload = {}) {
   );
 }
 
+function shouldUseBibleForInput(payload = {}) {
+  return payload.useBibleForInput !== false && payload.useBible !== false;
+}
+
 function normalizeOutlineChapters(outline = []) {
   return outline
     .filter((chapter) => chapter && chapter.title)
@@ -190,23 +411,6 @@ function normalizeOutlineChapters(outline = []) {
         : [chapter.title || `Chapter ${index + 1}`],
       generationStats: chapter.generationStats || null,
     }));
-}
-
-function createBookContext({ title, genre, audience, chapters }) {
-  const chapterList = chapters
-    .map(
-      (chapter, index) =>
-        `${index + 1}. ${chapter.title}: ${chapter.description || ""}`
-    )
-    .join("\n");
-
-  return [
-    `Book title: ${title}`,
-    `Genre: ${genre}`,
-    `Audience: ${audience}`,
-    "Planned book outline:",
-    chapterList,
-  ].join("\n");
 }
 
 async function findOwnedBook(bookId, userId) {
@@ -271,7 +475,7 @@ function buildChapterImagePrompt({
         chapter.description || chapter.title
       }`;
   const continuityInstruction = hasVisualReferences
-    ? "\nVisual continuity: use the provided reference image(s) as the book's style bible. Preserve the same overall art direction, lighting logic, palette, character design language, and genre feel, but create a new scene that fits this chapter. Do not copy the previous scene unchanged."
+    ? "\nVisual Bible continuity: the provided reference image(s) are mandatory visual canon. Preserve character identity, setting/world cues, art direction, lighting logic, palette, design language, and genre feel while creating a new scene that fits this chapter. Do not copy the previous scene unchanged."
     : "";
   const bookTypeGuidance = getBookTypeImageGuidance(book.genre);
 
@@ -624,25 +828,30 @@ async function generateFullBook(req, res) {
       billingCharges.push(serializeBilling(outlineBilling));
     }
 
-    const bookContext = createBookContext({
-      title: workingTitle,
-      genre: safeGenre,
-      audience: safeAudience,
-      chapters,
-    });
-    const visualBible = normalizeVisualBiblePayload(
-      req.body.visualBible || book?.visualBible
-    );
-    const bookBible = serializeGenerationCanon(
-      req.body.bible || book?.bible,
-      visualBible
+    const useBibleForInput = shouldUseBibleForInput(req.body);
+    const visualBible = useBibleForInput
+      ? normalizeVisualBiblePayload(req.body.visualBible || book?.visualBible)
+      : normalizeVisualBiblePayload({ enabled: false });
+    let currentBookBible = normalizeBookBiblePayload(
+      useBibleForInput ? req.body.bible || book?.bible || {} : {}
     );
 
     const generatedChapters = [];
     let failedCount = 0;
 
-    for (const chapter of chapters) {
+    for (const [chapterIndex, chapter] of chapters.entries()) {
       try {
+        const bookContext = buildEnhancedBookContext({
+          title: workingTitle,
+          genre: safeGenre,
+          audience: safeAudience,
+          chapters,
+          completedChapters: generatedChapters,
+        });
+        const bookBible = serializeGenerationCanon(
+          currentBookBible,
+          visualBible
+        );
         const result = await generateSectionForProvider(selectedProvider, {
           chapterTitle: chapter.title,
           chapterDescription: chapter.description,
@@ -657,7 +866,7 @@ async function generateFullBook(req, res) {
           chapterLength,
           ...modelPayload,
         });
-        const content = assertGeneratedChapterContent(result, {
+        let content = assertGeneratedChapterContent(result, {
           provider: selectedProvider,
           chapterTitle: chapter.title,
         });
@@ -673,6 +882,50 @@ async function generateFullBook(req, res) {
           metadata: { title: workingTitle, chapterTitle: chapter.title },
         });
         billingCharges.push(serializeBilling(chapterBilling));
+
+        const premiumResult = await runPremiumChapterPipeline({
+          provider: selectedProvider,
+          modelPayload,
+          bookTitle: workingTitle,
+          genre: safeGenre,
+          audience: safeAudience,
+          chapterTitle: chapter.title,
+          chapterDescription: chapter.description,
+          bookContext,
+          bookBible: currentBookBible,
+          draftContent: content,
+          includeTextGraphics,
+        });
+
+        for (const step of premiumResult.steps) {
+          totalStats = addStats(totalStats, step.result.stats);
+          const stepBilling = await chargeGeneratedTokens({
+            req,
+            stats: step.result.stats,
+            reason: `full_book_${step.action}`,
+            description: `Ran ${step.action.replace(/_/g, " ")} for "${
+              chapter.title
+            }"`,
+            provider: selectedProvider,
+            model: step.result.modelName,
+            metadata: {
+              title: workingTitle,
+              chapterTitle: chapter.title,
+              chapterIndex,
+              action: step.action,
+            },
+          });
+          billingCharges.push(serializeBilling(stepBilling));
+        }
+
+        content = assertGeneratedChapterContent(
+          { content: premiumResult.content },
+          {
+            provider: selectedProvider,
+            chapterTitle: chapter.title,
+          }
+        );
+        currentBookBible = premiumResult.bookBible || currentBookBible;
         generatedChapters.push({
           ...chapter,
           content,
@@ -681,6 +934,15 @@ async function generateFullBook(req, res) {
           generationStats: {
             ...result.stats,
             ...(result.grounding ? { grounding: result.grounding } : {}),
+            editorial: {
+              critique: premiumResult.critique,
+              rewriteApplied: premiumResult.content !== result.content,
+              bibleUpdated: premiumResult.steps.some(
+                (step) => step.action === "book_bible_update"
+              ),
+              errors: premiumResult.errors,
+            },
+            editorialMemory: premiumResult.editorialMemory,
           },
         });
       } catch (error) {
@@ -722,8 +984,8 @@ async function generateFullBook(req, res) {
       book.audience = safeAudience;
       book.chapters = generatedChapters;
       book.generation = generation;
-      if (req.body.bible) {
-        book.bible = normalizeBookBiblePayload(req.body.bible);
+      if (useBibleForInput) {
+        book.bible = currentBookBible;
       }
       if (req.body.visualBible) {
         book.visualBible = {
@@ -742,6 +1004,7 @@ async function generateFullBook(req, res) {
         audience: safeAudience,
         chapters: generatedChapters,
         generation,
+        ...(useBibleForInput ? { bible: currentBookBible } : {}),
         ...(req.body.visualBible
           ? {
               visualBible: {
@@ -749,9 +1012,6 @@ async function generateFullBook(req, res) {
                 updatedAt: new Date(),
               },
             }
-          : {}),
-        ...(req.body.bible
-          ? { bible: normalizeBookBiblePayload(req.body.bible) }
           : {}),
       });
     }
@@ -796,6 +1056,54 @@ async function createFullBookJob(req, res) {
     return res
       .status(error.statusCode || 500)
       .json({ error: error.message || "Internal Server Error!" });
+  }
+}
+
+async function listFullBookJobs(req, res) {
+  try {
+    const userId = req.user.id;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(401).json({ error: "Invalid or expired token!" });
+    }
+
+    const limit = normalizeLimit(req.query.limit);
+    const page = normalizePage(req.query.page);
+    const search = String(req.query.search || "").trim();
+    const status = normalizeRunStatus(String(req.query.status || "").trim());
+    const provider = normalizeRunProvider(String(req.query.provider || "").trim());
+    const query = await buildUserRunQuery({ userId, search, status, provider });
+
+    const [runs, total, summary] = await Promise.all([
+      GenerationJob.find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate({
+          path: "bookId",
+          select:
+            "title subtitle author genre status createdAt updatedAt generation.provider generation.status generation.jobId chapters.title chapters.generationStatus chapters.wordCount chapters.generationStats",
+        })
+        .lean(),
+      GenerationJob.countDocuments(query),
+      getUserRunsSummary(userId),
+    ]);
+
+    return res.status(200).json({
+      message: "Generation runs retrieved.",
+      runs: runs.map(serializeUserRun),
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
+      summary,
+    });
+  } catch (error) {
+    console.error("Error listing full-book generation jobs:", error);
+
+    return res.status(500).json({ error: "Internal Server Error!" });
   }
 }
 

@@ -1,5 +1,6 @@
 import { resolveImageUrl } from "../utils/api-endpoints";
 import {
+  Activity,
   ChevronDown,
   ChevronUp,
   FileText,
@@ -76,6 +77,14 @@ const ProfileMenu = ({
               <span>Admin Panel</span>
             </Link>
           )}
+
+          <Link
+            to="/runs"
+            className="flex items-center gap-x-2 w-full text-sm text-gray-700 px-3 py-2 transition-colors duration-200 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none"
+          >
+            <Activity className="size-4 text-gray-500" />
+            <span>Runs</span>
+          </Link>
 
           <Link
             to="/docs"

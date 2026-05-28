@@ -22,6 +22,20 @@ test("cover prompts include book-type image guidance", () => {
   assert.match(prompt, /Avoid generic writing/);
 });
 
+test("cover prompts make Visual Bible references mandatory canon", () => {
+  const prompt = buildEbookCoverPrompt({
+    book: {
+      title: "The Last Signal",
+      author: "A. Writer",
+      genre: "Novel",
+    },
+  });
+
+  assert.match(prompt, /Visual Bible references/);
+  assert.match(prompt, /mandatory visual canon/);
+  assert.match(prompt, /Do not ignore, contradict, or replace supplied references/);
+});
+
 test("cover prompts treat genre and audience as hidden non-rendered context", () => {
   const prompt = buildEbookCoverPrompt({
     book: {

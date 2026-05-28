@@ -33,6 +33,8 @@ function ChapterEditorTab({
   isGeneratingImage = false,
   onGenerateChapterImage = () => {},
   onGenerateInlineImageCommand = () => {},
+  isEditorLocked = false,
+  editorLockMessage = "AI is updating this chapter. Wait until it finishes before editing.",
 }) {
   const [isInPreviewMode, setIsInPreviewMode] = useState(false);
   const [isInFullScreenMode, setIsInFullScreenMode] = useState(false);
@@ -254,6 +256,7 @@ function ChapterEditorTab({
                 icon={ImageIcon}
                 size="sm"
                 isLoading={isGeneratingImage}
+                disabled={isEditorLocked}
                 onClick={handleImagePanelToggle}
                 className="shadow-sm"
               >
@@ -305,6 +308,22 @@ function ChapterEditorTab({
         </div>
       </header>
 
+      {isEditorLocked && (
+        <section className="border-b border-amber-200 bg-amber-50 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3 text-amber-950">
+            <div className="rounded-lg bg-white p-2 text-amber-700 shadow-sm">
+              <Bot className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Chapter editing is locked</p>
+              <p className="mt-0.5 text-xs text-amber-800 sm:text-sm">
+                {editorLockMessage}
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
       {isImagePanelOpen && (
         <section className="bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 py-4">
           <form
@@ -323,6 +342,7 @@ function ChapterEditorTab({
                 name="chapter-image-prompt"
                 value={imagePrompt}
                 onChange={(event) => setImagePrompt(event.target.value)}
+                disabled={isEditorLocked}
                 rows={3}
                 maxLength={1200}
                 placeholder="Optional scene, style, palette, camera angle..."
@@ -460,7 +480,7 @@ function ChapterEditorTab({
               type="submit"
               icon={Sparkles}
               isLoading={isGeneratingImage}
-              disabled={isGenerating}
+              disabled={isGenerating || isEditorLocked}
               size="sm"
               className="w-full xl:w-fit"
             >
@@ -481,7 +501,12 @@ function ChapterEditorTab({
                   label="Chapter Title"
                   name="title"
                   value={currentChapter.title || ""}
-                  onChange={(e) => onEditChapter("title", e.target.value)}
+                  onChange={(e) => {
+                    if (!isEditorLocked) {
+                      onEditChapter("title", e.target.value);
+                    }
+                  }}
+                  disabled={isEditorLocked}
                   placeholder="Enter chapter title..."
                   className="text-lg sm:text-xl font-semibold"
                 />
@@ -519,6 +544,8 @@ function ChapterEditorTab({
                       options={mdEditorOptions}
                       isGeneratingImageCommand={isGeneratingImage}
                       onGenerateImageCommand={handleGenerateInlineImageCommand}
+                      isLocked={isEditorLocked}
+                      lockMessage={editorLockMessage}
                     />
                   </div>
                 )}

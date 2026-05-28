@@ -30,6 +30,17 @@ function getPriorChapterImageUrls(book = {}, chapterIndex = 0) {
   return Array.from(new Set([firstUrl, latestUrl]));
 }
 
+function getContinuityImageUrls(imageUrls = []) {
+  const urls = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [];
+
+  if (!urls.length) return [];
+
+  const firstUrl = urls[0];
+  const latestUrl = urls[urls.length - 1];
+
+  return Array.from(new Set([firstUrl, latestUrl]));
+}
+
 function getChapterReferenceImageUrls(book = {}, chapterIndex = 0, options = {}) {
   const chapters = Array.isArray(book.chapters) ? book.chapters : [];
   const chapter = chapters[chapterIndex] || {};
@@ -38,10 +49,20 @@ function getChapterReferenceImageUrls(book = {}, chapterIndex = 0, options = {})
     chapter,
     options
   );
+  const generatedContinuityUrls = getContinuityImageUrls(
+    options.generatedImageUrls
+  );
+  const hasGeneratedContinuityInput = Array.isArray(options.generatedImageUrls);
   const priorUrls =
     book.visualBible?.matchBookStyle === false
       ? []
-      : getPriorChapterImageUrls(book, chapterIndex);
+      : hasGeneratedContinuityInput
+        ? generatedContinuityUrls
+        : getPriorChapterImageUrls(book, chapterIndex);
+
+  if (options.visualBibleFirstFallback && visualUrls.length) {
+    return Array.from(new Set(visualUrls)).slice(0, 10);
+  }
 
   return Array.from(new Set([...visualUrls, ...priorUrls])).slice(0, 10);
 }
@@ -128,6 +149,7 @@ async function getCoverImageReferences(book = {}) {
 module.exports = {
   getChapterReferenceImageUrls,
   getChapterImageReferences,
+  getContinuityImageUrls,
   getCoverImageReferences,
   getCoverReferenceImageUrls,
   getImageReferenceFromUrl,

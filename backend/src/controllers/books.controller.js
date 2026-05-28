@@ -24,6 +24,7 @@ const {
   migrateBookImagesToStorage,
   migrateChapterPayloadImagesToStorage,
 } = require("../utils/image-asset-migration");
+const { getCoverImageReferences } = require("../utils/image-reference");
 const {
   assertHasCredits,
   chargeImageUsage,
@@ -129,11 +130,13 @@ async function generateInitialCover(book, payload = {}) {
     customPrompt:
       typeof payload.coverPrompt === "string" ? payload.coverPrompt.slice(0, 4000) : "",
   });
+  const referenceImages = await getCoverImageReferences(book);
   const image = await generateGeminiImage({
     prompt: finalPrompt,
     model: normalizeImageModel(payload.coverModel),
     aspectRatio: normalizeAspectRatio(payload.coverAspectRatio, "2:3"),
     imageSize: normalizeImageSize(payload.coverImageSize),
+    referenceImages,
   });
 
   book.coverImage = image.url;
@@ -149,7 +152,7 @@ async function generateInitialCover(book, payload = {}) {
     createdAt: new Date(),
   };
 
-  return image;
+  return { image, referenceImages };
 }
 
 async function repairBookChapterImageMarkdown(book) {
@@ -320,7 +323,7 @@ async function createBook(req, res) {
             imageSize: normalizeImageSize(coverImageSize),
           })
         );
-        const image = await generateInitialCover(book, {
+        const { image, referenceImages } = await generateInitialCover(book, {
           coverPrompt,
           coverModel,
           coverAspectRatio,
@@ -337,6 +340,7 @@ async function createBook(req, res) {
             bookId: book._id.toString(),
             aspectRatio: image.aspectRatio,
             imageSize: image.imageSize,
+            visualReferenceCount: referenceImages.length,
           },
         });
         await book.save();
