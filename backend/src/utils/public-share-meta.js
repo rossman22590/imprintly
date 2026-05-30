@@ -34,6 +34,14 @@ function getPublicShareRoute(pathname = "") {
     .split("/")
     .filter(Boolean);
 
+  if (parts.length === 1 && parts[0] === "community") {
+    return { type: "community" };
+  }
+
+  if (parts.length === 3 && parts[0] === "community" && parts[1] === "books") {
+    return { type: "community-book", bookId: parts[2] };
+  }
+
   if (parts.length !== 2) return null;
 
   if (parts[0] === "shelf") {
@@ -181,8 +189,69 @@ async function getPreviewMeta(token, options = {}) {
   });
 }
 
+async function getCommunityMeta(options = {}) {
+  const bookCount = await Book.countDocuments({
+    "communityListing.isListed": true,
+  });
+
+  return buildMeta({
+    title: "Bookify Community Bookshelf",
+    description: `Browse ${bookCount ? `${bookCount} ` : ""}community books shared by Bookify authors, including free PDFs, previews, and purchase links for physical copies.`,
+    image: DEFAULT_SHARE_IMAGE,
+    type: "website",
+    ...options,
+  });
+}
+
+async function getCommunityBookMeta(bookId, options = {}) {
+  if (!/^[0-9a-fA-F]{24}$/.test(String(bookId || ""))) {
+    return null;
+  }
+
+  const book = await Book.findOne({
+    _id: bookId,
+    "communityListing.isListed": true,
+  })
+    .populate({
+      path: "userId",
+      select: "name avatar status",
+    })
+    .lean();
+
+  if (!book || isBannedOwner(book.userId)) return null;
+
+  const owner = book.userId || {};
+  const kdpAssets = book.kdp?.assets || {};
+  const description =
+    kdpAssets.description ||
+    kdpAssets.backCoverBlurb ||
+    book.subtitle ||
+    (book.communityListing?.freeFullPdfEnabled
+      ? `Read the free full PDF of ${book.title}.`
+      : `Browse ${book.title} on the Bookify Community Bookshelf.`);
+
+  return buildMeta({
+    title: book.title ? `${book.title} | Bookify Community` : "Bookify Community",
+    description,
+    image: book.coverImage || owner.avatar || DEFAULT_SHARE_IMAGE,
+    author: book.author || owner.name,
+    type: "book",
+    ...options,
+  });
+}
+
 async function getPublicShareMetaForPath(pathname = "", options = {}) {
   const route = getPublicShareRoute(pathname);
+
+  if (!route) return null;
+
+  if (route.type === "community") {
+    return getCommunityMeta(options);
+  }
+
+  if (route.type === "community-book") {
+    return getCommunityBookMeta(route.bookId, options);
+  }
 
   if (!route?.token) return null;
 

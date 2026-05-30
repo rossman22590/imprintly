@@ -7,6 +7,12 @@ import PublicRoute from "./PublicRoute";
 const AdminPage = lazy(() => import("../pages/AdminPage"));
 const ApiDocsPage = lazy(() => import("../pages/ApiDocsPage"));
 const BookPage = lazy(() => import("../pages/BookPage"));
+const CommunityBookReaderPage = lazy(() =>
+  import("../pages/CommunityBookReaderPage")
+);
+const CommunityBookshelfPage = lazy(() =>
+  import("../pages/CommunityBookshelfPage")
+);
 const CreditsPage = lazy(() => import("../pages/CreditsPage"));
 const DashboardPage = lazy(() => import("../pages/DashboardPage"));
 const DocsPage = lazy(() => import("../pages/DocsPage"));
@@ -87,6 +93,14 @@ const router = createBrowserRouter([
       {
         path: "preview/:shareToken",
         element: routeElement(<PublicBookPreviewPage />),
+      },
+      {
+        path: "community",
+        element: routeElement(<CommunityBookshelfPage />),
+      },
+      {
+        path: "community/books/:bookId",
+        element: routeElement(<CommunityBookReaderPage />),
       },
       {
         path: ":profileSlug/:shareToken",

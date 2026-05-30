@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router";
 import { CreditBalancePill, LogoIcon, ProfileMenu } from "../components";
 import axiosInstance from "../lib/axios";
 import { API_ENDPOINTS } from "../utils/api-endpoints";
-import { Activity, Clock3, FileText, KeyRound } from "lucide-react";
+import { Activity, Clock3, FileText, KeyRound, Library } from "lucide-react";
 
 function DashboardLayout({ children }) {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -97,6 +97,14 @@ function DashboardLayout({ children }) {
           >
             <KeyRound className="size-4" />
             API
+          </Link>
+
+          <Link
+            to="/community"
+            className="hidden md:inline-flex h-10 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+          >
+            <Library className="size-4" />
+            Community
           </Link>
 
           <CreditBalancePill />

@@ -9,6 +9,8 @@ export { default as SignUpPage } from "./SignUpPage";
 export { default as DashboardPage } from "./DashboardPage";
 export { default as DocsPage } from "./DocsPage";
 export { default as BookPage } from "./BookPage";
+export { default as CommunityBookReaderPage } from "./CommunityBookReaderPage";
+export { default as CommunityBookshelfPage } from "./CommunityBookshelfPage";
 export { default as EditBookPage } from "./EditBookPage";
 export { default as KDPStudioPage } from "./KDPStudioPage";
 export { default as PricingPage } from "./PricingPage";

@@ -100,6 +100,70 @@ function serializePublicPreview(book) {
   };
 }
 
+function serializeCommunityBook(book) {
+  const owner = book?.userId && typeof book.userId === "object" ? book.userId : {};
+  const previewToken = book?.previewShare?.token || "";
+  const shelfToken = owner?.bookshelfShare?.token || "";
+  const kdpAssets = book?.kdp?.assets || {};
+  const purchaseUrl =
+    book?.communityListing?.purchaseUrl || owner.storeUrl || "";
+
+  return {
+    _id: book._id,
+    title: book.title,
+    subtitle: book.subtitle,
+    author: book.author,
+    coverImage: book.coverImage,
+    genre: book.genre,
+    audience: book.audience,
+    language: book.language,
+    chapterCount: Array.isArray(book.chapters) ? book.chapters.length : 0,
+    createdAt: book.createdAt,
+    updatedAt: book.updatedAt,
+    owner: {
+      name: owner.name || "",
+      avatar: owner.avatar || "",
+      shelfPageName: owner.shelfPageName || "",
+      shelfPhotoUrl: owner.shelfPhotoUrl || "",
+      bookshelfShare: shelfToken
+        ? {
+            token: shelfToken,
+            enabledAt: owner.bookshelfShare.enabledAt,
+          }
+        : null,
+    },
+    sales: {
+      description: kdpAssets.description || kdpAssets.backCoverBlurb || "",
+    },
+    previewShare: previewToken
+      ? {
+          token: previewToken,
+          enabledAt: book.previewShare.enabledAt,
+        }
+      : null,
+    communityListing: {
+      listedAt: book.communityListing?.listedAt || null,
+      purchaseUrl,
+      freeFullPdfEnabled: Boolean(book.communityListing?.freeFullPdfEnabled),
+      freeFullPdfEnabledAt: book.communityListing?.freeFullPdfEnabledAt || null,
+    },
+  };
+}
+
+function serializeCommunityBookDetails(book) {
+  const communityBook = serializeCommunityBook(book);
+
+  return {
+    ...communityBook,
+    fullPdf: {
+      enabled: Boolean(book.communityListing?.freeFullPdfEnabled),
+      url: Boolean(book.communityListing?.freeFullPdfEnabled)
+        ? `/api/public/community-bookshelf/${book._id}/pdf`
+        : "",
+    },
+  };
+}
+
 async function getPublicBookshelf(req, res) {
   try {
     const { shareToken } = req.params;
@@ -142,6 +206,136 @@ async function getPublicBookshelf(req, res) {
     console.error("Error getting public bookshelf:", error);
 
     return res.status(500).json({ error: "Internal Server Error!" });
+  }
+}
+
+async function getCommunityBookshelf(req, res) {
+  try {
+    setPublicShareHeaders(res);
+
+    const books = await Book.find({ "communityListing.isListed": true })
+      .sort({
+        "communityListing.listedAt": -1,
+        updatedAt: -1,
+        createdAt: -1,
+      })
+      .limit(96)
+      .select(
+        "title subtitle author coverImage genre audience language chapters._id previewShare communityListing kdp.assets.description kdp.assets.backCoverBlurb createdAt updatedAt userId"
+      )
+      .populate({
+        path: "userId",
+        select:
+          "name avatar storeUrl shelfPageName shelfPhotoUrl bookshelfShare status",
+        match: activeOwnerQuery(),
+      })
+      .lean();
+
+    const visibleBooks = books.filter(
+      (book) => book.userId && !isBannedOwner(book.userId)
+    );
+
+    return res.status(200).json({
+      message: "Community bookshelf retrieved successfully.",
+      count: visibleBooks.length,
+      books: visibleBooks.map(serializeCommunityBook),
+    });
+  } catch (error) {
+    console.error("Error getting community bookshelf:", error);
+
+    return res.status(500).json({ error: "Internal Server Error!" });
+  }
+}
+
+async function getCommunityBook(req, res) {
+  try {
+    const { bookId } = req.params;
+
+    setPublicShareHeaders(res);
+
+    const book = await Book.findOne({
+      _id: bookId,
+      "communityListing.isListed": true,
+    })
+      .select(
+        "title subtitle author coverImage genre audience language chapters._id previewShare communityListing kdp.assets.description kdp.assets.backCoverBlurb createdAt updatedAt userId"
+      )
+      .populate({
+        path: "userId",
+        select:
+          "name avatar storeUrl shelfPageName shelfPhotoUrl bookshelfShare status",
+        match: activeOwnerQuery(),
+      })
+      .lean();
+
+    if (!book || !book.userId || isBannedOwner(book.userId)) {
+      return res.status(404).json({ error: "Community book is not active." });
+    }
+
+    return res.status(200).json({
+      message: "Community book retrieved successfully.",
+      book: serializeCommunityBookDetails(book),
+    });
+  } catch (error) {
+    console.error("Error getting community book:", error);
+
+    if (error.name === "CastError") {
+      return res.status(400).json({ error: "Invalid book ID format!" });
+    }
+
+    return res.status(500).json({ error: "Internal Server Error!" });
+  }
+}
+
+async function getCommunityBookPdf(req, res) {
+  try {
+    const { bookId } = req.params;
+    const book = await Book.findOne({
+      _id: bookId,
+      "communityListing.isListed": true,
+      "communityListing.freeFullPdfEnabled": true,
+    });
+
+    setPublicShareHeaders(res);
+
+    if (!book) {
+      return res.status(404).json({ error: "Free PDF is not active." });
+    }
+
+    const owner = await User.findOne(activeOwnerQuery({ _id: book.userId }))
+      .select("status")
+      .lean();
+
+    if (!owner || isBannedOwner(owner)) {
+      return res.status(404).json({ error: "Free PDF is not active." });
+    }
+
+    if (await migrateBookImagesToStorage(book)) {
+      book.markModified("coverImage");
+      book.markModified("chapters");
+      await book.save();
+    }
+
+    const filename = `${book.title.replace(
+      /[^a-zA-Z0-9]/g,
+      "_"
+    )}_free_full_book.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+    res.setHeader("Content-Transfer-Encoding", "binary");
+
+    await generatePdf(book, res);
+  } catch (error) {
+    console.error("Error getting community book PDF:", error);
+
+    if (!res.headersSent) {
+      if (error.name === "CastError") {
+        return res.status(400).json({ error: "Invalid book ID format!" });
+      }
+
+      res.status(500).json({ error: "Internal Server Error!" });
+    }
   }
 }
 
@@ -221,6 +415,9 @@ async function getPublicBookPreviewPdf(req, res) {
 }
 
 module.exports = {
+  getCommunityBookshelf,
+  getCommunityBook,
+  getCommunityBookPdf,
   getPublicBookshelf,
   getPublicBookPreview,
   getPublicBookPreviewPdf,

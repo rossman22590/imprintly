@@ -11,6 +11,7 @@ const {
   uploadVisualReference,
   enableBookPreviewShare,
   disableBookPreviewShare,
+  updateBookCommunityListing,
   deleteBook,
 } = require("../controllers/books.controller");
 const {
@@ -53,5 +54,8 @@ router
   .route("/:bookId/preview-share")
   .post(enableBookPreviewShare)
   .delete(disableBookPreviewShare);
+
+// PATCH /api/books/:bookId/community-listing - Post/remove a book in the community bookshelf
+router.route("/:bookId/community-listing").patch(updateBookCommunityListing);
 
 module.exports = router;
