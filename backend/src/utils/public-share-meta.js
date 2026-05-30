@@ -23,6 +23,14 @@ function getPublicShareRoute(pathname = "") {
     .split("/")
     .filter(Boolean);
 
+  if (parts.length === 1 && parts[0] === "community") {
+    return { type: "community" };
+  }
+
+  if (parts.length === 3 && parts[0] === "community" && parts[1] === "books") {
+    return { type: "community-book", bookId: parts[2] };
+  }
+
   if (parts.length !== 2) return null;
 
   if (parts[0] === "shelf") {
@@ -168,10 +176,67 @@ async function getPreviewMeta(token, options = {}) {
   });
 }
 
+async function getCommunityMeta(options = {}) {
+  const bookCount = await Book.countDocuments({
+    "communityListing.isListed": true,
+  });
+
+  return buildMeta({
+    title: "Bookify Community Bookshelf",
+    description: `Browse books shared by Bookify authors${
+      bookCount ? `, including ${bookCount} community-posted titles` : ""
+    }. Read previews and find purchase links for physical copies.`,
+    image: DEFAULT_SHARE_IMAGE,
+    type: "website",
+    ...options,
+  });
+}
+
+async function getCommunityBookMeta(bookId, options = {}) {
+  const book = await Book.findOne({
+    _id: bookId,
+    "communityListing.isListed": true,
+  })
+    .populate({
+      path: "userId",
+      select: "name avatar status",
+    })
+    .lean();
+
+  if (!book || book.userId?.status === "banned") return null;
+
+  const kdpAssets = book.kdp?.assets || {};
+  const isFreePdf = Boolean(book.communityListing?.freeFullPdfEnabled);
+  const description =
+    kdpAssets.description ||
+    kdpAssets.backCoverBlurb ||
+    book.subtitle ||
+    `${isFreePdf ? "Read the free full PDF of" : "Browse"} ${book.title}.`;
+
+  return buildMeta({
+    title: `${book.title} | Bookify Community`,
+    description,
+    image: book.coverImage || book.userId?.avatar || DEFAULT_SHARE_IMAGE,
+    author: book.author || book.userId?.name,
+    type: "book",
+    ...options,
+  });
+}
+
 async function getPublicShareMetaForPath(pathname = "", options = {}) {
   const route = getPublicShareRoute(pathname);
 
-  if (!route?.token) return null;
+  if (!route) return null;
+
+  if (route.type === "community") {
+    return getCommunityMeta(options);
+  }
+
+  if (route.type === "community-book") {
+    return getCommunityBookMeta(route.bookId, options);
+  }
+
+  if (!route.token) return null;
 
   if (route.type === "shelf") {
     return getShelfMeta(route.token, options);

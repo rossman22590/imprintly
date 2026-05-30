@@ -6,6 +6,8 @@ export { default as RunsPage } from "./RunsPage";
 export { default as SignInPage } from "./SignInPage";
 export { default as SignUpPage } from "./SignUpPage";
 export { default as DashboardPage } from "./DashboardPage";
+export { default as CommunityBookReaderPage } from "./CommunityBookReaderPage";
+export { default as CommunityBookshelfPage } from "./CommunityBookshelfPage";
 export { default as DocsPage } from "./DocsPage";
 export { default as BookPage } from "./BookPage";
 export { default as EditBookPage } from "./EditBookPage";

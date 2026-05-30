@@ -34,7 +34,7 @@ const FlipbookImagePage = forwardRef(({ page, theme }, ref) => (
 
 FlipbookImagePage.displayName = "FlipbookImagePage";
 
-async function renderPdfPages(pdfUrl, { signal, onProgress }) {
+async function renderPdfPages(pdfUrl, { signal, onProgress, maxPages }) {
   const loadingTask = pdfjs.getDocument({ url: pdfUrl });
 
   signal.addEventListener("abort", () => {
@@ -42,7 +42,9 @@ async function renderPdfPages(pdfUrl, { signal, onProgress }) {
   });
 
   const pdf = await loadingTask.promise;
-  const pageCount = Math.min(pdf.numPages, MAX_PREVIEW_PAGES);
+  const pageLimit =
+    Number.isFinite(maxPages) && maxPages > 0 ? maxPages : pdf.numPages;
+  const pageCount = Math.min(pdf.numPages, pageLimit);
   const pages = [];
 
   for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
@@ -79,7 +81,12 @@ async function renderPdfPages(pdfUrl, { signal, onProgress }) {
   return pages;
 }
 
-function PdfFlipbook({ pdfUrl, title = "Preview PDF", themeId = "" }) {
+function PdfFlipbook({
+  pdfUrl,
+  title = "Preview PDF",
+  themeId = "",
+  maxPages = MAX_PREVIEW_PAGES,
+}) {
   const [pages, setPages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -104,6 +111,7 @@ function PdfFlipbook({ pdfUrl, title = "Preview PDF", themeId = "" }) {
     renderPdfPages(pdfUrl, {
       signal: controller.signal,
       onProgress: setProgress,
+      maxPages,
     })
       .then((nextPages) => {
         if (!controller.signal.aborted) {
@@ -123,7 +131,7 @@ function PdfFlipbook({ pdfUrl, title = "Preview PDF", themeId = "" }) {
       });
 
     return () => controller.abort();
-  }, [pdfUrl]);
+  }, [maxPages, pdfUrl]);
 
   const goPrevious = () => {
     flipbookRef.current?.pageFlip?.().flipPrev();

@@ -12,6 +12,16 @@ export function normalizeBook(book) {
   return {
     ...book,
     chapters: Array.isArray(book.chapters) ? book.chapters : [],
+    communityListing: {
+      isListed: Boolean(book.communityListing?.isListed),
+      listedAt: book.communityListing?.listedAt || null,
+      purchaseUrl: book.communityListing?.purchaseUrl || "",
+      freeFullPdfEnabled: Boolean(
+        book.communityListing?.freeFullPdfEnabled
+      ),
+      freeFullPdfEnabledAt:
+        book.communityListing?.freeFullPdfEnabledAt || null,
+    },
     bible: {
       characters: bible.characters || "",
       locations: bible.locations || "",

@@ -252,6 +252,36 @@ const kdpAssetsSchema = new mongoose.Schema(
   }
 );
 
+const communityListingSchema = new mongoose.Schema(
+  {
+    isListed: {
+      type: Boolean,
+      default: false,
+    },
+    listedAt: {
+      type: Date,
+      default: null,
+    },
+    purchaseUrl: {
+      type: String,
+      default: "",
+      trim: true,
+      maxLength: [500, "Purchase URL cannot exceed 500 characters"],
+    },
+    freeFullPdfEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    freeFullPdfEnabledAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
 const bookBibleSchema = new mongoose.Schema(
   {
     characters: {
@@ -516,6 +546,10 @@ const bookSchema = new mongoose.Schema(
         default: null,
       },
     },
+    communityListing: {
+      type: communityListingSchema,
+      default: () => ({}),
+    },
   },
   {
     timestamps: true,
@@ -525,6 +559,10 @@ const bookSchema = new mongoose.Schema(
 // Index for faster queries
 bookSchema.index({ userId: 1, status: 1 });
 bookSchema.index({ title: "text" }); // Enable text search on title
+bookSchema.index({
+  "communityListing.isListed": 1,
+  "communityListing.listedAt": -1,
+});
 bookSchema.index(
   { "previewShare.token": 1 },
   {

@@ -113,6 +113,66 @@ function isEnabled(value) {
   return value === true || value === "true" || value === 1 || value === "1";
 }
 
+function normalizeOptionalHttpUrl(value = "") {
+  const trimmed = String(value || "").trim();
+
+  if (!trimmed) return "";
+
+  const normalized = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(normalized);
+
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return null;
+    }
+
+    return parsed.href.length <= 500 ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeCommunityListingEnabled(value, fallback = false) {
+  if (value === undefined) return Boolean(fallback);
+
+  if (value === true || value === "true" || value === 1 || value === "1") {
+    return true;
+  }
+
+  if (
+    value === false ||
+    value === "false" ||
+    value === 0 ||
+    value === "0"
+  ) {
+    return false;
+  }
+
+  return null;
+}
+
+function normalizeBooleanFlag(value, fallback = false) {
+  if (value === undefined) return Boolean(fallback);
+
+  if (value === true || value === "true" || value === 1 || value === "1") {
+    return true;
+  }
+
+  if (
+    value === false ||
+    value === "false" ||
+    value === 0 ||
+    value === "0"
+  ) {
+    return false;
+  }
+
+  return null;
+}
+
 async function getUniqueBookPreviewShareToken() {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const token = generateShareToken("preview");
@@ -697,6 +757,103 @@ async function disableBookPreviewShare(req, res) {
   }
 }
 
+async function updateBookCommunityListing(req, res) {
+  try {
+    const { bookId } = req.params;
+    const book = await Book.findById(bookId);
+
+    if (!book) {
+      return res.status(404).json({ error: "Book not found!" });
+    }
+
+    if (book.userId.toString() !== req.user.id.toString()) {
+      return res
+        .status(403)
+        .json({ error: "Forbidden: You cannot update this book!" });
+    }
+
+    const nextIsListed = normalizeCommunityListingEnabled(
+      req.body.isListed,
+      book.communityListing?.isListed
+    );
+
+    if (nextIsListed === null) {
+      return res.status(400).json({
+        error: "Community listing status must be true or false.",
+      });
+    }
+
+    const nextFreeFullPdfEnabled = normalizeBooleanFlag(
+      req.body.freeFullPdfEnabled,
+      book.communityListing?.freeFullPdfEnabled
+    );
+
+    if (nextFreeFullPdfEnabled === null) {
+      return res.status(400).json({
+        error: "Free PDF setting must be true or false.",
+      });
+    }
+
+    const normalizedPurchaseUrl =
+      req.body.purchaseUrl === undefined
+        ? book.communityListing?.purchaseUrl || ""
+        : normalizeOptionalHttpUrl(req.body.purchaseUrl);
+
+    if (normalizedPurchaseUrl === null) {
+      return res.status(400).json({
+        error: "Please enter a valid purchase URL.",
+      });
+    }
+
+    const wasListed = Boolean(book.communityListing?.isListed);
+    const wasFreeFullPdfEnabled = Boolean(
+      book.communityListing?.freeFullPdfEnabled
+    );
+    const shouldEnableFreeFullPdf = nextIsListed && nextFreeFullPdfEnabled;
+
+    book.communityListing = {
+      isListed: nextIsListed,
+      listedAt: nextIsListed
+        ? wasListed && book.communityListing?.listedAt
+          ? book.communityListing.listedAt
+          : new Date()
+        : null,
+      purchaseUrl: normalizedPurchaseUrl,
+      freeFullPdfEnabled: shouldEnableFreeFullPdf,
+      freeFullPdfEnabledAt: shouldEnableFreeFullPdf
+        ? wasFreeFullPdfEnabled && book.communityListing?.freeFullPdfEnabledAt
+          ? book.communityListing.freeFullPdfEnabledAt
+          : new Date()
+        : null,
+    };
+
+    const updatedBook = await book.save();
+
+    return res.status(200).json({
+      message: nextIsListed
+        ? "Book posted to the community bookshelf."
+        : "Book removed from the community bookshelf.",
+      book: updatedBook,
+      communityListing: updatedBook.communityListing,
+    });
+  } catch (error) {
+    console.error("Error updating community listing:", error);
+
+    if (error.name === "CastError") {
+      return res.status(400).json({ error: "Invalid book ID format!" });
+    }
+
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        error: "Validation failed",
+        details: error.message,
+      });
+    }
+
+    return res.status(500).json({ error: "Internal Server Error!" });
+  }
+}
+
 async function deleteBook(req, res) {
   try {
     const { bookId } = req.params;
@@ -750,5 +907,6 @@ module.exports = {
   uploadVisualReference,
   enableBookPreviewShare,
   disableBookPreviewShare,
+  updateBookCommunityListing,
   deleteBook,
 };

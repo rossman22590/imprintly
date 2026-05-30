@@ -8,6 +8,7 @@ import LogoIcon from "../LogoIcon";
 
 const navLinks = [
   { label: "Features", href: "/#features", hash: "#features" },
+  { label: "Community", to: "/community" },
   { label: "Pricing", to: "/pricing" },
   { label: "AI Tutor", href: "https://account.myapps.ai/", external: true },
 ];

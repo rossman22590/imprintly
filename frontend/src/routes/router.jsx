@@ -2,6 +2,8 @@ import { createBrowserRouter, Outlet } from "react-router";
 import {
   AdminPage,
   BookPage,
+  CommunityBookReaderPage,
+  CommunityBookshelfPage,
   CreditsPage,
   DashboardPage,
   DocsPage,
@@ -37,6 +39,14 @@ const router = createBrowserRouter([
       {
         path: "pricing",
         element: <PricingPage />,
+      },
+      {
+        path: "community",
+        element: <CommunityBookshelfPage />,
+      },
+      {
+        path: "community/books/:bookId",
+        element: <CommunityBookReaderPage />,
       },
       {
         path: "register",

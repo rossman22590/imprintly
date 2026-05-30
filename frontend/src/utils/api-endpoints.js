@@ -49,6 +49,7 @@ export const API_ENDPOINTS = {
     UPDATE_COVER: "/api/books",
     UPDATE_KDP: "/api/books",
     PREVIEW_SHARE: "/api/books",
+    COMMUNITY_LISTING: "/api/books",
     UPLOAD_VISUAL_REFERENCE: "/api/books/visual-references/upload",
     IMPORT_VISUAL_REFERENCE_URL: "/api/books/visual-references/import-url",
     DELETE: "/api/books",
@@ -71,6 +72,7 @@ export const API_ENDPOINTS = {
     CONTINUITY_REPORT: "/api/exports",
   },
   PUBLIC: {
+    COMMUNITY_BOOKSHELF: "/api/public/community-bookshelf",
     BOOKSHELF: "/api/public/bookshelves",
     BOOK_PREVIEW: "/api/public/book-previews",
   },

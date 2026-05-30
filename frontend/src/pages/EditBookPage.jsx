@@ -18,6 +18,7 @@ import {
   FileText,
   FileType,
   Image,
+  Library,
   Menu,
   NotebookText,
   Save,
@@ -71,6 +72,30 @@ async function copyToClipboard(value = "") {
     return true;
   } catch {
     return false;
+  }
+}
+
+function normalizeOptionalHttpUrl(value = "") {
+  const trimmed = String(value || "").trim();
+
+  if (!trimmed) return { url: "", error: "" };
+
+  const normalized = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(normalized);
+
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return { url: "", error: "Purchase link must start with http:// or https://" };
+    }
+
+    return parsed.href.length <= 500
+      ? { url: parsed.href, error: "" }
+      : { url: "", error: "Purchase link cannot exceed 500 characters." };
+  } catch {
+    return { url: "", error: "Please enter a valid purchase link." };
   }
 }
 
@@ -455,6 +480,14 @@ function EditBookPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingCover, setIsGeneratingCover] = useState(false);
   const [isPreviewShareSaving, setIsPreviewShareSaving] = useState(false);
+  const [isCommunityListingSaving, setIsCommunityListingSaving] =
+    useState(false);
+  const [isCommunityListingOpen, setIsCommunityListingOpen] = useState(false);
+  const [communityPurchaseUrl, setCommunityPurchaseUrl] = useState("");
+  const [communityPurchaseUrlError, setCommunityPurchaseUrlError] =
+    useState("");
+  const [communityFreePdfEnabled, setCommunityFreePdfEnabled] =
+    useState(false);
   const [isGeneratingChapterImage, setIsGeneratingChapterImage] =
     useState(false);
   const [activeEditorLockMessage, setActiveEditorLockMessage] = useState("");
@@ -1823,6 +1856,73 @@ function EditBookPage() {
     }
   };
 
+  const handleOpenCommunityListing = () => {
+    setCommunityPurchaseUrl(
+      book?.communityListing?.purchaseUrl || user?.storeUrl || ""
+    );
+    setCommunityFreePdfEnabled(
+      Boolean(book?.communityListing?.freeFullPdfEnabled)
+    );
+    setCommunityPurchaseUrlError("");
+    setIsCommunityListingOpen(true);
+  };
+
+  const handleUpdateCommunityListing = async (isListed) => {
+    let url = book?.communityListing?.purchaseUrl || "";
+
+    if (isListed) {
+      const normalized = normalizeOptionalHttpUrl(communityPurchaseUrl);
+
+      if (normalized.error) {
+        setCommunityPurchaseUrlError(normalized.error);
+        return;
+      }
+
+      url = normalized.url;
+    }
+
+    setIsCommunityListingSaving(true);
+
+    try {
+      const saved = await handleSaveChanges(book, false);
+
+      if (!saved) return;
+
+      const { data } = await axiosInstance.patch(
+        `${API_ENDPOINTS.BOOKS.COMMUNITY_LISTING}/${bookId}/community-listing`,
+        {
+          isListed,
+          purchaseUrl: url,
+          freeFullPdfEnabled: isListed && communityFreePdfEnabled,
+        }
+      );
+      const nextBook = normalizeBook(data?.book);
+
+      if (nextBook) {
+        skipNextAutosaveRef.current = true;
+        setBook(nextBook);
+      }
+
+      setIsCommunityListingOpen(false);
+      toast.success(
+        isListed
+          ? "Book posted to the community bookshelf."
+          : "Book removed from the community bookshelf."
+      );
+    } catch (error) {
+      console.error("Error updating community listing:", error);
+      toast.error(
+        error.response?.data?.error || "Failed to update community listing."
+      );
+    } finally {
+      setIsCommunityListingSaving(false);
+    }
+  };
+
+  const handleOpenCommunityBookshelf = () => {
+    window.open("/community", "_blank", "noopener,noreferrer");
+  };
+
   const handleAiTool = async (action, tone = "") => {
     if (isGenerating || isGeneratingChapterImage) {
       toast.error("Wait for the current AI update to finish first.");
@@ -2033,6 +2133,8 @@ function EditBookPage() {
       </main>
     );
   }
+
+  const isCommunityListed = Boolean(book?.communityListing?.isListed);
 
   return (
     <div className="min-h-screen bg-slate-50 font-display flex relative">
@@ -2349,6 +2451,146 @@ function EditBookPage() {
         </div>
       </Modal>
 
+      <Modal
+        isOpen={isCommunityListingOpen}
+        onClose={() =>
+          !isCommunityListingSaving && setIsCommunityListingOpen(false)
+        }
+        title="Community bookshelf"
+        sizeClassName="max-w-lg"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleOpenCommunityBookshelf}
+              disabled={isCommunityListingSaving}
+            >
+              Open Community
+            </Button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setIsCommunityListingOpen(false)}
+                disabled={isCommunityListingSaving}
+              >
+                Cancel
+              </Button>
+              {isCommunityListed && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => handleUpdateCommunityListing(false)}
+                  isLoading={isCommunityListingSaving}
+                >
+                  Remove
+                </Button>
+              )}
+              <Button
+                type="button"
+                icon={Library}
+                onClick={() => handleUpdateCommunityListing(true)}
+                isLoading={isCommunityListingSaving}
+              >
+                {isCommunityListed ? "Save Listing" : "Post Book"}
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div
+            className={`rounded-xl border px-4 py-3 ${
+              isCommunityListed
+                ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                : "border-slate-200 bg-slate-50 text-slate-700"
+            }`}
+          >
+            <p className="text-sm font-bold">
+              {isCommunityListed
+                ? "This book is posted publicly."
+                : "This book is not on the community bookshelf."}
+            </p>
+            <p className="mt-1 text-sm">
+              Community posts show the cover, title, author, genre, preview
+              link when active, free full-PDF access when enabled, and purchase
+              link when provided.
+            </p>
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-semibold text-slate-900">
+              Listing type
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setCommunityFreePdfEnabled(false)}
+                disabled={isCommunityListingSaving}
+                aria-pressed={!communityFreePdfEnabled}
+                className={`rounded-xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                  !communityFreePdfEnabled
+                    ? "border-violet-500 bg-violet-50 shadow-sm"
+                    : "border-slate-200 bg-white hover:border-slate-300"
+                }`}
+              >
+                <span className="flex items-center gap-2 text-sm font-black text-slate-950">
+                  <Store className="size-4 text-violet-600" />
+                  Catalog
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">
+                  Shows preview and buy links only.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCommunityFreePdfEnabled(true)}
+                disabled={isCommunityListingSaving}
+                aria-pressed={communityFreePdfEnabled}
+                className={`rounded-xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                  communityFreePdfEnabled
+                    ? "border-emerald-500 bg-emerald-50 shadow-sm"
+                    : "border-slate-200 bg-white hover:border-slate-300"
+                }`}
+              >
+                <span className="flex items-center gap-2 text-sm font-black text-slate-950">
+                  <FileText className="size-4 text-emerald-600" />
+                  FREE full PDF
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">
+                  Adds public view and download buttons.
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <Input
+            type="text"
+            label="Purchase Link"
+            name="communityPurchaseUrl"
+            value={communityPurchaseUrl}
+            onChange={(event) => {
+              setCommunityPurchaseUrl(event.target.value);
+              setCommunityPurchaseUrlError("");
+            }}
+            icon={Store}
+            inputMode="url"
+            placeholder="https://amazon.com/dp/your-book"
+            error={communityPurchaseUrlError}
+            helperText="Optional. Use a book-specific link for paperback, hardcover, or another physical copy listing."
+          />
+
+          {!book?.previewShare?.token && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Create a preview link from the Preview menu if you want readers
+              to open a first-chapter preview from the community page.
+            </div>
+          )}
+        </div>
+      </Modal>
+
       {/* Mobile sidebar */}
       {isSidebarOpen && (
         <aside
@@ -2609,6 +2851,20 @@ function EditBookPage() {
                   </DropdownItem>
                 )}
               </Dropdown>
+
+              <Button
+                type="button"
+                variant={isCommunityListed ? "secondary" : "outline"}
+                onClick={handleOpenCommunityListing}
+                icon={Library}
+                size="sm"
+                isLoading={isCommunityListingSaving}
+                ariaLabel="Community bookshelf listing"
+                title="Community bookshelf listing"
+                className="h-9 px-3"
+              >
+                {isCommunityListed ? "Posted" : "Community"}
+              </Button>
 
               <Dropdown
                 trigger={
