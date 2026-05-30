@@ -18,9 +18,9 @@ import {
 } from "lucide-react";
 
 const pageBackground = {
-  backgroundColor: "#f7fbf5",
+  backgroundColor: "#fbf7ed",
   backgroundImage:
-    "linear-gradient(135deg, rgba(30,86,49,0.08) 0%, transparent 32%), linear-gradient(225deg, rgba(193,63,40,0.08) 0%, transparent 30%), radial-gradient(circle at 50% 0%, rgba(247,197,72,0.18), transparent 32rem)",
+    "linear-gradient(135deg, rgba(29,78,216,0.08) 0%, transparent 32%), linear-gradient(225deg, rgba(215,154,0,0.13) 0%, transparent 30%), radial-gradient(circle at 50% 0%, rgba(242,193,78,0.18), transparent 32rem)",
 };
 
 const normalizeText = (value = "") =>
@@ -127,17 +127,17 @@ function CommunityBookshelfPage() {
   ).length;
 
   return (
-    <main className="min-h-screen text-[#10231b]" style={pageBackground}>
-      <header className="border-b border-[#d6e5d5] bg-white/76 backdrop-blur-xl">
+    <main className="min-h-screen text-[#171717]" style={pageBackground}>
+      <header className="border-b border-[#ded6c6] bg-white/76 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5 lg:px-8">
           <Link
             to="/"
-            className="inline-flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c13f28] focus-visible:ring-offset-2"
+            className="inline-flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
           >
-            <span className="inline-flex size-9 items-center justify-center rounded-xl bg-[#173f2d] text-white shadow-lg shadow-[#173f2d]/20">
+            <span className="inline-flex size-9 items-center justify-center rounded-xl bg-[#171717] text-white shadow-lg shadow-black/20">
               <LogoIcon className="size-5" />
             </span>
-            <span className="font-headline text-xl font-black text-[#10231b]">
+            <span className="font-headline text-xl font-black text-[#171717]">
               Bookify
             </span>
           </Link>
@@ -145,14 +145,14 @@ function CommunityBookshelfPage() {
           <nav className="flex items-center gap-2">
             <Link
               to="/"
-              className="hidden items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#395447] transition hover:bg-[#e9f3e7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c13f28] sm:inline-flex"
+              className="hidden items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#4f4b43] transition hover:bg-[#eef3ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] sm:inline-flex"
             >
               <Home className="size-4" />
               Home
             </Link>
             <Link
               to="/dashboard"
-              className="inline-flex items-center gap-2 rounded-xl bg-[#173f2d] px-4 py-2 text-sm font-bold text-white shadow-lg shadow-[#173f2d]/20 transition hover:bg-[#102f21] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c13f28] focus-visible:ring-offset-2"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#1d4ed8] px-4 py-2 text-sm font-bold text-white shadow-lg shadow-[#1d4ed8]/20 transition hover:bg-[#173ea8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
             >
               Dashboard
               <ArrowUpRight className="size-4" />
@@ -161,17 +161,17 @@ function CommunityBookshelfPage() {
         </div>
       </header>
 
-      <section className="border-b border-[#d6e5d5]">
+      <section className="border-b border-[#ded6c6]">
         <div className="mx-auto grid max-w-7xl gap-8 px-5 py-10 lg:grid-cols-[1fr_22rem] lg:px-8 lg:py-14">
           <div className="min-w-0">
-            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#cfe2cd] bg-white/70 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[#c13f28]">
+            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#d7ccba] bg-white/70 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[#1d4ed8]">
               <Library className="size-3.5" />
               Community Bookshelf
             </p>
-            <h1 className="max-w-4xl font-headline text-4xl font-black leading-[1.02] text-[#10231b] md:text-6xl">
+            <h1 className="max-w-4xl font-headline text-4xl font-black leading-[1.02] text-[#171717] md:text-6xl">
               Books posted by Bookify authors.
             </h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-[#496253] md:text-lg">
+            <p className="mt-5 max-w-2xl text-base leading-7 text-[#56534d] md:text-lg">
               Browse what people are making, view free full-book PDFs when
               authors allow it, and follow purchase links when a physical copy
               is ready.
@@ -179,25 +179,25 @@ function CommunityBookshelfPage() {
           </div>
 
           <div className="grid grid-cols-3 gap-3 self-end">
-            <div className="rounded-xl border border-[#d6e5d5] bg-white/80 p-4">
-              <p className="text-3xl font-black text-[#173f2d]">{books.length}</p>
-              <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#6a7f70]">
+            <div className="rounded-xl border border-[#ded6c6] bg-white/80 p-4">
+              <p className="text-3xl font-black text-[#171717]">{books.length}</p>
+              <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#746f66]">
                 Posted
               </p>
             </div>
-            <div className="rounded-xl border border-[#d6e5d5] bg-white/80 p-4">
-              <p className="text-3xl font-black text-[#31513f]">
+            <div className="rounded-xl border border-[#ded6c6] bg-white/80 p-4">
+              <p className="text-3xl font-black text-[#1d4ed8]">
                 {freePdfCount}
               </p>
-              <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#6a7f70]">
+              <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#746f66]">
                 Free
               </p>
             </div>
-            <div className="rounded-xl border border-[#d6e5d5] bg-white/80 p-4">
-              <p className="text-3xl font-black text-[#c13f28]">
+            <div className="rounded-xl border border-[#ded6c6] bg-white/80 p-4">
+              <p className="text-3xl font-black text-[#d79a00]">
                 {purchaseLinkCount}
               </p>
-              <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#6a7f70]">
+              <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#746f66]">
                 Buy links
               </p>
             </div>
@@ -209,13 +209,13 @@ function CommunityBookshelfPage() {
         <div className="grid gap-3 md:grid-cols-[1fr_16rem]">
           <label className="relative block">
             <span className="sr-only">Search books</span>
-            <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-[#6a7f70]" />
+            <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-[#746f66]" />
             <input
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search title, author, genre..."
-              className="h-12 w-full rounded-xl border border-[#cfe2cd] bg-white/86 pl-12 pr-4 text-sm font-semibold text-[#10231b] outline-none transition placeholder:text-[#7a8d80] focus:border-[#c13f28] focus:ring-2 focus:ring-[#c13f28]/20"
+              className="h-12 w-full rounded-xl border border-[#d7ccba] bg-white/86 pl-12 pr-4 text-sm font-semibold text-[#171717] outline-none transition placeholder:text-[#8b857b] focus:border-[#1d4ed8] focus:ring-2 focus:ring-[#1d4ed8]/20"
             />
           </label>
 
@@ -224,7 +224,7 @@ function CommunityBookshelfPage() {
             <select
               value={selectedGenre}
               onChange={(event) => setSelectedGenre(event.target.value)}
-              className="h-12 w-full rounded-xl border border-[#cfe2cd] bg-white/86 px-4 text-sm font-bold text-[#10231b] outline-none transition focus:border-[#c13f28] focus:ring-2 focus:ring-[#c13f28]/20"
+              className="h-12 w-full rounded-xl border border-[#d7ccba] bg-white/86 px-4 text-sm font-bold text-[#171717] outline-none transition focus:border-[#1d4ed8] focus:ring-2 focus:ring-[#1d4ed8]/20"
             >
               {genres.map((genre) => (
                 <option key={genre} value={genre}>
@@ -242,37 +242,37 @@ function CommunityBookshelfPage() {
             {Array.from({ length: 8 }).map((_, index) => (
               <div
                 key={index}
-                className="h-[34rem] animate-pulse rounded-xl border border-[#d6e5d5] bg-white/70"
+                className="h-[34rem] animate-pulse rounded-xl border border-[#ded6c6] bg-white/70"
               />
             ))}
           </div>
         ) : errorMessage ? (
-          <section className="rounded-xl border border-[#d6e5d5] bg-white/80 px-6 py-16 text-center">
-            <Library className="mx-auto mb-4 size-11 text-[#c13f28]" />
-            <h2 className="text-2xl font-black text-[#10231b]">
+          <section className="rounded-xl border border-[#ded6c6] bg-white/80 px-6 py-16 text-center">
+            <Library className="mx-auto mb-4 size-11 text-[#1d4ed8]" />
+            <h2 className="text-2xl font-black text-[#171717]">
               Bookshelf unavailable
             </h2>
-            <p className="mx-auto mt-2 max-w-md text-sm text-[#496253]">
+            <p className="mx-auto mt-2 max-w-md text-sm text-[#56534d]">
               {errorMessage}
             </p>
           </section>
         ) : books.length === 0 ? (
-          <section className="rounded-xl border-2 border-dashed border-[#cfe2cd] bg-white/62 px-6 py-16 text-center">
-            <BookOpen className="mx-auto mb-4 size-11 text-[#6a7f70]" />
-            <h2 className="text-2xl font-black text-[#10231b]">
+          <section className="rounded-xl border-2 border-dashed border-[#d7ccba] bg-white/62 px-6 py-16 text-center">
+            <BookOpen className="mx-auto mb-4 size-11 text-[#746f66]" />
+            <h2 className="text-2xl font-black text-[#171717]">
               No books posted yet
             </h2>
-            <p className="mx-auto mt-2 max-w-md text-sm text-[#496253]">
+            <p className="mx-auto mt-2 max-w-md text-sm text-[#56534d]">
               Community books will appear here as authors choose to post them.
             </p>
           </section>
         ) : filteredBooks.length === 0 ? (
-          <section className="rounded-xl border-2 border-dashed border-[#cfe2cd] bg-white/62 px-6 py-16 text-center">
-            <BookOpen className="mx-auto mb-4 size-11 text-[#6a7f70]" />
-            <h2 className="text-2xl font-black text-[#10231b]">
+          <section className="rounded-xl border-2 border-dashed border-[#d7ccba] bg-white/62 px-6 py-16 text-center">
+            <BookOpen className="mx-auto mb-4 size-11 text-[#746f66]" />
+            <h2 className="text-2xl font-black text-[#171717]">
               No matching books
             </h2>
-            <p className="mx-auto mt-2 max-w-md text-sm text-[#496253]">
+            <p className="mx-auto mt-2 max-w-md text-sm text-[#56534d]">
               Try a different search or clear the genre filter.
             </p>
           </section>
@@ -296,9 +296,9 @@ function CommunityBookshelfPage() {
               return (
                 <li
                   key={book._id}
-                  className="group overflow-hidden rounded-xl border border-[#d6e5d5] bg-white shadow-sm shadow-[#173f2d]/5 transition hover:-translate-y-1 hover:border-[#b5d1b2] hover:shadow-xl hover:shadow-[#173f2d]/10"
+                  className="group overflow-hidden rounded-xl border border-[#ded6c6] bg-white shadow-sm shadow-black/5 transition hover:-translate-y-1 hover:border-[#c9bfae] hover:shadow-xl hover:shadow-[#1d4ed8]/10"
                 >
-                  <div className="relative bg-[#e9f3e7]">
+                  <div className="relative bg-[#eef3ff]">
                     <img
                       src={coverImageUrl}
                       alt={`${book.title} cover`}
@@ -309,13 +309,13 @@ function CommunityBookshelfPage() {
                     />
                     <div className="absolute left-3 top-3 flex flex-wrap gap-2">
                       {isFreePdfEnabled && (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#173f2d] px-3 py-1 text-xs font-black text-white shadow-lg shadow-black/10">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#1d4ed8] px-3 py-1 text-xs font-black text-white shadow-lg shadow-black/10">
                           <BookOpen className="size-3.5" />
                           FREE PDF
                         </span>
                       )}
                       {purchaseUrl && (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f7c548] px-3 py-1 text-xs font-black text-[#291f05] shadow-lg shadow-black/10">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f2c14e] px-3 py-1 text-xs font-black text-[#241b06] shadow-lg shadow-black/10">
                           <Store className="size-3.5" />
                           Physical copy
                         </span>
@@ -325,24 +325,24 @@ function CommunityBookshelfPage() {
 
                   <div className="p-5">
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <span className="rounded-full bg-[#e9f3e7] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#31513f]">
+                      <span className="rounded-full bg-[#eef3ff] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-[#1d4ed8]">
                         {book.genre || "Book"}
                       </span>
-                      <span className="text-xs font-bold text-[#7a8d80]">
+                      <span className="text-xs font-bold text-[#8b857b]">
                         {book.chapterCount} chapters
                       </span>
                     </div>
 
-                    <h2 className="text-xl font-black leading-tight text-[#10231b] line-clamp-2">
+                    <h2 className="text-xl font-black leading-tight text-[#171717] line-clamp-2">
                       {book.title}
                     </h2>
-                    <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-[#496253]">
-                      <UserRound className="size-4 text-[#c13f28]" />
+                    <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-[#56534d]">
+                      <UserRound className="size-4 text-[#1d4ed8]" />
                       {book.author || book.owner?.name || "Bookify author"}
                     </p>
 
                     {description && (
-                      <p className="mt-4 min-h-16 text-sm leading-6 text-[#496253] line-clamp-3">
+                      <p className="mt-4 min-h-16 text-sm leading-6 text-[#56534d] line-clamp-3">
                         {description}
                       </p>
                     )}
@@ -351,7 +351,7 @@ function CommunityBookshelfPage() {
                       {isFreePdfEnabled && (
                         <Link
                           to={`/community/books/${book._id}`}
-                          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#c13f28] px-4 text-sm font-black text-white transition hover:bg-[#9d321f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c13f28] focus-visible:ring-offset-2"
+                          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#1d4ed8] px-4 text-sm font-black text-white transition hover:bg-[#173ea8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
                         >
                           <BookOpen className="size-4" />
                           View Free PDF
@@ -361,7 +361,7 @@ function CommunityBookshelfPage() {
                       {previewToken && (
                         <Link
                           to={getPublicSharePath(previewToken, book.owner?.name)}
-                          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#173f2d] px-4 text-sm font-black text-white transition hover:bg-[#102f21] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c13f28] focus-visible:ring-offset-2"
+                          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#171717] px-4 text-sm font-black text-white transition hover:bg-[#2a2a2a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
                         >
                           <BookOpen className="size-4" />
                           Read Preview
@@ -373,7 +373,7 @@ function CommunityBookshelfPage() {
                           href={purchaseUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#c13f28] px-4 text-sm font-black text-white transition hover:bg-[#9d321f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c13f28] focus-visible:ring-offset-2"
+                          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#d79a00] px-4 text-sm font-black text-[#171717] transition hover:bg-[#bf8700] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
                         >
                           <Store className="size-4" />
                           Buy Copy
@@ -383,7 +383,7 @@ function CommunityBookshelfPage() {
                       {authorShelfPath && (
                         <Link
                           to={authorShelfPath}
-                          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#cfe2cd] bg-white px-4 text-sm font-bold text-[#31513f] transition hover:bg-[#e9f3e7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c13f28] focus-visible:ring-offset-2"
+                          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#d7ccba] bg-white px-4 text-sm font-bold text-[#3f3b34] transition hover:bg-[#eef3ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
                         >
                           <ExternalLink className="size-4" />
                           Author Shelf
