@@ -34,21 +34,21 @@ const FICTION_CHAPTER_LENGTH_DETAILS = {
 const CHILDREN_CHAPTER_LENGTHS = {
   small: {
     target: "40-90 words",
-    pages: "one two-page storybook spread",
+    pages: "two individual storybook pages",
     detail:
-      "Keep the right-page text brief, warm, visual, and easy for a child to follow.",
+      "Keep the image-page line and following text page brief, warm, visual, and easy for a child to follow.",
   },
   medium: {
     target: "75-140 words",
-    pages: "one two-page storybook spread",
+    pages: "two individual storybook pages",
     detail:
-      "Develop one clear spread beat with repetition, expressive action, and a small emotional turn.",
+      "Develop one clear story beat with repetition, expressive action, and a small emotional turn.",
   },
   large: {
     target: "120-220 words",
-    pages: "one text-heavy two-page storybook spread",
+    pages: "two text-heavy storybook pages",
     detail:
-      "Write a richer spread with vivid action, recurring character cues, playful rhythm, and a complete moment. Do not pad or become adult.",
+      "Write a richer two-page scene with vivid action, recurring character cues, playful rhythm, and a complete moment. Do not pad or become adult.",
   },
 };
 
@@ -71,13 +71,13 @@ function getChapterLengthInstruction(value = "medium", options = {}) {
     ? FICTION_CHAPTER_LENGTH_DETAILS[chapterLength]
     : config.detail;
   const substanceRule = isChildren
-    ? "Prioritize spread clarity over length: one strong left-page visual moment and short right-page read-aloud copy, without adult explanation or filler."
+    ? "Prioritize page clarity over length: one strong image-page visual moment, a short line under the image, and readable follow-up text on the next page, without adult explanation or filler."
     : isFiction
     ? "Prioritize substance over filler: add sensory specificity, scene consequences, character choices, tension, emotional subtext, and connective tissue that makes the story feel cohesive."
     : "Prioritize substance over filler: add specificity, scenes or examples where appropriate, consequences, caveats, and connective tissue that makes the book feel cohesive.";
 
   return [
-    `${isChildren ? "Spread text length" : "Chapter length"}: ${
+    `${isChildren ? "Story page text amount" : "Chapter length"}: ${
       config.label
     }. Aim for ${targetConfig.target}, ${targetConfig.pages}.`,
     detail,

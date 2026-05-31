@@ -480,11 +480,11 @@ function buildChapterImagePrompt({
   visualReferenceContext = "",
 }) {
   const unitLabel =
-    getBookTypeFamily(book.genre) === "children" ? "spread" : "chapter";
-  const unitLabelTitleCase = unitLabel === "spread" ? "Spread" : "Chapter";
+    getBookTypeFamily(book.genre) === "children" ? "scene" : "chapter";
+  const unitLabelTitleCase = unitLabel === "scene" ? "Scene" : "Chapter";
   const illustrationPlacement =
-    unitLabel === "spread"
-      ? "separate left-page illustration"
+    unitLabel === "scene"
+      ? "children's image-page illustration"
       : "inline ebook illustration";
   const direction = customPrompt
     ? `Scene direction from the author: ${customPrompt}`

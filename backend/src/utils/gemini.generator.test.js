@@ -104,18 +104,18 @@ test("Gemini section prompt makes novel chapters narrative", () => {
   assert.doesNotMatch(prompt, /reader takeaways/);
 });
 
-test("Gemini section prompt makes children's books spread-based", () => {
+test("Gemini section prompt makes children's books page-based", () => {
   const prompt = buildGeminiSectionPrompt({
     chapterTitle: "The Puddle Parade",
     bookTitle: "Mira's Rainy Day",
     genre: "Children's Book",
   });
 
-  assert.match(prompt, /children's picture book spread/);
+  assert.match(prompt, /two-page children's picture-book scene/);
   assert.match(prompt, /children's-book story text/);
-  assert.match(prompt, /brief left-page story line/);
-  assert.match(prompt, /left-page illustration/);
-  assert.match(prompt, /Spread text length/);
+  assert.match(prompt, /short story line under the image/);
+  assert.match(prompt, /illustration page/);
+  assert.match(prompt, /Story page text amount/);
   assert.match(prompt, /40-90 words|75-140 words/);
   assert.doesNotMatch(prompt, /3,500-5,000 words/);
 });

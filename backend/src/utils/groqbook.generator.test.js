@@ -26,7 +26,7 @@ test("Groq section prompt makes Novel chapters narrative", () => {
   assert.doesNotMatch(prompt, /reader takeaways/);
 });
 
-test("Groq section prompt makes children's books spread-based", () => {
+test("Groq section prompt makes children's books page-based", () => {
   const messages = buildGroqSectionMessages({
     chapterTitle: "The Puddle Parade",
     bookTitle: "Mira's Rainy Day",
@@ -35,11 +35,11 @@ test("Groq section prompt makes children's books spread-based", () => {
   const prompt = messages.map((message) => message.content).join("\n\n");
 
   assert.match(prompt, /children's picture book writer/);
-  assert.match(prompt, /one two-page spread/);
+  assert.match(prompt, /two-page scene for individual PDF pages/);
   assert.match(prompt, /children's-book story text/);
-  assert.match(prompt, /brief left-page story line/);
-  assert.match(prompt, /left-page illustration/);
-  assert.match(prompt, /Spread text length/);
+  assert.match(prompt, /short story line under the image/);
+  assert.match(prompt, /illustration page/);
+  assert.match(prompt, /Story page text amount/);
   assert.doesNotMatch(prompt, /long, comprehensive, polished chapter/);
 });
 

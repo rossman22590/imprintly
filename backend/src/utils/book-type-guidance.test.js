@@ -43,7 +43,7 @@ test("novel image guidance prevents generic instructional visuals", () => {
   assert.match(imageGuidance, /not instructional graphics/);
 });
 
-test("recognizes children's book variants as page-spread books", () => {
+test("recognizes children's book variants as individual illustrated pages", () => {
   assert.equal(getBookTypeFamily("Childrens Picture Book"), "children");
   assert.equal(getBookTypeFamily("kids storybook"), "children");
   assert.equal(getDefaultChapterImageCount("Children's Book"), 1);
@@ -54,10 +54,10 @@ test("recognizes children's book variants as page-spread books", () => {
   const chapterGuidance = getBookTypeChapterGuidance("Children's Book");
   const imageGuidance = getBookTypeImageGuidance("kids book");
 
-  assert.match(outlineGuidance, /20 pages means 10 spreads/);
-  assert.match(chapterGuidance, /one illustrated two-page spread/);
+  assert.match(outlineGuidance, /20 pages means 10 image pages and 10 text pages/);
+  assert.match(chapterGuidance, /two individual children's-book pages/);
   assert.match(imageGuidance, /Preserve recurring character identity/);
-  assert.match(imageGuidance, /left-page illustration/);
+  assert.match(imageGuidance, /image page/);
 });
 
 test("workbook guidance preserves fill-in and worksheet formatting", () => {

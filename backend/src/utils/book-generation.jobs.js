@@ -207,11 +207,11 @@ function buildChapterImagePrompt({
 }) {
   const excerpt = excerptContent(content);
   const unitLabel =
-    getBookTypeFamily(genre) === "children" ? "spread" : "chapter";
-  const unitLabelTitleCase = unitLabel === "spread" ? "Spread" : "Chapter";
+    getBookTypeFamily(genre) === "children" ? "scene" : "chapter";
+  const unitLabelTitleCase = unitLabel === "scene" ? "Scene" : "Chapter";
   const illustrationPlacement =
-    unitLabel === "spread"
-      ? "separate left-page illustration"
+    unitLabel === "scene"
+      ? "children's image-page illustration"
       : "inline ebook illustration";
   const continuityInstruction = hasVisualReferences
     ? referenceMode === "generated"
@@ -223,7 +223,7 @@ function buildChapterImagePrompt({
   const imageTotal = Math.max(1, Number(totalImages) || 1);
   const multiImageDirection =
     imageTotal > 1
-      ? `\nIllustration slot: ${imageNumber} of ${imageTotal}. Create a distinct moment for this ${unitLabel}. For children's books, use slot 1 for the opening scene, middle slots for action/emotion, and the final slot for the ending reaction or resolution. Do not repeat the same pose, composition, or beat across slots.`
+      ? `\nIllustration slot: ${imageNumber} of ${imageTotal}. Create a distinct moment for this ${unitLabel}. For children's books, use slot 1 for the opening moment, middle slots for action/emotion, and the final slot for the ending reaction or resolution. Do not repeat the same pose, composition, or beat across slots.`
       : "";
 
   return `Create a relevant ${illustrationPlacement} for this ${unitLabel}.
@@ -409,8 +409,38 @@ function getChapterGenerationStepCount(
   return includeChapterImages ? 1 + Math.max(1, requiredImageCount) : 1;
 }
 
+function isCancellationState(job = {}) {
+  return (
+    Boolean(job.cancelled) ||
+    job.status === "cancelling" ||
+    job.status === "cancelled"
+  );
+}
+
+async function applyStoredCancellationState(job) {
+  if (!job?._id) return job;
+
+  const storedJob = await GenerationJob.findById(job._id)
+    .select("cancelled status progress.message completedAt")
+    .lean();
+
+  if (!isCancellationState(storedJob)) return job;
+
+  job.cancelled = true;
+  job.status = "cancelled";
+  job.completedAt = job.completedAt || storedJob.completedAt || new Date();
+  job.progress = {
+    ...(job.progress?.toObject?.() || job.progress || {}),
+    message: "Cancelled",
+  };
+
+  return job;
+}
+
 async function saveJob(job) {
   if (!job?._id) return;
+
+  await applyStoredCancellationState(job);
 
   await GenerationJob.updateOne(
     { _id: job._id },
@@ -532,18 +562,9 @@ async function cancelGenerationJob(jobId, userId) {
   }
 
   job.cancelled = true;
-
-  if (job.status === "queued") {
-    job.status = "cancelled";
-    job.completedAt = new Date();
-    job.progress.message = "Cancelled";
-    await saveJob(job);
-
-    return publicJob(job);
-  }
-
-  job.status = "cancelling";
-  job.progress.message = "Cancelling after the current chapter";
+  job.status = "cancelled";
+  job.completedAt = new Date();
+  job.progress.message = "Cancelled";
   await saveJob(job);
 
   return publicJob(job);
@@ -567,6 +588,8 @@ async function retryGenerationJob(jobId, userId, { payloadOverrides = {} } = {})
 }
 
 async function updateBookProgress(book, job, extraGeneration = {}) {
+  await applyStoredCancellationState(job);
+
   const currentGeneration =
     typeof book.generation?.toObject === "function"
       ? book.generation.toObject()
@@ -669,6 +692,29 @@ async function resolveBookForJob(job) {
 
 async function refreshJob(jobId) {
   return GenerationJob.findOne({ id: jobId });
+}
+
+async function syncCancellationState(job, jobId) {
+  const latestJob = await refreshJob(jobId);
+
+  if (!isCancellationState(latestJob)) return false;
+
+  job.cancelled = true;
+  job.status = "cancelled";
+  job.completedAt = job.completedAt || latestJob.completedAt || new Date();
+  job.progress = {
+    ...(job.progress?.toObject?.() || job.progress || {}),
+    message: "Cancelled",
+  };
+
+  return true;
+}
+
+async function stopIfCancelled(job, jobId, book) {
+  if (!(await syncCancellationState(job, jobId))) return false;
+
+  await updateBookProgress(book, job);
+  return true;
 }
 
 async function runGenerationJob(jobId) {
@@ -1319,10 +1365,13 @@ async function runGenerationJob(jobId) {
     const failedJob = await refreshJob(jobId);
 
     if (failedJob) {
-      failedJob.status = "failed";
-      failedJob.error = error.message;
+      const wasCancelled = isCancellationState(failedJob);
+
+      failedJob.cancelled = wasCancelled || failedJob.cancelled;
+      failedJob.status = wasCancelled ? "cancelled" : "failed";
+      failedJob.error = wasCancelled ? "" : error.message;
       failedJob.completedAt = new Date();
-      failedJob.progress.message = error.message;
+      failedJob.progress.message = wasCancelled ? "Cancelled" : error.message;
       await saveJob(failedJob);
 
       if (failedJob.bookId) {
@@ -1337,7 +1386,7 @@ async function runGenerationJob(jobId) {
           book.generation = {
             ...currentGeneration,
             provider: failedJob.provider,
-            status: "failed",
+            status: failedJob.status,
             jobId: failedJob.id,
             progress: failedJob.progress,
             completedAt: failedJob.completedAt,

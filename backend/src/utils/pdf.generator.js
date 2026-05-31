@@ -2179,12 +2179,43 @@ function getPlainSpreadTextFromMarkdown(markdown = "", chapterTitle = "") {
   return stripInlineMarkdown(parts.join("\n\n")).trim();
 }
 
+function splitTextForChildrenImagePage(text = "") {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+
+  if (words.length === 0) {
+    return { leftText: "", rightText: "" };
+  }
+
+  const firstSentence = String(text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .match(/^(.{8,150}?[.!?])(?:\s+|$)/)?.[1]
+    ?.trim();
+  const firstSentenceWordCount = firstSentence
+    ? firstSentence.split(/\s+/).filter(Boolean).length
+    : 0;
+  const leftWordCount =
+    firstSentence && firstSentenceWordCount <= 24
+      ? firstSentenceWordCount
+      : Math.min(18, Math.max(8, Math.ceil(words.length * 0.18)));
+  const leftText = words.slice(0, leftWordCount).join(" ");
+  const rightText = words.slice(leftWordCount).join(" ");
+
+  return { leftText, rightText };
+}
+
 function getSpreadPartsFromMarkdown(markdown = "", chapterTitle = "") {
   const { leftText, rightText } = extractChildrenSpreadParts(markdown);
+  const plainLeftText = getPlainSpreadTextFromMarkdown(leftText, chapterTitle);
+  const plainRightText = getPlainSpreadTextFromMarkdown(rightText, chapterTitle);
+
+  if (!plainLeftText && plainRightText) {
+    return splitTextForChildrenImagePage(plainRightText);
+  }
 
   return {
-    leftText: getPlainSpreadTextFromMarkdown(leftText, chapterTitle),
-    rightText: getPlainSpreadTextFromMarkdown(rightText, chapterTitle),
+    leftText: plainLeftText,
+    rightText: plainRightText,
   };
 }
 
@@ -2284,19 +2315,6 @@ function renderChildrenSpreadPdf(doc, chapter = {}) {
       align: "left",
       lineGap: 7,
     });
-}
-
-function applyChildrenSpreadViewingHints(doc) {
-  if (doc?._root?.data) {
-    doc._root.data.PageLayout = "TwoPageRight";
-  }
-}
-
-function shouldInsertChildrenSpreadAlignmentPage({
-  isChildrenBook = false,
-  renderedCoverPage = false,
-} = {}) {
-  return Boolean(isChildrenBook && renderedCoverPage);
 }
 
 function renderCodeBlock(doc, token) {
@@ -2583,8 +2601,6 @@ async function generatePdf(book, res) {
         reject(err);
       });
 
-      let renderedCoverPage = false;
-
       // PAGE 1: COVER PAGE
       if (book.coverImage && !book.coverImage.includes("pravatar")) {
         const imagePath = resolveExportImagePath(book.coverImage);
@@ -2593,7 +2609,6 @@ async function generatePdf(book, res) {
           if (imagePath) {
             renderFullPageCover(doc, imagePath);
             doc.addPage();
-            renderedCoverPage = true;
           } else {
             console.warn(`PDF cover image not found: ${book.coverImage}`);
           }
@@ -2642,19 +2657,6 @@ async function generatePdf(book, res) {
 
       const isChildrenBook = getBookTypeFamily(book.genre) === "children";
 
-      if (isChildrenBook) {
-        applyChildrenSpreadViewingHints(doc);
-
-        if (
-          shouldInsertChildrenSpreadAlignmentPage({
-            isChildrenBook,
-            renderedCoverPage,
-          })
-        ) {
-          doc.addPage();
-        }
-      }
-
       // PROCESS CHAPTERS/SPREADS (starts on page 3+)
       (book?.chapters || []).forEach((chapter, index) => {
         try {
@@ -2698,7 +2700,6 @@ async function generatePdf(book, res) {
 module.exports = {
   generatePdf,
   __private: {
-    applyChildrenSpreadViewingHints,
     getCoverImagePlacement,
     getSpreadPartsFromMarkdown,
     getSpreadTextFromMarkdown,
@@ -2714,6 +2715,6 @@ module.exports = {
     parseProcessDiagram,
     parseSystemComparisonDiagram,
     parseStackDiagram,
-    shouldInsertChildrenSpreadAlignmentPage,
+    splitTextForChildrenImagePage,
   },
 };

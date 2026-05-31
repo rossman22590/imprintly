@@ -105,7 +105,7 @@ function JobRow({ job, queuePosition, isMutating, onCancel, onRetry }) {
   const meta = STATUS_META[job.status] || STATUS_META.queued;
   const percent = getProgressPercent(job);
   const hasFailedSteps = Number(job?.progress?.failed || 0) > 0;
-  const canCancel = ["queued", "generating"].includes(job.status);
+  const canCancel = ["queued", "generating", "cancelling"].includes(job.status);
   const canRetry = job.status === "failed" && job.bookId;
   const jobDetail =
     job.status === "queued" && queuePosition
@@ -317,11 +317,23 @@ function JobsPage() {
 
     try {
       await axiosInstance.delete(`${API_ENDPOINTS.AI.FULL_BOOK_JOBS}/${job.id}`);
-      toast.success(
-        job.status === "queued"
-          ? "Queued job cancelled."
-          : "Generation will cancel after the current chapter."
+      setJobs((currentJobs) =>
+        currentJobs.map((currentJob) =>
+          currentJob.id === job.id
+            ? {
+                ...currentJob,
+                cancelled: true,
+                completedAt: new Date().toISOString(),
+                status: "cancelled",
+                progress: {
+                  ...(currentJob.progress || {}),
+                  message: "Cancelled",
+                },
+              }
+            : currentJob
+        )
       );
+      toast.success("Generation cancelled.");
       await fetchJobs({ silent: true });
     } catch (error) {
       console.error("Error cancelling generation job:", error);

@@ -157,10 +157,10 @@ function getBookTypeOutlineGuidance(bookType = "") {
     return [
       "Book type guidance:",
       "- Treat this as a children's storybook with clear scenes, warm language, memorable repetition, and age-appropriate conflict.",
-      "- Structure the outline as page-spread pairs, not extensive chapters, lessons, or essays.",
-      "- Each editable unit is one two-page spread: left page illustration, right page short story text.",
-      "- When the user requests a page count, plan about one spread for every two interior pages; for example, 20 pages means 10 spreads and 10 illustrations.",
-      "- Each spread brief should include action, emotion, recurring characters, a single visual moment, and a simple story beat.",
+      "- Structure the outline as two-page illustrated scenes, not extensive chapters, lessons, or essays.",
+      "- Each editable unit becomes two individual PDF pages: an image page with a short story line under the illustration, followed by a text page with the rest of the read-aloud copy.",
+      "- When the user requests a page count, plan one illustrated scene for every two interior pages; for example, 20 pages means 10 image pages and 10 text pages.",
+      "- Each scene brief should include action, emotion, recurring characters, a single visual moment, and a simple story beat.",
       "- Avoid adult instructional tone unless the user explicitly asks for an educational workbook.",
     ].join("\n");
   }
@@ -240,10 +240,10 @@ function getBookTypeChapterGuidance(bookType = "") {
       "Book type guidance:",
       "- Write as a children's storybook, not a nonfiction lesson, essay, or generic explainer.",
       "- Use storybook warmth, clear action, vivid imagery, age-appropriate vocabulary, repetition, rhythm, and a satisfying emotional beat.",
-      "- Keep recurring character names, appearances, relationships, and personality traits consistent across spreads.",
-      "- Treat this unit as one illustrated two-page spread: one left-page illustration, optionally a very short left-page story line, and one right-page block of read-aloud text.",
+      "- Keep recurring character names, appearances, relationships, and personality traits consistent across pages.",
+      "- Treat this unit as two individual children's-book pages: first an illustration page with a short story line under the image, then a text page with the rest of the read-aloud copy.",
       "- Return only the story manuscript text. Do not write 'Left Page' or 'Right Page' labels, illustration directions, image prompts, or art descriptions into the chapter content.",
-      "- Keep the text concise enough to sit opposite the image; do not write an extensive chapter.",
+      "- Keep the text concise enough to fit across the two pages; do not write an extensive chapter.",
       "- Avoid adult essay tone, key-takeaway sections, business language, and lesson-plan structure unless the user explicitly asked for an educational children's workbook.",
     ].join("\n");
   }
@@ -321,8 +321,8 @@ function getBookTypeImageGuidance(bookType = "") {
       "- Treat visuals as warm children's book illustration with clear characters, expressive emotion, readable action, and age-appropriate charm.",
       "- Keep shapes, faces, and story moments easy to understand at a glance.",
       "- Preserve recurring character identity, wardrobe, proportions, colors, and personality cues across all illustrations.",
-      "- For each spread image, create the left-page illustration that pairs with the right-page text.",
-      "- Make each spread image a single clear story moment rather than a generic chapter poster.",
+      "- For each image page, create the illustration that pairs with the short text under the image and the following text page.",
+      "- Make each image a single clear story moment rather than a generic chapter poster.",
       "- Avoid adult editorial, corporate, or textbook styling.",
     ].join("\n");
   }

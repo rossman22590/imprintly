@@ -3,7 +3,6 @@ const test = require("node:test");
 const { __private } = require("./pdf.generator");
 
 const {
-  applyChildrenSpreadViewingHints,
   isDiagramCodeBlock,
   normalizeCodeTextForPdf,
   parseAsciiTableDiagram,
@@ -19,7 +18,7 @@ const {
   getCoverImagePlacement,
   getSpreadPartsFromMarkdown,
   getSpreadTextFromMarkdown,
-  shouldInsertChildrenSpreadAlignmentPage,
+  splitTextForChildrenImagePage,
 } = __private;
 
 test("scales cover images to fill the entire PDF page", () => {
@@ -77,36 +76,28 @@ test("children spread PDF parts preserve short left-page text separately", () =>
   assert.equal(parts.rightText, '"Ta-da!" squeaked Pip.');
 });
 
-test("children spread export aligns illustration pages as left-hand pages", () => {
-  assert.equal(
-    shouldInsertChildrenSpreadAlignmentPage({
-      isChildrenBook: true,
-      renderedCoverPage: true,
-    }),
-    true
+test("children image pages get a short story line when none is labeled", () => {
+  const parts = getSpreadPartsFromMarkdown(
+    [
+      "\"Ta-da!\" squeaked Pip, waving the map high.",
+      "",
+      "Barnaby leaned closer until his nose nearly touched the leaf. Pippa tugged her red boots and marched toward the muddy trail.",
+    ].join("\n"),
+    "The Grand Map of Mud"
   );
-  assert.equal(
-    shouldInsertChildrenSpreadAlignmentPage({
-      isChildrenBook: true,
-      renderedCoverPage: false,
-    }),
-    false
-  );
-  assert.equal(
-    shouldInsertChildrenSpreadAlignmentPage({
-      isChildrenBook: false,
-      renderedCoverPage: true,
-    }),
-    false
-  );
+
+  assert.equal(parts.leftText, '"Ta-da!" squeaked Pip, waving the map high.');
+  assert.match(parts.rightText, /Barnaby leaned closer/);
+  assert.doesNotMatch(parts.rightText, /"Ta-da!"/);
 });
 
-test("children spread PDF requests two-page right viewer layout", () => {
-  const doc = { _root: { data: {} } };
+test("children image page text splitter keeps the rest for the next page", () => {
+  const parts = splitTextForChildrenImagePage(
+    "Mira lifted the glowing spoon. The soup sparkled blue, then green, then gold as everyone leaned closer."
+  );
 
-  applyChildrenSpreadViewingHints(doc);
-
-  assert.equal(doc._root.data.PageLayout, "TwoPageRight");
+  assert.equal(parts.leftText, "Mira lifted the glowing spoon.");
+  assert.match(parts.rightText, /soup sparkled/);
 });
 
 test("detects unicode box/tree diagrams as diagram code blocks", () => {
