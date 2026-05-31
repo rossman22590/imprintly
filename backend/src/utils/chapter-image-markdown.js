@@ -189,32 +189,15 @@ function normalizeChapterImages(images = [], { requireExisting = false } = {}) {
 }
 
 function stripGeneratedImageMarkdown(content = "") {
-  const removeLeadingGeneratedImages = (value = "") => {
-    let nextValue = String(value || "").trimStart();
-    const generatedImageLine =
-      /^!\[[^\]]*\]\((?:https?:\/\/[^)\s]+)?\/uploads\/ai-image-[^)]+\)\s*(?:\n+|$)/i;
+  const generatedImageLine =
+    /^[ \t]*!\[[^\]]*\]\((?:https?:\/\/[^)\s]+)?\/uploads\/ai-image-[^)]+\)[ \t]*(?:\r?\n|$)/gim;
 
-    while (generatedImageLine.test(nextValue)) {
-      nextValue = nextValue.replace(generatedImageLine, "").trimStart();
-    }
-
-    return nextValue;
-  };
-
-  const normalizedContent = String(content || "").replace(/\n{3,}/g, "\n\n");
-  const trimmedContent = normalizedContent.trimStart();
-  const headingMatch = trimmedContent.match(/^(#{1,6}\s+[^\n]+)\n+/);
-
-  if (headingMatch) {
-    const heading = headingMatch[1];
-    const body = removeLeadingGeneratedImages(
-      trimmedContent.slice(headingMatch[0].length)
-    );
-
-    return body ? `${heading}\n\n${body}` : heading;
-  }
-
-  return removeLeadingGeneratedImages(trimmedContent).trimEnd();
+  return String(content || "")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(generatedImageLine, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function buildImageMarkdown({ alt = "", url = "", req = null }) {
@@ -241,6 +224,67 @@ function insertImageUnderTitle(content = "", imageMarkdown = "") {
   }
 
   return `${imageMarkdown}\n\n${trimmedContent}`;
+}
+
+function insertImagesThroughoutChapter(content = "", imageMarkdowns = []) {
+  const images = (Array.isArray(imageMarkdowns) ? imageMarkdowns : [imageMarkdowns])
+    .map((imageMarkdown) => String(imageMarkdown || "").trim())
+    .filter(Boolean);
+
+  if (images.length === 0) return content || "";
+  if (images.length === 1) return insertImageUnderTitle(content, images[0]);
+
+  const cleanedContent = stripGeneratedImageMarkdown(content);
+  const trimmedContent = cleanedContent.trimStart();
+
+  if (!trimmedContent) {
+    return `${images.join("\n\n")}\n`;
+  }
+
+  const headingMatch = trimmedContent.match(/^(#{1,6}\s+[^\n]+)\n+/);
+  const heading = headingMatch ? headingMatch[1] : "";
+  const body = headingMatch
+    ? trimmedContent.slice(headingMatch[0].length).trimStart()
+    : trimmedContent;
+  const blocks = body ? body.split(/\n{2,}/).filter((block) => block.trim()) : [];
+
+  if (blocks.length === 0) {
+    return heading
+      ? `${heading}\n\n${images.join("\n\n")}\n`
+      : `${images.join("\n\n")}\n`;
+  }
+
+  const outputBlocks = [];
+  const insertAfterIndexes = images.map((_, imageIndex) => {
+    if (imageIndex === 0) return -1;
+
+    return Math.min(
+      blocks.length - 1,
+      Math.max(0, Math.ceil((blocks.length * imageIndex) / images.length) - 1)
+    );
+  });
+  const imagesByBlockIndex = new Map();
+
+  insertAfterIndexes.forEach((blockIndex, imageIndex) => {
+    if (!imagesByBlockIndex.has(blockIndex)) {
+      imagesByBlockIndex.set(blockIndex, []);
+    }
+
+    imagesByBlockIndex.get(blockIndex).push(images[imageIndex]);
+  });
+
+  if (heading) {
+    outputBlocks.push(heading);
+  }
+
+  outputBlocks.push(...(imagesByBlockIndex.get(-1) || []));
+
+  blocks.forEach((block, blockIndex) => {
+    outputBlocks.push(block);
+    outputBlocks.push(...(imagesByBlockIndex.get(blockIndex) || []));
+  });
+
+  return `${outputBlocks.filter(Boolean).join("\n\n")}\n`;
 }
 
 function insertImageUnderTitleWithoutStripping(content = "", imageMarkdown = "") {
@@ -307,6 +351,7 @@ module.exports = {
   getMarkdownImageUrl,
   getUploadUrlFromImageUrl,
   insertImageUnderTitle,
+  insertImagesThroughoutChapter,
   isGeneratedUploadUrl,
   normalizeChapterImages,
   removeMissingUploadImageMarkdown,

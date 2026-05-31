@@ -16,6 +16,8 @@ const {
   parseStackDiagram,
   parseSystemComparisonDiagram,
   getCoverImagePlacement,
+  getSpreadPartsFromMarkdown,
+  getSpreadTextFromMarkdown,
 } = __private;
 
 test("scales cover images to fill the entire PDF page", () => {
@@ -25,6 +27,52 @@ test("scales cover images to fill the entire PDF page", () => {
   assert.ok(placement.width >= 595.28);
   assert.ok(placement.x <= 0);
   assert.ok(Math.abs(placement.y) < 0.001);
+});
+
+test("children spread PDF text excludes illustration page notes", () => {
+  const text = getSpreadTextFromMarkdown(
+    [
+      "### Left Page: Illustration",
+      "",
+      "![Map](/uploads/ai-image-1.png)",
+      "",
+      "Three friends study a leaf map below an oak tree.",
+      "",
+      "***",
+      "",
+      "### Right Page: Story Text",
+      "",
+      "\"Ta-da!\" squeaked Pip.",
+      "",
+      "***Squish! Squash! Squelch!***",
+    ].join("\n"),
+    "The Grand Map of Mud"
+  );
+
+  assert.doesNotMatch(text, /Left Page/);
+  assert.doesNotMatch(text, /oak tree/);
+  assert.match(text, /"Ta-da!" squeaked Pip/);
+  assert.match(text, /Squish! Squash! Squelch!/);
+});
+
+test("children spread PDF parts preserve short left-page text separately", () => {
+  const parts = getSpreadPartsFromMarkdown(
+    [
+      "### Left Page: Illustration",
+      "",
+      "Mud went squish under Pippa's shiny boots.",
+      "",
+      "***",
+      "",
+      "### Right Page: Story Text",
+      "",
+      "\"Ta-da!\" squeaked Pip.",
+    ].join("\n"),
+    "The Grand Map of Mud"
+  );
+
+  assert.equal(parts.leftText, "Mud went squish under Pippa's shiny boots.");
+  assert.equal(parts.rightText, '"Ta-da!" squeaked Pip.');
 });
 
 test("detects unicode box/tree diagrams as diagram code blocks", () => {

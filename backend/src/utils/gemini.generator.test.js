@@ -104,6 +104,37 @@ test("Gemini section prompt makes novel chapters narrative", () => {
   assert.doesNotMatch(prompt, /reader takeaways/);
 });
 
+test("Gemini section prompt makes children's books spread-based", () => {
+  const prompt = buildGeminiSectionPrompt({
+    chapterTitle: "The Puddle Parade",
+    bookTitle: "Mira's Rainy Day",
+    genre: "Children's Book",
+  });
+
+  assert.match(prompt, /children's picture book spread/);
+  assert.match(prompt, /children's-book story text/);
+  assert.match(prompt, /brief left-page story line/);
+  assert.match(prompt, /left-page illustration/);
+  assert.match(prompt, /Spread text length/);
+  assert.match(prompt, /40-90 words|75-140 words/);
+  assert.doesNotMatch(prompt, /3,500-5,000 words/);
+});
+
+test("Gemini section prompt makes textbooks use textbook formatting", () => {
+  const prompt = buildGeminiSectionPrompt({
+    chapterTitle: "Cellular Respiration",
+    bookTitle: "Biology Foundations",
+    genre: "Textbook",
+  });
+
+  assert.match(prompt, /publication-quality textbook chapter/);
+  assert.match(prompt, /Learning Objectives/);
+  assert.match(prompt, /Key Terms/);
+  assert.match(prompt, /Chapter Summary/);
+  assert.match(prompt, /Review Questions/);
+  assert.match(prompt, /Do not use workbook fill-in blanks/);
+});
+
 test("novel outlines strip textbook numbering from chapter titles", () => {
   const outline = normalizeOutlineJson(
     {
@@ -129,4 +160,24 @@ test("novel outlines strip textbook numbering from chapter titles", () => {
   assert.deepEqual(outline.chapters[1].outlinePath, [
     "The Door That Should Not Open",
   ]);
+});
+
+test("children's outlines use spread titles instead of chapter fallbacks", () => {
+  const outline = normalizeOutlineJson(
+    {
+      title: "Mira's Rainy Day",
+      structure: {
+        "Spread 1: The First Puddle": "Mira spots a shiny puddle.",
+        "Page 3-4: Umbrella Parade": "The friends march in the rain.",
+        "Chapter 3: Rainbow Boots": "Mira finds courage.",
+      },
+    },
+    { genre: "Children's Book" }
+  );
+
+  assert.deepEqual(
+    outline.chapters.map((chapter) => chapter.title),
+    ["The First Puddle", "Umbrella Parade", "Rainbow Boots"]
+  );
+  assert.deepEqual(outline.chapters[0].outlinePath, ["The First Puddle"]);
 });

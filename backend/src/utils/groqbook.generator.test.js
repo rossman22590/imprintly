@@ -26,6 +26,39 @@ test("Groq section prompt makes Novel chapters narrative", () => {
   assert.doesNotMatch(prompt, /reader takeaways/);
 });
 
+test("Groq section prompt makes children's books spread-based", () => {
+  const messages = buildGroqSectionMessages({
+    chapterTitle: "The Puddle Parade",
+    bookTitle: "Mira's Rainy Day",
+    genre: "Children's Book",
+  });
+  const prompt = messages.map((message) => message.content).join("\n\n");
+
+  assert.match(prompt, /children's picture book writer/);
+  assert.match(prompt, /one two-page spread/);
+  assert.match(prompt, /children's-book story text/);
+  assert.match(prompt, /brief left-page story line/);
+  assert.match(prompt, /left-page illustration/);
+  assert.match(prompt, /Spread text length/);
+  assert.doesNotMatch(prompt, /long, comprehensive, polished chapter/);
+});
+
+test("Groq section prompt makes textbooks use textbook formatting", () => {
+  const messages = buildGroqSectionMessages({
+    chapterTitle: "Cellular Respiration",
+    bookTitle: "Biology Foundations",
+    genre: "Textbook",
+  });
+  const prompt = messages.map((message) => message.content).join("\n\n");
+
+  assert.match(prompt, /expert textbook author/);
+  assert.match(prompt, /formal, pedagogically sequenced textbook chapter/);
+  assert.match(prompt, /Learning Objectives/);
+  assert.match(prompt, /Key Terms/);
+  assert.match(prompt, /Review Questions/);
+  assert.match(prompt, /Do not use workbook fill-in blanks/);
+});
+
 test("Groq prompt only allows text graphics when explicitly enabled", () => {
   const defaultPrompt = buildGroqSectionMessages({
     chapterTitle: "Scaling Operations",
@@ -70,5 +103,24 @@ test("Groq novel outlines strip textbook numbering from chapter titles", () => {
       "The Door That Should Not Open",
       "The False Dawn",
     ]
+  );
+});
+
+test("Groq children's outlines use spread titles instead of chapter fallbacks", () => {
+  const outline = normalizeOutlineJson(
+    {
+      title: "Mira's Rainy Day",
+      structure: {
+        "Spread 1: The First Puddle": "Mira spots a shiny puddle.",
+        "Page 3-4: Umbrella Parade": "The friends march in the rain.",
+        "Chapter 3: Rainbow Boots": "Mira finds courage.",
+      },
+    },
+    { genre: "Children's Book" }
+  );
+
+  assert.deepEqual(
+    outline.chapters.map((chapter) => chapter.title),
+    ["The First Puddle", "Umbrella Parade", "Rainbow Boots"]
   );
 });

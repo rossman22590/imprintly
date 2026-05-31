@@ -19,7 +19,7 @@ const { generateGeminiImage } = require("./gemini-image.generator");
 const { buildEbookCoverPrompt } = require("./book-image-prompts");
 const {
   buildImageMarkdown,
-  insertImageUnderTitle,
+  insertImagesThroughoutChapter,
   isGeneratedUploadUrl,
 } = require("./chapter-image-markdown");
 const {
@@ -42,7 +42,15 @@ const {
   normalizeVisualBiblePayload,
   serializeVisualBible,
 } = require("./visual-bible");
-const { getBookTypeImageGuidance } = require("./book-type-guidance");
+const {
+  getDefaultChapterImageCount,
+  getBookTypeFamily,
+  getBookTypeStructureCount,
+  getBookTypeImageGuidance,
+} = require("./book-type-guidance");
+const {
+  sanitizeChildrenSpreadManuscript,
+} = require("./children-spread-content");
 const {
   buildEnhancedBookContext,
   runPremiumChapterPipeline,
@@ -191,36 +199,58 @@ function buildChapterImagePrompt({
   content,
   genre,
   audience,
+  imageIndex = 0,
+  totalImages = 1,
   hasVisualReferences = false,
   referenceMode = "visual",
   visualReferenceContext = "",
 }) {
   const excerpt = excerptContent(content);
+  const unitLabel =
+    getBookTypeFamily(genre) === "children" ? "spread" : "chapter";
+  const unitLabelTitleCase = unitLabel === "spread" ? "Spread" : "Chapter";
+  const illustrationPlacement =
+    unitLabel === "spread"
+      ? "separate left-page illustration"
+      : "inline ebook illustration";
   const continuityInstruction = hasVisualReferences
     ? referenceMode === "generated"
-      ? "\nGenerated art continuity: no Visual Bible image references were supplied, so use the provided earlier generated chapter image(s) as the book's visual seed. Preserve the same art direction, lighting logic, palette, design language, and genre feel while creating a new scene that fits this chapter. Do not copy the previous scene unchanged."
-      : "\nVisual Bible continuity: the provided reference image(s) are mandatory visual canon. Preserve character identity, setting/world cues, art direction, lighting logic, palette, design language, and genre feel while creating a new scene that fits this chapter. Do not copy the previous scene unchanged."
+      ? `\nGenerated art continuity: no Visual Bible image references were supplied, so use the provided earlier generated ${unitLabel} image(s) as the book's visual seed. Preserve the same art direction, lighting logic, palette, design language, and genre feel while creating a new scene that fits this ${unitLabel}. Do not copy the previous scene unchanged.`
+      : `\nVisual Bible continuity: the provided reference image(s) are mandatory visual canon. Preserve character identity, setting/world cues, art direction, lighting logic, palette, design language, and genre feel while creating a new scene that fits this ${unitLabel}. Do not copy the previous scene unchanged.`
     : "";
   const bookTypeGuidance = getBookTypeImageGuidance(genre);
+  const imageNumber = Math.max(0, Number(imageIndex) || 0) + 1;
+  const imageTotal = Math.max(1, Number(totalImages) || 1);
+  const multiImageDirection =
+    imageTotal > 1
+      ? `\nIllustration slot: ${imageNumber} of ${imageTotal}. Create a distinct moment for this ${unitLabel}. For children's books, use slot 1 for the opening scene, middle slots for action/emotion, and the final slot for the ending reaction or resolution. Do not repeat the same pose, composition, or beat across slots.`
+      : "";
 
-  return `Create a relevant inline ebook illustration for this chapter.
+  return `Create a relevant ${illustrationPlacement} for this ${unitLabel}.
 
 Book title: ${book.title}
 Genre: ${genre}
 Audience: ${audience}
 ${bookTypeGuidance}
-Chapter title: ${chapter.title}
-Chapter brief: ${chapter.description || "No brief provided."}
-Chapter excerpt: ${excerpt || "No chapter excerpt available."}
+${unitLabelTitleCase} title: ${chapter.title}
+${unitLabelTitleCase} brief: ${chapter.description || "No brief provided."}
+${unitLabelTitleCase} excerpt: ${excerpt || `No ${unitLabel} excerpt available.`}
+${multiImageDirection}
 ${continuityInstruction}
 ${visualReferenceContext}
 
 Requirements:
-1. Represent the chapter's actual ideas, not a generic book or writing scene.
+1. Represent the ${unitLabel}'s actual ideas, not a generic book or writing scene.
 2. No title text, captions, logos, UI, or extra words inside the image.
-3. Keep the composition readable inside an ebook chapter.
+3. Keep the composition readable inside an ebook ${unitLabel}.
 4. Match the tone of the genre and audience.
 5. Use a polished editorial illustration or tasteful cinematic image style.`;
+}
+
+function normalizeGeneratedManuscriptForGenre(content = "", genre = "") {
+  return getBookTypeFamily(genre) === "children"
+    ? sanitizeChildrenSpreadManuscript(content)
+    : content;
 }
 
 async function generateStructureForProvider(provider, payload) {
@@ -284,11 +314,47 @@ function toPlainValue(value) {
     : value;
 }
 
-function hasChapterImage(chapter = {}) {
-  return Array.isArray(chapter.images) && chapter.images.length > 0;
+function normalizeChapterImageCount(value, genre = "") {
+  const parsed = Number.parseInt(value, 10);
+  const defaultCount = getDefaultChapterImageCount(genre);
+
+  if (!Number.isFinite(parsed)) return defaultCount;
+
+  return Math.min(Math.max(parsed, 1), 4);
 }
 
-function isIncompleteChapterForRetry(chapter = {}, includeChapterImages = false) {
+function getPayloadChapterImageCount(payload = {}, genre = "") {
+  return normalizeChapterImageCount(
+    payload.imagesPerChapter ??
+      payload.chapterImageCount ??
+      payload.imageCountPerChapter,
+    genre
+  );
+}
+
+function countChapterImages(chapter = {}) {
+  return Array.isArray(chapter.images)
+    ? chapter.images.filter((image) => image?.url).length
+    : 0;
+}
+
+function isGeneratedChapterImageAsset(image = {}) {
+  return image?.source === "gemini" || isGeneratedUploadUrl(image?.url);
+}
+
+function hasChapterImage(chapter = {}, requiredImageCount = 1) {
+  return countChapterImages(chapter) >= Math.max(1, requiredImageCount);
+}
+
+function getMissingChapterImageCount(chapter = {}, requiredImageCount = 1) {
+  return Math.max(0, Math.max(1, requiredImageCount) - countChapterImages(chapter));
+}
+
+function isIncompleteChapterForRetry(
+  chapter = {},
+  includeChapterImages = false,
+  requiredImageCount = 1
+) {
   const status = chapter.generationStatus || "";
   const hasContent = Boolean(String(chapter.content || "").trim());
   const stats = chapter.generationStats || {};
@@ -298,7 +364,7 @@ function isIncompleteChapterForRetry(chapter = {}, includeChapterImages = false)
   if (
     includeChapterImages &&
     hasContent &&
-    !hasChapterImage(chapter) &&
+    !hasChapterImage(chapter, requiredImageCount) &&
     ["queued", "generating", "empty"].includes(status)
   ) {
     return true;
@@ -310,7 +376,11 @@ function isIncompleteChapterForRetry(chapter = {}, includeChapterImages = false)
   return false;
 }
 
-function isImageOnlyRetryChapter(chapter = {}, includeChapterImages = false) {
+function isImageOnlyRetryChapter(
+  chapter = {},
+  includeChapterImages = false,
+  requiredImageCount = 1
+) {
   const hasContent = Boolean(String(chapter.content || "").trim());
   const stats = chapter.generationStats || {};
 
@@ -319,23 +389,24 @@ function isImageOnlyRetryChapter(chapter = {}, includeChapterImages = false) {
     hasContent &&
     (stats.imageStatus === "failed" ||
       Boolean(stats.imageError) ||
-      !hasChapterImage(chapter))
+      !hasChapterImage(chapter, requiredImageCount))
   );
 }
 
 function getChapterGenerationStepCount(
   chapter = {},
   includeChapterImages = false,
-  retryFailedOnly = false
+  retryFailedOnly = false,
+  requiredImageCount = 1
 ) {
   if (
     retryFailedOnly &&
-    isImageOnlyRetryChapter(chapter, includeChapterImages)
+    isImageOnlyRetryChapter(chapter, includeChapterImages, requiredImageCount)
   ) {
-    return 1;
+    return Math.max(1, getMissingChapterImageCount(chapter, requiredImageCount));
   }
 
-  return includeChapterImages ? 2 : 1;
+  return includeChapterImages ? 1 + Math.max(1, requiredImageCount) : 1;
 }
 
 async function saveJob(job) {
@@ -395,15 +466,20 @@ async function createGenerationJob({ userId, payload, retryFailedOnly = false })
 async function validateFullBookJobRequest({ userId, payload = {} }) {
   const includesImages = isEnabled(payload.includeImages ?? payload.generateImages);
   const includesCover = isEnabled(payload.generateCover ?? payload.includeCover);
+  const safeGenre = sanitizeInput(payload.genre, 100) || "Nonfiction";
+  const chapterImageCount = getPayloadChapterImageCount(payload, safeGenre);
+  const outlineCount = Array.isArray(payload.outline) ? payload.outline.length : 0;
   const chapterCountEstimate = Math.max(
     1,
-    Number.parseInt(payload.chapterCount, 10) ||
-      (Array.isArray(payload.outline) ? payload.outline.length : 0) ||
-      1
+    outlineCount ||
+      getBookTypeStructureCount(
+        safeGenre,
+        Number.parseInt(payload.chapterCount, 10) || 1
+      )
   );
   const imageCountEstimate =
     (includesCover ? 1 : 0) +
-    (includesImages ? chapterCountEstimate : 0);
+    (includesImages ? chapterCountEstimate * chapterImageCount : 0);
 
   await assertHasCredits(
     userId,
@@ -620,7 +696,7 @@ async function runGenerationJob(jobId) {
     const payload = job.payload || {};
     const provider = job.provider;
     const safeStyle = sanitizeInput(payload.style, 50) || "Informative";
-    const safeGenre = sanitizeInput(payload.genre, 100) || "Nonfiction";
+    let safeGenre = sanitizeInput(payload.genre, 100) || "Nonfiction";
     const safeAudience =
       sanitizeInput(payload.audience, 200) || "General readers";
     const includeChapterImages = isEnabled(
@@ -643,6 +719,10 @@ async function runGenerationJob(jobId) {
       provider === "groq" ? getGroqModels(modelPayload) : getGeminiModels();
     let totalStats = emptyStats(provider);
     const book = await resolveBookForJob(job);
+    safeGenre = sanitizeInput(payload.genre || book.genre, 100) || "Nonfiction";
+    const chapterImageCount = includeChapterImages
+      ? getPayloadChapterImageCount(payload, safeGenre)
+      : 0;
     const safeLanguage =
       sanitizeInput(payload.language || payload.bookLanguage, 50) ||
       book.language ||
@@ -659,7 +739,8 @@ async function runGenerationJob(jobId) {
     );
     const generatedChapterImageUrls = [];
     const imageCountEstimate =
-      (includeCover ? 1 : 0) + (includeChapterImages ? chapters.length : 0);
+      (includeCover ? 1 : 0) +
+      (includeChapterImages ? chapters.length * chapterImageCount : 0);
     await assertHasCredits(
       job.userId,
       imageCountEstimate > 0
@@ -705,6 +786,8 @@ async function runGenerationJob(jobId) {
       sourcePrompt: sanitizeInput(payload.topic || book.title, 300),
       useGoogleSearch,
       includeTextGraphics,
+      includeImages: includeChapterImages,
+      chapterImageCount,
       chapterLength,
     });
 
@@ -749,7 +832,11 @@ async function runGenerationJob(jobId) {
     const targetIndexes = job.retryFailedOnly
       ? chapters
           .map((chapter, index) =>
-            isIncompleteChapterForRetry(chapter, includeChapterImages)
+            isIncompleteChapterForRetry(
+              chapter,
+              includeChapterImages,
+              chapterImageCount
+            )
               ? index
               : null
           )
@@ -766,7 +853,8 @@ async function runGenerationJob(jobId) {
           getChapterGenerationStepCount(
             chapters[index],
             includeChapterImages,
-            job.retryFailedOnly
+            job.retryFailedOnly,
+            chapterImageCount
           ),
         shouldGenerateCover ? 1 : 0
       );
@@ -865,7 +953,8 @@ async function runGenerationJob(jobId) {
       const chapter = book.chapters[chapterIndex];
       const retryImageOnly = isImageOnlyRetryChapter(
         chapter,
-        includeChapterImages
+        includeChapterImages,
+        chapterImageCount
       );
       job.progress.currentChapterIndex = chapterIndex;
       job.progress.currentChapterTitle = chapter.title;
@@ -917,6 +1006,10 @@ async function runGenerationJob(jobId) {
             provider,
             chapterTitle: chapter.title,
           });
+          chapterContent = normalizeGeneratedManuscriptForGenre(
+            chapterContent,
+            safeGenre
+          );
 
           totalStats = addStats(totalStats, result.stats);
           await chargeTokenUsage({
@@ -980,6 +1073,10 @@ async function runGenerationJob(jobId) {
             { content: premiumResult.content },
             { provider, chapterTitle: chapter.title }
           );
+          chapterContent = normalizeGeneratedManuscriptForGenre(
+            chapterContent,
+            safeGenre
+          );
           currentBookBible = premiumResult.bookBible || currentBookBible;
           if (useBibleForInput) {
             book.bible = currentBookBible;
@@ -996,114 +1093,180 @@ async function runGenerationJob(jobId) {
           job.progress.completed += 1;
         }
 
+        chapterContent = normalizeGeneratedManuscriptForGenre(
+          chapterContent,
+          safeGenre
+        );
+
         if (includeChapterImages) {
-          job.progress.message = `Generating image for ${chapter.title}`;
+          const existingImages = book.chapters[chapterIndex].images || [];
+          const retainedImages = existingImages.filter(
+            (item) => !isGeneratedChapterImageAsset(item)
+          );
+          const existingGeneratedImages = retryImageOnly
+            ? existingImages.filter(isGeneratedChapterImageAsset)
+            : [];
+          const imagesToGenerate = retryImageOnly
+            ? Math.max(
+                1,
+                chapterImageCount - countChapterImages({
+                  images: existingGeneratedImages,
+                })
+              )
+            : chapterImageCount;
+          const generatedImageAssets = [];
+          const imageMarkdowns = [];
+          const imageErrors = [];
+
+          job.progress.message =
+            imagesToGenerate > 1
+              ? `Generating ${imagesToGenerate} images for ${chapter.title}`
+              : `Generating image for ${chapter.title}`;
           book.chapters[chapterIndex].content = chapterContent;
           book.chapters[chapterIndex].wordCount = countWords(chapterContent);
           await updateBookProgress(book, job);
 
-          try {
-            await assertHasCredits(
-              job.userId,
-              getImageCreditEstimate({
-                provider: "gemini",
-                imageSize: "1K",
-              })
-            );
-            const visualReferenceContext = buildVisualReferencePromptContext(
-              visualBibleForImages,
-              {
-                ...chapter,
-                content: chapterContent,
-              }
-            );
-            const referenceImages = await getChapterImageReferences(
-              book,
-              chapterIndex,
-              {
-                generatedImageUrls: generatedChapterImageUrls,
-                visualBibleFirstFallback: true,
-              }
-            );
-            const referenceMode = visualReferenceContext
-              ? "visual"
-              : generatedChapterImageUrls.length
-                ? "generated"
-                : "none";
-            const image = await generateGeminiImage({
-              prompt: buildChapterImagePrompt({
+          for (let imageOffset = 0; imageOffset < imagesToGenerate; imageOffset += 1) {
+            try {
+              await assertHasCredits(
+                job.userId,
+                getImageCreditEstimate({
+                  provider: "gemini",
+                  imageSize: "1K",
+                })
+              );
+              const visualReferenceContext = buildVisualReferencePromptContext(
+                visualBibleForImages,
+                {
+                  ...chapter,
+                  content: chapterContent,
+                }
+              );
+              const referenceImages = await getChapterImageReferences(
                 book,
-                chapter,
-                content: chapterContent,
-                genre: safeGenre,
-                audience: safeAudience,
-                hasVisualReferences: referenceImages.length > 0,
-                referenceMode,
-                visualReferenceContext,
-              }),
-              aspectRatio: "16:9",
-              imageSize: "1K",
-              referenceImages,
-            });
-            await chargeImageUsage({
-              userId: job.userId,
-              reason: "chapter_image_generation",
-              description: `Generated image for "${chapter.title}"`,
-              provider: "gemini",
-              model: image.model,
-              usage: image.stats,
-              metadata: buildUsageMetadata(job, {
-                jobId: job.id,
-                bookId: book._id.toString(),
                 chapterIndex,
-                chapterTitle: chapter.title,
+                {
+                  generatedImageUrls: generatedChapterImageUrls,
+                  visualBibleFirstFallback: true,
+                }
+              );
+              const referenceMode = visualReferenceContext
+                ? "visual"
+                : generatedChapterImageUrls.length
+                  ? "generated"
+                  : "none";
+              const imageIndex = retryImageOnly
+                ? Math.min(
+                    chapterImageCount - 1,
+                    existingGeneratedImages.length + generatedImageAssets.length
+                  )
+                : generatedImageAssets.length;
+              const image = await generateGeminiImage({
+                prompt: buildChapterImagePrompt({
+                  book,
+                  chapter,
+                  content: chapterContent,
+                  genre: safeGenre,
+                  audience: safeAudience,
+                  imageIndex,
+                  totalImages: chapterImageCount,
+                  hasVisualReferences: referenceImages.length > 0,
+                  referenceMode,
+                  visualReferenceContext,
+                }),
+                aspectRatio: "16:9",
+                imageSize: "1K",
+                referenceImages,
+              });
+              await chargeImageUsage({
+                userId: job.userId,
+                reason: "chapter_image_generation",
+                description: `Generated image ${imageIndex + 1} for "${
+                  chapter.title
+                }"`,
+                provider: "gemini",
+                model: image.model,
+                usage: image.stats,
+                metadata: buildUsageMetadata(job, {
+                  jobId: job.id,
+                  bookId: book._id.toString(),
+                  chapterIndex,
+                  chapterTitle: chapter.title,
+                  imageIndex,
+                  imageTotal: chapterImageCount,
+                  aspectRatio: image.aspectRatio,
+                  imageSize: image.imageSize,
+                  visualReferenceCount: referenceImages.length,
+                }),
+              });
+              const imageAlt =
+                chapterImageCount > 1
+                  ? `${
+                      chapter.title || `Chapter ${chapterIndex + 1}`
+                    } illustration ${imageIndex + 1}`
+                  : `${
+                      chapter.title || `Chapter ${chapterIndex + 1}`
+                    } illustration`;
+              const imageAsset = {
+                url: image.url,
+                prompt: image.prompt,
+                alt: imageAlt,
+                model: image.model,
+                mimeType: image.mimeType,
                 aspectRatio: image.aspectRatio,
                 imageSize: image.imageSize,
-                visualReferenceCount: referenceImages.length,
-              }),
-            });
-            const imageAlt = `${
-              chapter.title || `Chapter ${chapterIndex + 1}`
-            } illustration`;
-            const imageAsset = {
-              url: image.url,
-              prompt: image.prompt,
-              alt: imageAlt,
-              model: image.model,
-              mimeType: image.mimeType,
-              aspectRatio: image.aspectRatio,
-              imageSize: image.imageSize,
-              source: "gemini",
-            };
+                source: "gemini",
+              };
 
-            chapterContent = insertImageUnderTitle(
-              chapterContent,
+              generatedImageAssets.push(imageAsset);
+              generatedChapterImageUrls.push(image.url);
+              totalStats = addStats(totalStats, image.stats);
+              job.progress.completed += 1;
+            } catch (imageError) {
+              imageErrors.push(imageError.message);
+              job.progress.failed += 1;
+              job.failedChapters.push({
+                index: chapterIndex,
+                title: chapter.title,
+                error: `Image generation failed: ${imageError.message}`,
+              });
+            }
+          }
+
+          const finalGeneratedImages = [
+            ...existingGeneratedImages,
+            ...generatedImageAssets,
+          ];
+          finalGeneratedImages.forEach((imageAsset) => {
+            imageMarkdowns.push(
               buildImageMarkdown({
-                alt: imageAlt,
-                url: image.url,
+                alt: imageAsset.alt,
+                url: imageAsset.url,
               })
             );
+          });
+
+          if (imageMarkdowns.length > 0) {
+            chapterContent = insertImagesThroughoutChapter(
+              chapterContent,
+              imageMarkdowns
+            );
             book.chapters[chapterIndex].images = [
-              ...(book.chapters[chapterIndex].images || []).filter(
-                (item) => !isGeneratedUploadUrl(item?.url)
-              ),
-              imageAsset,
+              ...retainedImages,
+              ...finalGeneratedImages,
             ];
-            generatedChapterImageUrls.push(image.url);
-            chapterStats.image = imageAsset;
+            chapterStats.image = finalGeneratedImages[0];
+            chapterStats.images = finalGeneratedImages;
+          }
+
+          if (imageErrors.length > 0) {
+            chapterStats.imageError = imageErrors.join("; ");
+            chapterStats.imageStatus = generatedImageAssets.length
+              ? "partial"
+              : "failed";
+          } else if (generatedImageAssets.length > 0) {
             delete chapterStats.imageError;
             delete chapterStats.imageStatus;
-            totalStats = addStats(totalStats, image.stats);
-            job.progress.completed += 1;
-          } catch (imageError) {
-            chapterStats.imageError = imageError.message;
-            chapterStats.imageStatus = "failed";
-            job.progress.failed += 1;
-            job.failedChapters.push({
-              index: chapterIndex,
-              title: chapter.title,
-              error: `Image generation failed: ${imageError.message}`,
-            });
           }
         }
 
@@ -1117,7 +1280,8 @@ async function runGenerationJob(jobId) {
         job.progress.failed += getChapterGenerationStepCount(
           chapter,
           includeChapterImages,
-          job.retryFailedOnly
+          job.retryFailedOnly,
+          chapterImageCount
         );
         job.failedChapters.push({
           index: chapterIndex,
@@ -1143,6 +1307,8 @@ async function runGenerationJob(jobId) {
       outlineTree,
       useGoogleSearch,
       includeTextGraphics,
+      includeImages: includeChapterImages,
+      chapterImageCount,
       chapterLength,
       grounding: outlineGrounding,
       stats: totalStats,
@@ -1338,8 +1504,15 @@ async function autoResumeInterruptedBooks(bookIds = []) {
             (chapter) =>
               Array.isArray(chapter.images) && chapter.images.length > 0
           ));
+      const chapterImageCount = includeChapterImages
+        ? getPayloadChapterImageCount(book.generation || {}, book.genre)
+        : 0;
       const hasResumable = (book.chapters || []).some((chapter) =>
-        isIncompleteChapterForRetry(chapter, includeChapterImages)
+        isIncompleteChapterForRetry(
+          chapter,
+          includeChapterImages,
+          chapterImageCount
+        )
       );
 
       if (!hasResumable) continue;

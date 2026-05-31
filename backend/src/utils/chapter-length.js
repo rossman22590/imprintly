@@ -31,6 +31,27 @@ const FICTION_CHAPTER_LENGTH_DETAILS = {
     "Write a deep, premium novel chapter with rich scene work, emotional turns, subtext, complications, and narrative momentum. Do not pad or repeat.",
 };
 
+const CHILDREN_CHAPTER_LENGTHS = {
+  small: {
+    target: "40-90 words",
+    pages: "one two-page storybook spread",
+    detail:
+      "Keep the right-page text brief, warm, visual, and easy for a child to follow.",
+  },
+  medium: {
+    target: "75-140 words",
+    pages: "one two-page storybook spread",
+    detail:
+      "Develop one clear spread beat with repetition, expressive action, and a small emotional turn.",
+  },
+  large: {
+    target: "120-220 words",
+    pages: "one text-heavy two-page storybook spread",
+    detail:
+      "Write a richer spread with vivid action, recurring character cues, playful rhythm, and a complete moment. Do not pad or become adult.",
+  },
+};
+
 function normalizeChapterLength(value = "medium") {
   const normalized = String(value || "medium").trim().toLowerCase();
 
@@ -41,15 +62,24 @@ function getChapterLengthInstruction(value = "medium", options = {}) {
   const chapterLength = normalizeChapterLength(value);
   const config = CHAPTER_LENGTHS[chapterLength];
   const isFiction = options.mode === "fiction" || options.family === "fiction";
-  const detail = isFiction
+  const isChildren =
+    options.mode === "children" || options.family === "children";
+  const targetConfig = isChildren ? CHILDREN_CHAPTER_LENGTHS[chapterLength] : config;
+  const detail = isChildren
+    ? targetConfig.detail
+    : isFiction
     ? FICTION_CHAPTER_LENGTH_DETAILS[chapterLength]
     : config.detail;
-  const substanceRule = isFiction
+  const substanceRule = isChildren
+    ? "Prioritize spread clarity over length: one strong left-page visual moment and short right-page read-aloud copy, without adult explanation or filler."
+    : isFiction
     ? "Prioritize substance over filler: add sensory specificity, scene consequences, character choices, tension, emotional subtext, and connective tissue that makes the story feel cohesive."
     : "Prioritize substance over filler: add specificity, scenes or examples where appropriate, consequences, caveats, and connective tissue that makes the book feel cohesive.";
 
   return [
-    `Chapter length: ${config.label}. Aim for ${config.target}, ${config.pages}.`,
+    `${isChildren ? "Spread text length" : "Chapter length"}: ${
+      config.label
+    }. Aim for ${targetConfig.target}, ${targetConfig.pages}.`,
     detail,
     substanceRule,
   ].join(" ");

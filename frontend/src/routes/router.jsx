@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { createBrowserRouter, Outlet } from "react-router";
+import { createBrowserRouter, Navigate, Outlet } from "react-router";
 import ErrorPage from "../pages/ErrorPage";
 import ProtectedRoute from "./ProtectedRoute";
 import PublicRoute from "./PublicRoute";
@@ -29,7 +29,6 @@ const PublicBookPreviewPage = lazy(() =>
 );
 const PublicSharePage = lazy(() => import("../pages/PublicSharePage"));
 const ResetPasswordPage = lazy(() => import("../pages/ResetPasswordPage"));
-const RunsPage = lazy(() => import("../pages/RunsPage"));
 const SignInPage = lazy(() => import("../pages/SignInPage"));
 const SignUpPage = lazy(() => import("../pages/SignUpPage"));
 
@@ -142,7 +141,7 @@ const router = createBrowserRouter([
         path: "runs",
         element: routeElement(
           <ProtectedRoute>
-            <RunsPage />
+            <Navigate to="/jobs" replace />
           </ProtectedRoute>
         ),
       },

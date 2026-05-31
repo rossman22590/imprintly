@@ -41,7 +41,6 @@ export const API_ENDPOINTS = {
   ADMIN: {
     JOBS: "/api/admin/jobs",
     PLANS: "/api/admin/plans",
-    RUNS: "/api/admin/runs",
     USERS: "/api/admin/users",
   },
   BOOKS: {
@@ -64,7 +63,6 @@ export const API_ENDPOINTS = {
     GENERATE_CHAPTER_IMAGE: "/api/ai/generate-chapter-image",
     GENERATE_FULL_BOOK: "/api/ai/generate-full-book",
     FULL_BOOK_JOBS: "/api/ai/full-book-jobs",
-    RUNS: "/api/ai/full-book-jobs",
     QUALITY_TOOL: "/api/ai/quality-tool",
   },
   EXPORTS: {

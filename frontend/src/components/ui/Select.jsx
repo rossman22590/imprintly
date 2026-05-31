@@ -4,7 +4,7 @@ function Select({ icon: SelectIcon, label, name, options, ...props }) {
   const isRequired = Object.keys(props).includes("required");
 
   return (
-    <div className="grid grid-cols-1 gap-y-2">
+    <div className="w-full grid grid-cols-1 content-start gap-y-2">
       <label htmlFor={name} className="text-gray-700 text-sm font-medium">
         {isRequired ? (
           <>

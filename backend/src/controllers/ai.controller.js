@@ -68,8 +68,12 @@ const {
 } = require("../utils/visual-bible");
 const {
   getBookTypeChapterGuidance,
+  getBookTypeFamily,
   getBookTypeImageGuidance,
 } = require("../utils/book-type-guidance");
+const {
+  sanitizeChildrenSpreadManuscript,
+} = require("../utils/children-spread-content");
 const {
   buildEnhancedBookContext,
   runPremiumChapterPipeline,
@@ -356,6 +360,12 @@ function countWords(content = "") {
   return content.split(/\s+/).filter(Boolean).length;
 }
 
+function normalizeGeneratedManuscriptForGenre(content = "", genre = "") {
+  return getBookTypeFamily(genre) === "children"
+    ? sanitizeChildrenSpreadManuscript(content)
+    : content;
+}
+
 function assertGeneratedChapterContent(result = {}, { provider, chapterTitle }) {
   const content = String(result.content || "").trim();
 
@@ -469,24 +479,31 @@ function buildChapterImagePrompt({
   hasVisualReferences = false,
   visualReferenceContext = "",
 }) {
+  const unitLabel =
+    getBookTypeFamily(book.genre) === "children" ? "spread" : "chapter";
+  const unitLabelTitleCase = unitLabel === "spread" ? "Spread" : "Chapter";
+  const illustrationPlacement =
+    unitLabel === "spread"
+      ? "separate left-page illustration"
+      : "inline ebook illustration";
   const direction = customPrompt
     ? `Scene direction from the author: ${customPrompt}`
-    : `Create a visual scene that captures this chapter brief: ${
+    : `Create a visual scene that captures this ${unitLabel} brief: ${
         chapter.description || chapter.title
       }`;
   const continuityInstruction = hasVisualReferences
-    ? "\nVisual Bible continuity: the provided reference image(s) are mandatory visual canon. Preserve character identity, setting/world cues, art direction, lighting logic, palette, design language, and genre feel while creating a new scene that fits this chapter. Do not copy the previous scene unchanged."
+    ? `\nVisual Bible continuity: the provided reference image(s) are mandatory visual canon. Preserve character identity, setting/world cues, art direction, lighting logic, palette, design language, and genre feel while creating a new scene that fits this ${unitLabel}. Do not copy the previous scene unchanged.`
     : "";
   const bookTypeGuidance = getBookTypeImageGuidance(book.genre);
 
-  return `Create a polished illustration for a chapter inside an ebook.
+  return `Create a polished ${illustrationPlacement} for a ${unitLabel} inside an ebook.
 
 Book title: ${book.title}
 Genre: ${book.genre || "Nonfiction"}
 Audience: ${book.audience || "General readers"}
 ${bookTypeGuidance}
-Chapter title: ${chapter.title}
-Chapter brief: ${chapter.description || "No brief provided."}
+${unitLabelTitleCase} title: ${chapter.title}
+${unitLabelTitleCase} brief: ${chapter.description || "No brief provided."}
 ${direction}
 ${continuityInstruction}
 ${visualReferenceContext}
@@ -663,6 +680,7 @@ async function generateChapterContent(req, res) {
     const safeChapterTitle = sanitizeInput(chapterTitle, 300);
     const safeChapterDescription = sanitizeInput(chapterDescription, 600);
     const safeStyle = sanitizeInput(style, 50);
+    const safeGenre = sanitizeInput(genre, 100) || "Nonfiction";
 
     await assertHasCredits(req.user.id, 0.0001);
 
@@ -671,7 +689,7 @@ async function generateChapterContent(req, res) {
       chapterDescription: safeChapterDescription,
       style: safeStyle,
       bookTitle: sanitizeInput(bookTitle, 200),
-      genre: sanitizeInput(genre, 100) || "Nonfiction",
+      genre: safeGenre,
       audience: sanitizeInput(audience, 200) || "General readers",
       bookContext: sanitizeInput(bookContext, 3000),
       bookBible: serializeGenerationCanon(bookBible, req.body.visualBible),
@@ -680,10 +698,13 @@ async function generateChapterContent(req, res) {
       chapterLength,
       model,
     });
-    const content = assertGeneratedChapterContent(result, {
-      provider: selectedProvider,
-      chapterTitle: safeChapterTitle,
-    });
+    const content = normalizeGeneratedManuscriptForGenre(
+      assertGeneratedChapterContent(result, {
+        provider: selectedProvider,
+        chapterTitle: safeChapterTitle,
+      }),
+      safeGenre
+    );
 
     const billing = await chargeGeneratedTokens({
       req,
@@ -870,6 +891,7 @@ async function generateFullBook(req, res) {
           provider: selectedProvider,
           chapterTitle: chapter.title,
         });
+        content = normalizeGeneratedManuscriptForGenre(content, safeGenre);
 
         totalStats = addStats(totalStats, result.stats);
         const chapterBilling = await chargeGeneratedTokens({
@@ -925,6 +947,7 @@ async function generateFullBook(req, res) {
             chapterTitle: chapter.title,
           }
         );
+        content = normalizeGeneratedManuscriptForGenre(content, safeGenre);
         currentBookBible = premiumResult.bookBible || currentBookBible;
         generatedChapters.push({
           ...chapter,
@@ -1393,7 +1416,10 @@ async function generateChapterImage(req, res) {
         url: image.url,
         req,
       });
-      chapter.content = insertImageUnderTitle(chapter.content, imageMarkdown);
+      chapter.content = insertImageUnderTitle(
+        normalizeGeneratedManuscriptForGenre(chapter.content, book.genre),
+        imageMarkdown
+      );
       chapter.wordCount = countWords(chapter.content);
     }
 

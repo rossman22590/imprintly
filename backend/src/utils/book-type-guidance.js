@@ -48,11 +48,78 @@ function getBookTypeFamily(bookType = "") {
     return "fiction";
   }
 
-  if (["children's book", "children book", "kids book", "kids"].includes(normalized)) {
+  if (
+    [
+      "textbook",
+      "text book",
+      "school textbook",
+      "college textbook",
+      "academic textbook",
+      "educational textbook",
+      "course textbook",
+    ].includes(normalized) ||
+    ["textbook", "schooltextbook", "collegetextbook", "academictextbook"].includes(
+      compact
+    ) ||
+    /\b(text\s*book|textbook)\b/.test(normalized)
+  ) {
+    return "textbook";
+  }
+
+  if (
+    [
+      "children's book",
+      "children book",
+      "childrens book",
+      "kids book",
+      "kids",
+      "kid's book",
+      "picture book",
+      "storybook",
+      "story book",
+      "early reader",
+    ].includes(normalized) ||
+    [
+      "childrensbook",
+      "kidsbook",
+      "kidsstorybook",
+      "picturebook",
+      "storybook",
+      "earlyreader",
+    ].includes(compact) ||
+    /\b(children'?s?|kids?|picture|storybook|early reader)\b/.test(normalized)
+  ) {
     return "children";
   }
 
-  if (["workbook", "course"].includes(normalized)) {
+  if (
+    [
+      "workbook",
+      "work book",
+      "worksheet",
+      "worksheets",
+      "activity book",
+      "course",
+      "study guide",
+      "lesson book",
+      "curriculum",
+      "training manual",
+      "journal",
+      "planner",
+    ].includes(normalized) ||
+    [
+      "workbook",
+      "worksheet",
+      "worksheets",
+      "activitybook",
+      "studyguide",
+      "lessonbook",
+      "trainingmanual",
+    ].includes(compact) ||
+    /\b(work\s*book|worksheet|activity book|study guide|lesson book|curriculum|course)\b/.test(
+      normalized
+    )
+  ) {
     return "learning";
   }
 
@@ -90,7 +157,10 @@ function getBookTypeOutlineGuidance(bookType = "") {
     return [
       "Book type guidance:",
       "- Treat this as a children's storybook with clear scenes, warm language, memorable repetition, and age-appropriate conflict.",
-      "- Each chapter or spread brief should include action, emotion, visual moments, and a simple story beat.",
+      "- Structure the outline as page-spread pairs, not extensive chapters, lessons, or essays.",
+      "- Each editable unit is one two-page spread: left page illustration, right page short story text.",
+      "- When the user requests a page count, plan about one spread for every two interior pages; for example, 20 pages means 10 spreads and 10 illustrations.",
+      "- Each spread brief should include action, emotion, recurring characters, a single visual moment, and a simple story beat.",
       "- Avoid adult instructional tone unless the user explicitly asks for an educational workbook.",
     ].join("\n");
   }
@@ -100,7 +170,20 @@ function getBookTypeOutlineGuidance(bookType = "") {
       "Book type guidance:",
       "- Treat this as an interactive learning product.",
       "- Structure chapters as modules with objectives, explanations, examples, exercises, reflection prompts, and practice tasks.",
+      "- Include printable workbook space where useful: fill-in blanks, ruled answer lines, checkboxes, short response prompts, and practice tables.",
+      "- Make every exercise self-contained enough for the reader to complete on the page.",
       "- Keep the outline practical and usable for a learner moving through the material.",
+    ].join("\n");
+  }
+
+  if (family === "textbook") {
+    return [
+      "Book type guidance:",
+      "- Treat this as a formal textbook, not a workbook, blog, article collection, or casual guide.",
+      "- Structure the book as complete textbook chapters with teachable sequencing from foundations to advanced concepts.",
+      "- Each chapter brief must include learning objectives, key terms, major concept sections, definitions, worked examples or case studies, figure/table opportunities, a chapter summary, and review questions.",
+      "- Use clear pedagogical progression: introduce terms, explain concepts, demonstrate with examples, connect ideas, and assess understanding.",
+      "- Avoid fill-in blanks and worksheet answer lines unless the user explicitly asks for a workbook.",
     ].join("\n");
   }
 
@@ -155,9 +238,13 @@ function getBookTypeChapterGuidance(bookType = "") {
   if (family === "children") {
     return [
       "Book type guidance:",
-      "- Write with storybook warmth, clear action, vivid imagery, age-appropriate vocabulary, and a satisfying emotional beat.",
-      "- Use repetition and rhythm when helpful, but keep the chapter moving as a story.",
-      "- Avoid adult essay tone.",
+      "- Write as a children's storybook, not a nonfiction lesson, essay, or generic explainer.",
+      "- Use storybook warmth, clear action, vivid imagery, age-appropriate vocabulary, repetition, rhythm, and a satisfying emotional beat.",
+      "- Keep recurring character names, appearances, relationships, and personality traits consistent across spreads.",
+      "- Treat this unit as one illustrated two-page spread: one left-page illustration, optionally a very short left-page story line, and one right-page block of read-aloud text.",
+      "- Return only the story manuscript text. Do not write 'Left Page' or 'Right Page' labels, illustration directions, image prompts, or art descriptions into the chapter content.",
+      "- Keep the text concise enough to sit opposite the image; do not write an extensive chapter.",
+      "- Avoid adult essay tone, key-takeaway sections, business language, and lesson-plan structure unless the user explicitly asked for an educational children's workbook.",
     ].join("\n");
   }
 
@@ -165,7 +252,23 @@ function getBookTypeChapterGuidance(bookType = "") {
     return [
       "Book type guidance:",
       "- Write this as a learning module with objectives, explanation, examples, exercises, reflection prompts, and practical assignments.",
+      "- Use printable workbook formatting: fill-in-the-blank prompts, answer lines made from underscores, checkboxes written as [ ], short response spaces, and clear worksheet sections.",
+      "- Do not let the prose become a passive textbook chapter; the reader should have places to write, decide, calculate, reflect, or practice.",
+      "- Keep answer spaces readable in export by placing long fill-in lines on their own lines instead of burying them in dense paragraphs.",
       "- Make the reader able to do something concrete by the end.",
+    ].join("\n");
+  }
+
+  if (family === "textbook") {
+    return [
+      "Book type guidance:",
+      "- Write as a polished textbook chapter with a clear teaching sequence, not a blog post, generic ebook chapter, sales guide, or workbook.",
+      "- Use textbook formatting in markdown: Learning Objectives, Key Terms, numbered concept sections, definitions, worked examples or cases, chapter summary, and review questions.",
+      "- Define important terms when first introduced and keep terminology consistent.",
+      "- Explain concepts from prerequisite knowledge toward more complex ideas, with transitions that show how each concept builds on the previous one.",
+      "- Include examples, mini-cases, tables, or comparison lists where they improve comprehension, but do not invent citations or unsupported facts.",
+      "- End with a concise chapter summary and review questions that test comprehension, application, and analysis.",
+      "- Do not add fill-in blanks, ruled answer lines, or printable worksheet space unless the user explicitly requested a workbook.",
     ].join("\n");
   }
 
@@ -217,6 +320,9 @@ function getBookTypeImageGuidance(bookType = "") {
       "Book type image guidance:",
       "- Treat visuals as warm children's book illustration with clear characters, expressive emotion, readable action, and age-appropriate charm.",
       "- Keep shapes, faces, and story moments easy to understand at a glance.",
+      "- Preserve recurring character identity, wardrobe, proportions, colors, and personality cues across all illustrations.",
+      "- For each spread image, create the left-page illustration that pairs with the right-page text.",
+      "- Make each spread image a single clear story moment rather than a generic chapter poster.",
       "- Avoid adult editorial, corporate, or textbook styling.",
     ].join("\n");
   }
@@ -226,6 +332,17 @@ function getBookTypeImageGuidance(bookType = "") {
       "Book type image guidance:",
       "- Treat visuals as friendly learning material: clear examples, exercises, tools, worksheets, or classroom/workshop context.",
       "- Make the image support practice and comprehension rather than decorative mood.",
+      "- Avoid fake readable text inside generated images; worksheet labels, answer lines, and fill-in prompts should live in the manuscript text where export can render them cleanly.",
+    ].join("\n");
+  }
+
+  if (family === "textbook") {
+    return [
+      "Book type image guidance:",
+      "- Treat visuals as textbook publishing art: clean instructional figures, concept illustrations, process views, maps, timelines, lab/classroom scenes, or chapter-opening educational images.",
+      "- Make visuals clarify the chapter concept rather than act as decorative mood art.",
+      "- Avoid fake readable labels or dense text inside generated images; labels, captions, tables, and figure explanations should live in the manuscript text where export can render them cleanly.",
+      "- Keep the tone credible, organized, and suitable for formal educational publishing.",
     ].join("\n");
   }
 
@@ -260,7 +377,35 @@ function getBookTypeImageGuidance(bookType = "") {
   ].join("\n");
 }
 
+function getDefaultChapterImageCount(bookType = "") {
+  return 1;
+}
+
+function getChildrenSpreadCountFromPages(pageCount = 20) {
+  const parsed = Number.parseInt(pageCount, 10);
+  const safePageCount = Number.isFinite(parsed)
+    ? Math.min(Math.max(parsed, 2), 52)
+    : 20;
+
+  return Math.min(Math.max(Math.ceil(safePageCount / 2), 1), 26);
+}
+
+function getBookTypeStructureCount(bookType = "", requestedCount = 8) {
+  const family = getBookTypeFamily(bookType);
+
+  if (family === "children") {
+    return getChildrenSpreadCountFromPages(requestedCount);
+  }
+
+  const parsed = Number.parseInt(requestedCount, 10);
+
+  return Math.min(Math.max(parsed || 8, 1), 26);
+}
+
 module.exports = {
+  getDefaultChapterImageCount,
+  getBookTypeStructureCount,
+  getChildrenSpreadCountFromPages,
   getBookTypeChapterGuidance,
   getBookTypeFamily,
   getBookTypeImageGuidance,

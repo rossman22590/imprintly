@@ -108,7 +108,7 @@ function getInitials(name = "", email = "") {
 
 const ADMIN_TABS = [
   { id: "users", label: "Users", icon: Users },
-  { id: "runs", label: "Runs", icon: Activity },
+  { id: "jobs", label: "Jobs", icon: Activity },
 ];
 
 const RUN_STATUS_OPTIONS = [
@@ -454,7 +454,7 @@ function RunsPanel({
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
         <StatBlock
           icon={Activity}
-          label="Runs"
+          label="Jobs"
           value={runsSummary?.totalRuns || 0}
         />
         <StatBlock
@@ -483,7 +483,7 @@ function RunsPanel({
         <div className="p-4 border-b border-slate-200 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr),12rem,12rem] gap-3">
           <Input
             icon={Search}
-            label="Search runs"
+            label="Search jobs"
             name="admin-run-search"
             value={runSearch}
             onChange={(event) => setRunSearch(event.target.value)}
@@ -536,7 +536,7 @@ function RunsPanel({
                     colSpan="6"
                     className="px-4 py-10 text-center text-slate-500 text-sm"
                   >
-                    Loading runs...
+                    Loading jobs...
                   </td>
                 </tr>
               ) : runsList.length === 0 ? (
@@ -545,7 +545,7 @@ function RunsPanel({
                     colSpan="6"
                     className="px-4 py-10 text-center text-slate-500 text-sm"
                   >
-                    No generation runs found.
+                    No generation jobs found.
                   </td>
                 </tr>
               ) : (
@@ -1512,7 +1512,7 @@ function AdminPage() {
     setIsRunsLoading(true);
 
     try {
-      const { data } = await axiosInstance.get(API_ENDPOINTS.ADMIN.RUNS, {
+      const { data } = await axiosInstance.get(API_ENDPOINTS.ADMIN.JOBS, {
         params: {
           search: runSearch,
           status: runStatusFilter,
@@ -1526,8 +1526,8 @@ function AdminPage() {
       setRunsSummary(data.summary || null);
       setRunsPagination(data.pagination || null);
     } catch (error) {
-      console.error("Error fetching admin runs:", error);
-      toast.error(error.response?.data?.error || "Failed to load admin runs.");
+      console.error("Error fetching admin jobs:", error);
+      toast.error(error.response?.data?.error || "Failed to load admin jobs.");
     } finally {
       setIsRunsLoading(false);
     }
@@ -1887,7 +1887,7 @@ function AdminPage() {
               Admin Console
             </p>
             <h1 className="text-slate-950 text-2xl md:text-3xl font-bold mt-1">
-              Users, credits, and runs
+              Users, credits, and jobs
             </h1>
           </div>
 

@@ -8,6 +8,10 @@ const {
   prepareExportImages,
   resolveExportImagePath,
 } = require("./export-markdown");
+const { getBookTypeFamily } = require("./book-type-guidance");
+const {
+  extractChildrenSpreadParts,
+} = require("./children-spread-content");
 
 const md = new MarkdownIt();
 
@@ -2130,6 +2134,158 @@ function renderTextBlock(doc, text, options = {}) {
   doc.moveDown(options.after ?? 0.75);
 }
 
+function getFirstMarkdownImage(markdown = "") {
+  const tokens = md.parse(normalizeMarkdownForExport(markdown), {});
+
+  for (const token of tokens) {
+    if (token.type !== "inline") continue;
+
+    const [image] = collectInlineImages(token);
+
+    if (image?.src) return image;
+  }
+
+  return null;
+}
+
+function getPlainSpreadTextFromMarkdown(markdown = "", chapterTitle = "") {
+  const tokens = md.parse(normalizeMarkdownForExport(markdown), {});
+  const parts = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+
+    if (token.type === "heading_open") {
+      index += 2;
+      continue;
+    }
+
+    if (token.type === "paragraph_open" && tokens[index + 1]?.type === "inline") {
+      const text = inlineTextWithoutImages(tokens[index + 1]).trim();
+
+      if (text) parts.push(text);
+
+      index += 2;
+      continue;
+    }
+
+    if (token.type === "inline") {
+      const text = inlineTextWithoutImages(token).trim();
+
+      if (text && text !== chapterTitle) parts.push(text);
+    }
+  }
+
+  return stripInlineMarkdown(parts.join("\n\n")).trim();
+}
+
+function getSpreadPartsFromMarkdown(markdown = "", chapterTitle = "") {
+  const { leftText, rightText } = extractChildrenSpreadParts(markdown);
+
+  return {
+    leftText: getPlainSpreadTextFromMarkdown(leftText, chapterTitle),
+    rightText: getPlainSpreadTextFromMarkdown(rightText, chapterTitle),
+  };
+}
+
+function getSpreadTextFromMarkdown(markdown = "", chapterTitle = "") {
+  const { rightText, leftText } = getSpreadPartsFromMarkdown(
+    markdown,
+    chapterTitle
+  );
+
+  return rightText || leftText;
+}
+
+function renderChildrenSpreadPdf(doc, chapter = {}) {
+  const markdown = getChapterMarkdownForExport(chapter);
+  const firstImage = getFirstMarkdownImage(markdown);
+  const imagePath = firstImage?.src ? resolveExportImagePath(firstImage.src) : "";
+  const contentWidth = getContentWidth(doc);
+  const top = PDF_CONFIG.margins.top;
+  const maxPageHeight =
+    doc.page.height - PDF_CONFIG.margins.top - PDF_CONFIG.margins.bottom;
+  const pageX = PDF_CONFIG.margins.left;
+  const spreadParts = getSpreadPartsFromMarkdown(markdown, chapter.title);
+  const leftPageText = spreadParts.leftText;
+  const title = stripInlineMarkdown(chapter.title || "");
+
+  doc.addPage();
+
+  doc.font(PDF_CONFIG.fonts.body).fontSize(12).fillColor(PDF_CONFIG.colors.body);
+  const leftTextHeight = leftPageText
+    ? Math.min(
+        96,
+        doc.heightOfString(leftPageText, {
+          width: contentWidth,
+          lineGap: 5,
+        }) + 18
+      )
+    : 0;
+  const imageAreaHeight = Math.max(140, maxPageHeight - leftTextHeight);
+
+  if (imagePath) {
+    try {
+      const dimensions = fitImage(doc, imagePath, contentWidth, imageAreaHeight);
+      const imageX = pageX + (contentWidth - dimensions.width) / 2;
+      const imageY = top + Math.max(0, (imageAreaHeight - dimensions.height) / 2);
+
+      doc.image(imagePath, imageX, imageY, {
+        width: dimensions.width,
+        height: dimensions.height,
+      });
+    } catch (error) {
+      console.error(`Could not embed PDF spread image: ${imagePath}`, error);
+    }
+  } else if (firstImage?.alt) {
+    doc
+      .font(PDF_CONFIG.fonts.bodyItalic)
+      .fontSize(9)
+      .fillColor(PDF_CONFIG.colors.pageNumber)
+      .text(`[Image unavailable: ${firstImage.alt}]`, pageX, top, {
+        width: contentWidth,
+        align: "center",
+      });
+  }
+
+  if (leftPageText) {
+    doc
+      .font(PDF_CONFIG.fonts.body)
+      .fontSize(12)
+      .fillColor(PDF_CONFIG.colors.body)
+      .text(leftPageText, pageX, top + imageAreaHeight + 14, {
+        width: contentWidth,
+        align: "center",
+        lineGap: 5,
+      });
+  }
+
+  const spreadText = spreadParts.rightText || spreadParts.leftText;
+
+  doc.addPage();
+
+  doc
+    .font(PDF_CONFIG.fonts.heading)
+    .fontSize(PDF_CONFIG.sizes.h2)
+    .fillColor(PDF_CONFIG.colors.heading)
+    .text(title, pageX, top + 48, {
+      width: contentWidth,
+      align: "left",
+    });
+
+  doc.moveDown(1.2);
+
+  doc
+    .font(PDF_CONFIG.fonts.body)
+    .fontSize(15)
+    .fillColor(PDF_CONFIG.colors.body)
+    .text(spreadText || " ", pageX, doc.y, {
+      width: contentWidth,
+      align: "left",
+      lineGap: 7,
+    });
+}
+
 function renderCodeBlock(doc, token) {
   const originalLines = token.content.replace(/\n$/, "").split("\n");
   const language = String(token.info || "").trim().split(/\s+/)[0] || "";
@@ -2468,9 +2624,16 @@ async function generatePdf(book, res) {
         .lineTo(doc.page.width / 2 + 100, doc.y)
         .stroke("#4f46e5");
 
-      // PROCESS CHAPTERS (starts on page 3+)
+      const isChildrenBook = getBookTypeFamily(book.genre) === "children";
+
+      // PROCESS CHAPTERS/SPREADS (starts on page 3+)
       (book?.chapters || []).forEach((chapter, index) => {
         try {
+          if (isChildrenBook) {
+            renderChildrenSpreadPdf(doc, chapter);
+            return;
+          }
+
           doc.addPage();
 
           doc
@@ -2507,6 +2670,8 @@ module.exports = {
   generatePdf,
   __private: {
     getCoverImagePlacement,
+    getSpreadPartsFromMarkdown,
+    getSpreadTextFromMarkdown,
     isDiagramCodeBlock,
     normalizeCodeTextForPdf,
     parseAsciiTableDiagram,
