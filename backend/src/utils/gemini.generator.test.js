@@ -104,6 +104,38 @@ test("Gemini section prompt makes novel chapters narrative", () => {
   assert.doesNotMatch(prompt, /reader takeaways/);
 });
 
+test("Gemini section prompt makes children books two individual pages", () => {
+  const prompt = buildGeminiSectionPrompt({
+    chapterTitle: "The Door Under the Bed",
+    bookTitle: "Barnaby and the Under-Bed Express",
+    genre: "Children's Book",
+    chapterLength: "medium",
+  });
+
+  assert.match(prompt, /children's picture-book scene/);
+  assert.match(prompt, /two individual children's book pages/);
+  assert.match(prompt, /image on top/);
+  assert.match(prompt, /45-80 words/);
+  assert.match(prompt, /roughly twice as much read-aloud story copy/);
+  assert.match(prompt, /Story page text amount: Medium/);
+  assert.doesNotMatch(prompt, /reader takeaways/);
+});
+
+test("Gemini section prompt makes textbook chapters use textbook structure", () => {
+  const prompt = buildGeminiSectionPrompt({
+    chapterTitle: "Forces and Motion",
+    bookTitle: "Physics Foundations",
+    genre: "Textbook",
+  });
+
+  assert.match(prompt, /publication-quality textbook chapter/);
+  assert.match(prompt, /Learning Objectives/);
+  assert.match(prompt, /Key Terms/);
+  assert.match(prompt, /Chapter Summary/);
+  assert.match(prompt, /Review Questions/);
+  assert.match(prompt, /Do not use workbook fill-in blanks/);
+});
+
 test("novel outlines strip textbook numbering from chapter titles", () => {
   const outline = normalizeOutlineJson(
     {
@@ -129,4 +161,24 @@ test("novel outlines strip textbook numbering from chapter titles", () => {
   assert.deepEqual(outline.chapters[1].outlinePath, [
     "The Door That Should Not Open",
   ]);
+});
+
+test("children outlines strip chapter and page labels from scene titles", () => {
+  const outline = normalizeOutlineJson(
+    {
+      title: "Barnaby",
+      structure: {
+        "Scene 1 - The Glowing Sock": "Barnaby finds a tiny portal.",
+        "Pages 3-4: The Under-Bed Station": "The train whistles softly.",
+        "Chapter 3: Monster Tea": "Everyone shares moonberry tea.",
+      },
+    },
+    { genre: "Children's Book" }
+  );
+
+  assert.deepEqual(
+    outline.chapters.map((chapter) => chapter.title),
+    ["The Glowing Sock", "The Under-Bed Station", "Monster Tea"]
+  );
+  assert.deepEqual(outline.chapters[0].outlinePath, ["The Glowing Sock"]);
 });

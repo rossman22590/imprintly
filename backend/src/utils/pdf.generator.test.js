@@ -3,6 +3,8 @@ const test = require("node:test");
 const { __private } = require("./pdf.generator");
 
 const {
+  countChildrenPageWords,
+  getChildrenPagePartsFromMarkdown,
   isDiagramCodeBlock,
   normalizeCodeTextForPdf,
   parseAsciiTableDiagram,
@@ -15,6 +17,7 @@ const {
   parseProcessDiagram,
   parseStackDiagram,
   parseSystemComparisonDiagram,
+  splitTextForChildrenImagePage,
   getCoverImagePlacement,
 } = __private;
 
@@ -25,6 +28,57 @@ test("scales cover images to fill the entire PDF page", () => {
   assert.ok(placement.width >= 595.28);
   assert.ok(placement.x <= 0);
   assert.ok(Math.abs(placement.y) < 0.001);
+});
+
+test("splits children text so the image page is short and text page is longer", () => {
+  const text = [
+    "Barnaby heard a soft tap under the bed and held his breath.",
+    "A purple monster peeked out with a lantern made of moonlight.",
+    "The room filled with tiny silver sparks as the monster gave a shy wave.",
+    "Barnaby waved back, because brave things are easier when someone smiles first.",
+    "Together they tiptoed toward the glowing portal, listening to the train whistle below the floorboards.",
+    "The stairs shimmered like soap bubbles, and every step hummed a friendly tune.",
+    "At the bottom, a conductor mouse lifted his cap and called, All aboard for the monster world.",
+    "Barnaby squeezed the monster's paw and stepped into the warm golden light.",
+  ].join(" ");
+  const parts = splitTextForChildrenImagePage(text);
+
+  assert.ok(countChildrenPageWords(parts.leftText) >= 20);
+  assert.ok(countChildrenPageWords(parts.leftText) <= 80);
+  assert.ok(
+    countChildrenPageWords(parts.rightText) >
+      countChildrenPageWords(parts.leftText)
+  );
+});
+
+test("children PDF parser tops up tiny old image-page text from the text page", () => {
+  const markdown = `
+### Left Page: Illustration
+
+Barnaby gasped.
+
+***
+
+### Right Page: Story Text
+
+The tiny monster opened a door made of blue sparks. Barnaby saw a tunnel full of humming stars, sleepy socks, and golden train tracks.
+
+He wanted to run, but the monster held out one fuzzy hand. "I know the way," the monster whispered.
+
+Barnaby took one step, then another. Soon the bedroom was far behind them, and the Under-Bed Express was waiting with warm lights in every window.
+`;
+  const parts = getChildrenPagePartsFromMarkdown(
+    markdown,
+    "The Door Under the Bed"
+  );
+
+  assert.ok(countChildrenPageWords(parts.leftText) >= 20);
+  assert.ok(
+    countChildrenPageWords(parts.rightText) >
+      countChildrenPageWords(parts.leftText)
+  );
+  assert.doesNotMatch(parts.leftText, /Left Page/);
+  assert.doesNotMatch(parts.rightText, /Right Page/);
 });
 
 test("detects unicode box/tree diagrams as diagram code blocks", () => {

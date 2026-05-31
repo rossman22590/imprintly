@@ -6,6 +6,7 @@ const {
 } = require("./groqbook.generator");
 const { runGeminiEditorialTask } = require("./gemini.generator");
 const { normalizeBookBiblePayload, serializeBookBible } = require("./book-bible");
+const { getBookTypeFamily } = require("./book-type-guidance");
 
 const BIBLE_JSON_SHAPE =
   '{"characters":"","locations":"","worldRules":"","timeline":"","styleGuide":"","canonFacts":"","unresolvedThreads":"","notes":""}';
@@ -55,6 +56,39 @@ function getGraphicsPolicy(includeTextGraphics = false) {
     "Do not include charts, graphs, diagrams, flowcharts, visual explainers, ASCII art, box-drawing diagrams, Mermaid, graph code blocks, or diagram code blocks.",
     "Use prose, headings, and simple bullets instead.",
   ].join(" ");
+}
+
+function getEditorialBookTypeRules(genre = "") {
+  const family = getBookTypeFamily(genre);
+
+  if (family === "children") {
+    return [
+      "Children's picture-book rules:",
+      "Treat each generated section as one illustrated scene, not a long prose chapter.",
+      "Keep only final story prose. Do not output labels such as Left Page, Right Page, Story Text, Illustration Prompt, Art Notes, Image Prompt, or production direction.",
+      "The opening 45-80 words should work as the short paragraph under the image page.",
+      "The remaining story text should be fuller read-aloud prose, roughly twice the image-page text when enough content exists.",
+      "Use clear character continuity, age-appropriate language, sensory action, playful rhythm, and a gentle page-turn hook.",
+    ].join(" ");
+  }
+
+  if (family === "workbook") {
+    return [
+      "Workbook rules:",
+      "Preserve worksheet structure, fill-in blanks, ruled answer lines, checkboxes, short prompts, examples, practice tasks, answer spaces, and printable formatting.",
+      "Do not rewrite workbook material into passive textbook chapters unless the user explicitly asked for a textbook.",
+    ].join(" ");
+  }
+
+  if (family === "textbook") {
+    return [
+      "Textbook rules:",
+      "Write like a real textbook chapter with learning objectives, key terms, concept sections, examples or case studies, chapter summary, and review questions.",
+      "Do not add workbook-style blanks or answer lines unless the user explicitly asked for exercises.",
+    ].join(" ");
+  }
+
+  return "";
 }
 
 function summarizeCompletedChapter(chapter = {}, index = 0) {
@@ -145,6 +179,9 @@ ${bookBible || "Not provided."}
 Graphics policy:
 ${getGraphicsPolicy(includeTextGraphics)}
 
+Book-type rules:
+${getEditorialBookTypeRules(genre) || "Use the expected structure and reader experience for this book type."}
+
 Review the draft for:
 - weak or generic writing
 - missing reader promise or chapter thesis
@@ -152,6 +189,7 @@ Review the draft for:
 - continuity errors against prior chapters or the Book Bible
 - fiction problems: weak scene goal, low conflict, POV drift, missing emotional consequence, missing hook
 - nonfiction problems: unsupported claims, vague advice, invented citations, thin examples, missing caveats, weak source discipline
+- book-type problems: children scene labels/art notes, missing workbook answer spaces, or missing textbook structure
 - accidental ASCII diagrams or visual blocks that violate the graphics policy
 
 Return concise editorial notes only. Do not rewrite yet.
@@ -193,6 +231,9 @@ ${critique || "Improve clarity, specificity, continuity, and publishing polish."
 Graphics policy:
 ${getGraphicsPolicy(includeTextGraphics)}
 
+Book-type rules:
+${getEditorialBookTypeRules(genre) || "Use the expected structure and reader experience for this book type."}
+
 Rewrite rules:
 1. Return only the revised chapter markdown.
 2. Preserve the chapter's purpose while making it more specific, coherent, and premium.
@@ -200,6 +241,7 @@ Rewrite rules:
 4. For nonfiction, make the chapter less generic: use a clear thesis, reader promise, concrete scenarios, examples, objections, caveats, consequences, and practical next steps. Do not invent citations. If a claim needs sourcing, phrase it carefully instead of fabricating proof.
 5. For fiction, strengthen scene goals, conflict, choices, subtext, emotional consequence, and the hook into the next chapter.
 6. Follow the graphics policy exactly.
+7. Follow the book-type rules exactly.
 
 <draft>
 ${draftContent}

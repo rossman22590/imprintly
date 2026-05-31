@@ -8,8 +8,16 @@ const {
   prepareExportImages,
   resolveExportImagePath,
 } = require("./export-markdown");
+const { getBookTypeFamily } = require("./book-type-guidance");
+const { extractChildrenSpreadParts } = require("./children-spread-content");
 
 const md = new MarkdownIt();
+
+const CHILDREN_IMAGE_PAGE_TEXT = {
+  minWords: 35,
+  maxWords: 80,
+  minFollowupWords: 28,
+};
 
 const PDF_CONFIG = {
   fonts: {
@@ -216,6 +224,16 @@ function fitImage(doc, imagePath, maxWidth, maxHeight) {
   };
 }
 
+function fitImageAllowUpscale(doc, imagePath, maxWidth, maxHeight) {
+  const image = doc.openImage(imagePath);
+  const scale = Math.min(maxWidth / image.width, maxHeight / image.height);
+
+  return {
+    width: image.width * scale,
+    height: image.height * scale,
+  };
+}
+
 function getCoverImagePlacement(pageWidth, pageHeight, imageWidth, imageHeight) {
   const scale = Math.max(pageWidth / imageWidth, pageHeight / imageHeight);
   const width = imageWidth * scale;
@@ -307,6 +325,185 @@ function stripInlineMarkdown(text = "") {
     .replace(/_([^_]+)_/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
     .trim();
+}
+
+function normalizeChildrenPageText(text = "") {
+  return stripInlineMarkdown(text)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function countChildrenPageWords(text = "") {
+  return normalizeChildrenPageText(text).split(/\s+/).filter(Boolean).length;
+}
+
+function splitTextForChildrenImagePage(text = "") {
+  const normalizedText = normalizeChildrenPageText(text);
+  const words = normalizedText.split(/\s+/).filter(Boolean);
+
+  if (!words.length) {
+    return { leftText: "", rightText: "" };
+  }
+
+  if (words.length <= CHILDREN_IMAGE_PAGE_TEXT.minWords) {
+    return { leftText: normalizedText, rightText: "" };
+  }
+
+  const minImagePageWords =
+    words.length >= 90 ? CHILDREN_IMAGE_PAGE_TEXT.minWords : 24;
+  const minFollowupWords =
+    words.length > 90
+      ? Math.max(CHILDREN_IMAGE_PAGE_TEXT.minFollowupWords, 42)
+      : Math.max(18, Math.floor(words.length * 0.55));
+  const maxLeftWords = Math.max(8, words.length - minFollowupWords);
+  const targetWords = Math.min(
+    CHILDREN_IMAGE_PAGE_TEXT.maxWords,
+    Math.max(minImagePageWords, Math.round(words.length * 0.32)),
+    maxLeftWords
+  );
+  const sentenceChunks =
+    normalizedText.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g) || [];
+  let runningWordCount = 0;
+  let boundaryWordCount = 0;
+
+  sentenceChunks.forEach((sentence) => {
+    if (boundaryWordCount) return;
+
+    const sentenceWordCount = sentence.trim().split(/\s+/).filter(Boolean)
+      .length;
+    const nextWordCount = runningWordCount + sentenceWordCount;
+
+    if (nextWordCount > maxLeftWords) {
+      boundaryWordCount = runningWordCount || targetWords;
+      return;
+    }
+
+    runningWordCount = nextWordCount;
+
+    if (
+      runningWordCount >=
+      Math.min(minImagePageWords, targetWords)
+    ) {
+      boundaryWordCount = runningWordCount;
+    }
+  });
+
+  const leftWordCount = Math.min(
+    Math.max(boundaryWordCount || targetWords, 1),
+    maxLeftWords
+  );
+
+  return {
+    leftText: words.slice(0, leftWordCount).join(" "),
+    rightText: words.slice(leftWordCount).join(" "),
+  };
+}
+
+function getPlainChildrenTextFromMarkdown(markdown = "", chapterTitle = "") {
+  const tokens = md.parse(normalizeMarkdownForExport(markdown), {});
+  const title = normalizeChildrenPageText(chapterTitle).toLowerCase();
+  const textParts = [];
+  let skipNextInline = false;
+
+  tokens.forEach((token, index) => {
+    if (skipNextInline) {
+      skipNextInline = false;
+      return;
+    }
+
+    if (token.type === "heading_open") {
+      const nextToken = tokens[index + 1];
+      const headingText = normalizeChildrenPageText(nextToken?.content || "");
+      const normalizedHeading = headingText.toLowerCase();
+
+      skipNextInline = true;
+
+      if (
+        headingText &&
+        normalizedHeading !== title &&
+        !/^(left|right)\s+page\b/i.test(headingText) &&
+        !/^(illustration|story text|image page|text page)\b/i.test(headingText)
+      ) {
+        textParts.push(headingText);
+      }
+
+      return;
+    }
+
+    if (token.type === "paragraph_open") {
+      const nextToken = tokens[index + 1];
+
+      if (nextToken?.type === "inline") {
+        const textContent = normalizeChildrenPageText(
+          inlineTextWithoutImages(nextToken)
+        );
+
+        if (textContent) {
+          textParts.push(textContent);
+        }
+      }
+    }
+  });
+
+  return textParts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function getFirstMarkdownImage(markdown = "") {
+  const tokens = md.parse(normalizeMarkdownForExport(markdown), {});
+
+  for (const token of tokens) {
+    if (token.type !== "inline") continue;
+
+    const [image] = collectInlineImages(token);
+
+    if (image) return image;
+  }
+
+  return null;
+}
+
+function getChildrenPagePartsFromMarkdown(markdown = "", chapterTitle = "") {
+  const { leftText, rightText } = extractChildrenSpreadParts(markdown);
+  const plainLeftText = getPlainChildrenTextFromMarkdown(leftText, chapterTitle);
+  const plainRightText = getPlainChildrenTextFromMarkdown(
+    rightText,
+    chapterTitle
+  );
+  const leftWordCount = countChildrenPageWords(plainLeftText);
+  const rightWordCount = countChildrenPageWords(plainRightText);
+  const combinedText = [plainLeftText, plainRightText].filter(Boolean).join(" ");
+  const combinedWordCount = countChildrenPageWords(combinedText);
+
+  if (!plainLeftText && plainRightText) {
+    return splitTextForChildrenImagePage(plainRightText);
+  }
+
+  if (
+    plainLeftText &&
+    combinedWordCount >=
+      CHILDREN_IMAGE_PAGE_TEXT.minWords +
+        CHILDREN_IMAGE_PAGE_TEXT.minFollowupWords &&
+    (leftWordCount < CHILDREN_IMAGE_PAGE_TEXT.minWords ||
+      leftWordCount > CHILDREN_IMAGE_PAGE_TEXT.maxWords ||
+      rightWordCount < Math.ceil(leftWordCount * 1.35))
+  ) {
+    return splitTextForChildrenImagePage(combinedText);
+  }
+
+  if (plainLeftText && plainRightText) {
+    return {
+      leftText: plainLeftText,
+      rightText: plainRightText,
+    };
+  }
+
+  if (plainLeftText) {
+    return splitTextForChildrenImagePage(plainLeftText);
+  }
+
+  return splitTextForChildrenImagePage(
+    getPlainChildrenTextFromMarkdown(markdown, chapterTitle)
+  );
 }
 
 const pdfCodeCharacterReplacements = new Map([
@@ -2396,6 +2593,148 @@ function processMdContentForPdf(doc, mdContent) {
   }
 }
 
+function renderChildrenImagePlaceholder(doc, x, y, width, height) {
+  doc
+    .roundedRect(x, y, width, height, 8)
+    .fillAndStroke("#f8fafc", "#cbd5e1");
+  doc
+    .font(PDF_CONFIG.fonts.bodyItalic)
+    .fontSize(10)
+    .fillColor(PDF_CONFIG.colors.pageNumber)
+    .text("Illustration unavailable", x + 16, y + height / 2 - 7, {
+      width: width - 32,
+      align: "center",
+    });
+}
+
+function renderChildrenImagePage(doc, { imagePath, alt = "", text = "" }) {
+  const pageTop = PDF_CONFIG.margins.top;
+  const pageBottom = doc.page.height - PDF_CONFIG.margins.bottom;
+  const contentWidth = getContentWidth(doc);
+  const imageX = PDF_CONFIG.margins.left;
+  const textWidth = Math.min(contentWidth, 410);
+  const textX = PDF_CONFIG.margins.left + (contentWidth - textWidth) / 2;
+  const textContent = normalizeChildrenPageText(text);
+  const imageTextFontSize = 12.5;
+
+  doc.font(PDF_CONFIG.fonts.body).fontSize(imageTextFontSize);
+  const textHeightValue = textContent
+    ? Math.min(
+        185,
+        Math.max(
+          58,
+          textHeight(doc, textContent, {
+            width: textWidth,
+            align: "center",
+            lineGap: 4,
+          }) + 8
+        )
+      )
+    : 0;
+  const gap = textContent ? 18 : 0;
+  const maxImageHeight = Math.max(
+    220,
+    pageBottom - pageTop - textHeightValue - gap
+  );
+  let imageBottom = pageTop;
+
+  if (imagePath) {
+    try {
+      const dimensions = fitImageAllowUpscale(
+        doc,
+        imagePath,
+        contentWidth,
+        maxImageHeight
+      );
+      const x = imageX + (contentWidth - dimensions.width) / 2;
+
+      doc.image(imagePath, x, pageTop, {
+        width: dimensions.width,
+        height: dimensions.height,
+      });
+      imageBottom = pageTop + dimensions.height;
+    } catch (error) {
+      console.error(`Could not embed children's PDF image: ${imagePath}`, error);
+      renderChildrenImagePlaceholder(doc, imageX, pageTop, contentWidth, 300);
+      imageBottom = pageTop + 300;
+    }
+  } else {
+    if (alt) {
+      console.warn(`Children's PDF image unavailable: ${alt}`);
+    }
+
+    renderChildrenImagePlaceholder(doc, imageX, pageTop, contentWidth, 300);
+    imageBottom = pageTop + 300;
+  }
+
+  if (textContent) {
+    const textY = Math.min(
+      Math.max(imageBottom + gap, pageBottom - textHeightValue),
+      pageBottom - textHeightValue
+    );
+
+    doc
+      .font(PDF_CONFIG.fonts.body)
+      .fontSize(imageTextFontSize)
+      .fillColor(PDF_CONFIG.colors.body)
+      .text(textContent, textX, textY, {
+        width: textWidth,
+        align: "center",
+        lineGap: 4,
+      });
+  }
+}
+
+function renderChildrenTextPage(doc, { title = "", text = "" }) {
+  const contentWidth = getContentWidth(doc);
+  const textContent = normalizeChildrenPageText(text);
+
+  doc
+    .font(PDF_CONFIG.fonts.heading)
+    .fontSize(PDF_CONFIG.sizes.h2)
+    .fillColor(PDF_CONFIG.colors.chapterTitle)
+    .text(title || "Story", {
+      align: "center",
+    });
+  doc.moveDown(1.2);
+
+  if (!textContent) {
+    return;
+  }
+
+  doc
+    .font(PDF_CONFIG.fonts.body)
+    .fontSize(14)
+    .fillColor(PDF_CONFIG.colors.body)
+    .text(textContent, PDF_CONFIG.margins.left, doc.y, {
+      width: contentWidth,
+      align: "left",
+      lineGap: 5,
+    });
+}
+
+function renderChildrenScenePdf(doc, chapter) {
+  const markdown = getChapterMarkdownForExport(chapter);
+  const firstImage = getFirstMarkdownImage(markdown);
+  const imagePath = firstImage?.src ? resolveExportImagePath(firstImage.src) : "";
+  const pageParts = getChildrenPagePartsFromMarkdown(markdown, chapter.title);
+  const imagePageText = pageParts.leftText;
+  const textPageText = pageParts.rightText || pageParts.leftText;
+
+  doc.addPage();
+  renderChildrenImagePage(doc, {
+    imagePath,
+    alt: firstImage?.alt || chapter.title,
+    text: imagePageText,
+  });
+
+  doc.addPage();
+  renderChildrenTextPage(doc, {
+    title: chapter.title,
+    text: textPageText,
+  });
+}
+
 // MAIN PDF GENERATION FUNCTION
 async function generatePdf(book, res) {
   await prepareExportImages(book);
@@ -2469,8 +2808,15 @@ async function generatePdf(book, res) {
         .stroke("#4f46e5");
 
       // PROCESS CHAPTERS (starts on page 3+)
+      const isChildrenBook = getBookTypeFamily(book.genre) === "children";
+
       (book?.chapters || []).forEach((chapter, index) => {
         try {
+          if (isChildrenBook) {
+            renderChildrenScenePdf(doc, chapter);
+            return;
+          }
+
           doc.addPage();
 
           doc
@@ -2506,9 +2852,13 @@ async function generatePdf(book, res) {
 module.exports = {
   generatePdf,
   __private: {
+    countChildrenPageWords,
+    getChildrenPagePartsFromMarkdown,
     getCoverImagePlacement,
+    getFirstMarkdownImage,
     isDiagramCodeBlock,
     normalizeCodeTextForPdf,
+    splitTextForChildrenImagePage,
     parseAsciiTableDiagram,
     parseBoxedListDiagram,
     parseBranchDiagram,

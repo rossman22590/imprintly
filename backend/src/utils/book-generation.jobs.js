@@ -42,7 +42,13 @@ const {
   normalizeVisualBiblePayload,
   serializeVisualBible,
 } = require("./visual-bible");
-const { getBookTypeImageGuidance } = require("./book-type-guidance");
+const {
+  getBookTypeFamily,
+  getBookTypeImageGuidance,
+} = require("./book-type-guidance");
+const {
+  sanitizeChildrenSpreadManuscript,
+} = require("./children-spread-content");
 const {
   buildEnhancedBookContext,
   runPremiumChapterPipeline,
@@ -104,6 +110,14 @@ function assertGeneratedChapterContent(result = {}, { provider, chapterTitle }) 
   throw new Error(
     `${providerName} returned ${reason} chapter content${chapterLabel}.`
   );
+}
+
+function normalizeGeneratedManuscriptForGenre(content = "", genre = "") {
+  if (getBookTypeFamily(genre) !== "children") {
+    return content;
+  }
+
+  return sanitizeChildrenSpreadManuscript(content);
 }
 
 function isEnabled(value) {
@@ -172,8 +186,15 @@ function buildChapterImagePrompt({
       : "\nVisual Bible continuity: the provided reference image(s) are mandatory visual canon. Preserve character identity, setting/world cues, art direction, lighting logic, palette, design language, and genre feel while creating a new scene that fits this chapter. Do not copy the previous scene unchanged."
     : "";
   const bookTypeGuidance = getBookTypeImageGuidance(genre);
+  const isChildrenBook = getBookTypeFamily(genre) === "children";
+  const illustrationContext = isChildrenBook
+    ? "Create a relevant children's picture-book image-page illustration."
+    : "Create a relevant inline ebook illustration for this chapter.";
+  const placementRequirement = isChildrenBook
+    ? "Keep the composition readable as the top illustration on a children's interior page."
+    : "Keep the composition readable inside an ebook chapter.";
 
-  return `Create a relevant inline ebook illustration for this chapter.
+  return `${illustrationContext}
 
 Book title: ${book.title}
 Genre: ${genre}
@@ -188,7 +209,7 @@ ${visualReferenceContext}
 Requirements:
 1. Represent the chapter's actual ideas, not a generic book or writing scene.
 2. No title text, captions, logos, UI, or extra words inside the image.
-3. Keep the composition readable inside an ebook chapter.
+3. ${placementRequirement}
 4. Match the tone of the genre and audience.
 5. Use a polished editorial illustration or tasteful cinematic image style.`;
 }
@@ -774,10 +795,13 @@ async function runGenerationJob(jobId) {
             chapterLength,
             ...modelPayload,
           });
-          chapterContent = assertGeneratedChapterContent(result, {
-            provider,
-            chapterTitle: chapter.title,
-          });
+          chapterContent = normalizeGeneratedManuscriptForGenre(
+            assertGeneratedChapterContent(result, {
+              provider,
+              chapterTitle: chapter.title,
+            }),
+            safeGenre
+          );
 
           totalStats = addStats(totalStats, result.stats);
           await chargeTokenUsage({
@@ -837,9 +861,12 @@ async function runGenerationJob(jobId) {
             });
           }
 
-          chapterContent = assertGeneratedChapterContent(
-            { content: premiumResult.content },
-            { provider, chapterTitle: chapter.title }
+          chapterContent = normalizeGeneratedManuscriptForGenre(
+            assertGeneratedChapterContent(
+              { content: premiumResult.content },
+              { provider, chapterTitle: chapter.title }
+            ),
+            safeGenre
           );
           currentBookBible = premiumResult.bookBible || currentBookBible;
           if (useBibleForInput) {
