@@ -1,4 +1,4 @@
-const MAX_LEFT_PAGE_TEXT_WORDS = 45;
+const MAX_LEFT_PAGE_TEXT_WORDS = 90;
 
 function isPageHeading(line = "", side = "") {
   const sidePattern = side ? `${side}\\s+` : "(?:left|right)\\s+";
@@ -41,6 +41,10 @@ function countWords(text = "") {
   return String(text || "").trim().split(/\s+/).filter(Boolean).length;
 }
 
+function countSentences(text = "") {
+  return (String(text || "").match(/[.!?]+(?=\s|$)/g) || []).length;
+}
+
 function isLikelyProductionText(text = "") {
   return /\b(?:art direction|image prompt|illustration prompt|camera angle|composition|foreground|background|depict|render|drawn|visual description)\b/i.test(
     text
@@ -52,6 +56,7 @@ function getShortLeftPageText(lines = []) {
 
   if (!text) return "";
   if (countWords(text) > MAX_LEFT_PAGE_TEXT_WORDS) return "";
+  if (countWords(text) > 35 && countSentences(text) < 2) return "";
   if (isLikelyProductionText(text)) return "";
 
   return text;

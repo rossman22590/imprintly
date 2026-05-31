@@ -567,6 +567,21 @@ async function cancelGenerationJob(jobId, userId) {
   job.progress.message = "Cancelled";
   await saveJob(job);
 
+  const bookId = job.bookId || job.payload?.bookId;
+
+  if (bookId) {
+    await Book.updateOne(
+      { _id: bookId, userId: job.userId },
+      {
+        $set: {
+          "generation.status": "cancelled",
+          "generation.completedAt": job.completedAt,
+          "generation.progress": toPlainValue(job.progress || {}),
+        },
+      }
+    );
+  }
+
   return publicJob(job);
 }
 
@@ -836,10 +851,12 @@ async function runGenerationJob(jobId) {
       chapterImageCount,
       chapterLength,
     });
+    if (await stopIfCancelled(job, jobId, book)) return;
 
     if (!job.retryFailedOnly && chapters.length === 0) {
       job.progress.message = "Generating outline";
       await updateBookProgress(book, job);
+      if (await stopIfCancelled(job, jobId, book)) return;
 
       const outlineResult = await generateStructureForProvider(provider, {
         title: sanitizeInput(payload.title || book.title, 200),
@@ -873,6 +890,7 @@ async function runGenerationJob(jobId) {
       });
       book.title = outlineResult.title || book.title;
       book.subtitle = payload.subtitle || outlineResult.subtitle || book.subtitle;
+      if (await stopIfCancelled(job, jobId, book)) return;
     }
 
     const targetIndexes = job.retryFailedOnly
@@ -915,10 +933,12 @@ async function runGenerationJob(jobId) {
         : chapter
     );
     await updateBookProgress(book, job, { outlineTree });
+    if (await stopIfCancelled(job, jobId, book)) return;
 
     if (shouldGenerateCover) {
       job.progress.message = "Generating cover";
       await updateBookProgress(book, job);
+      if (await stopIfCancelled(job, jobId, book)) return;
 
       try {
         const finalPrompt = buildEbookCoverPrompt({
@@ -970,6 +990,7 @@ async function runGenerationJob(jobId) {
         };
         totalStats = addStats(totalStats, image.stats);
         job.progress.completed += 1;
+        if (await stopIfCancelled(job, jobId, book)) return;
       } catch (coverError) {
         job.progress.failed += 1;
         job.failedChapters.push({
@@ -980,21 +1001,11 @@ async function runGenerationJob(jobId) {
       }
 
       await updateBookProgress(book, job);
+      if (await stopIfCancelled(job, jobId, book)) return;
     }
 
     for (const chapterIndex of targetIndexes) {
-      const latestJob = await refreshJob(jobId);
-
-      if (latestJob) {
-        job.cancelled = latestJob.cancelled;
-        job.status = latestJob.status;
-      }
-
-      if (job.cancelled || job.status === "cancelling") {
-        job.status = "cancelled";
-        job.progress.message = "Cancelled";
-        break;
-      }
+      if (await stopIfCancelled(job, jobId, book)) break;
 
       const chapter = book.chapters[chapterIndex];
       const retryImageOnly = isImageOnlyRetryChapter(
@@ -1011,6 +1022,7 @@ async function runGenerationJob(jobId) {
         ? "complete"
         : "generating";
       await updateBookProgress(book, job);
+      if (await stopIfCancelled(job, jobId, book)) break;
 
       try {
         let chapterContent = String(chapter.content || "");
@@ -1076,9 +1088,11 @@ async function runGenerationJob(jobId) {
             ...result.stats,
             ...(result.grounding ? { grounding: result.grounding } : {}),
           });
+          if (await stopIfCancelled(job, jobId, book)) break;
 
           job.progress.message = `Editing ${chapter.title}`;
           await updateBookProgress(book, job);
+          if (await stopIfCancelled(job, jobId, book)) break;
 
           const premiumResult = await runPremiumChapterPipeline({
             provider,
@@ -1114,6 +1128,7 @@ async function runGenerationJob(jobId) {
               },
             });
           }
+          if (await stopIfCancelled(job, jobId, book)) break;
 
           chapterContent = assertGeneratedChapterContent(
             { content: premiumResult.content },
@@ -1171,8 +1186,11 @@ async function runGenerationJob(jobId) {
           book.chapters[chapterIndex].content = chapterContent;
           book.chapters[chapterIndex].wordCount = countWords(chapterContent);
           await updateBookProgress(book, job);
+          if (await stopIfCancelled(job, jobId, book)) break;
 
           for (let imageOffset = 0; imageOffset < imagesToGenerate; imageOffset += 1) {
+            if (await stopIfCancelled(job, jobId, book)) break;
+
             try {
               await assertHasCredits(
                 job.userId,
@@ -1268,6 +1286,7 @@ async function runGenerationJob(jobId) {
               generatedChapterImageUrls.push(image.url);
               totalStats = addStats(totalStats, image.stats);
               job.progress.completed += 1;
+              if (await stopIfCancelled(job, jobId, book)) break;
             } catch (imageError) {
               imageErrors.push(imageError.message);
               job.progress.failed += 1;
@@ -1278,6 +1297,7 @@ async function runGenerationJob(jobId) {
               });
             }
           }
+          if (job.status === "cancelled") break;
 
           const finalGeneratedImages = [
             ...existingGeneratedImages,

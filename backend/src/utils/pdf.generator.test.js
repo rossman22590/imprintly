@@ -76,28 +76,62 @@ test("children spread PDF parts preserve short left-page text separately", () =>
   assert.equal(parts.rightText, '"Ta-da!" squeaked Pip.');
 });
 
-test("children image pages get a short story line when none is labeled", () => {
+test("children image pages top up tiny labeled text from the following text page", () => {
   const parts = getSpreadPartsFromMarkdown(
     [
-      "\"Ta-da!\" squeaked Pip, waving the map high.",
+      "### Left Page: Illustration",
       "",
-      "Barnaby leaned closer until his nose nearly touched the leaf. Pippa tugged her red boots and marched toward the muddy trail.",
+      "Moon dust tickled Barnaby's toes.",
+      "",
+      "***",
+      "",
+      "### Right Page: Story Text",
+      "",
+      "Barnaby peeked under the bed and found a tiny train glowing blue beside his slippers. The engine gave a sleepy toot, and purple sparks twirled around the blanket like fireflies. Milo climbed aboard with his stuffed rabbit tucked under one arm, while the friendly monster folded himself into the caboose. Together they rolled toward a silver tunnel that opened in the wall. The tunnel smelled like warm cinnamon and moon dust, and every clickety-clack made the stars painted on Milo's pajamas blink awake. Barnaby pressed his nose to the window, whispering hello to floating socks, upside-down pillows, and a sleepy moon-moth conductor who tipped his silver cap.",
+    ].join("\n"),
+    "The Under-Bed Express"
+  );
+
+  assert.ok(parts.leftText.split(/\s+/).length >= 35);
+  assert.ok(
+    parts.rightText.split(/\s+/).length >=
+      parts.leftText.split(/\s+/).length * 1.7
+  );
+  assert.match(parts.leftText, /Moon dust tickled/);
+  assert.match(parts.leftText, /tiny train glowing/);
+  assert.match(parts.rightText, /silver tunnel|friendly monster/);
+});
+
+test("children image pages get a real story paragraph when none is labeled", () => {
+  const parts = getSpreadPartsFromMarkdown(
+    [
+      "\"Ta-da!\" squeaked Pip, waving the map high while the muddy trail sparkled like chocolate pudding in the morning sun.",
+      "",
+      "Barnaby leaned closer until his nose nearly touched the leaf, and Pippa tugged her red boots with a proud little squeak. Together they stepped forward, chanting left foot, right foot, brave boots, bright boots, until the first puddle answered with a tremendous sploosh. The forest went quiet, then giggled in drips from every leaf. Pip tried to look serious, but a blob of mud landed on his whiskers like a tiny brown mustache. Pippa clapped, Barnaby bowed, and the map fluttered toward a tunnel of ferns where something shiny was humming their marching song back to them.",
     ].join("\n"),
     "The Grand Map of Mud"
   );
 
-  assert.equal(parts.leftText, '"Ta-da!" squeaked Pip, waving the map high.');
-  assert.match(parts.rightText, /Barnaby leaned closer/);
+  assert.ok(parts.leftText.split(/\s+/).length >= 35);
+  assert.ok(parts.leftText.split(/\s+/).length <= 80);
+  assert.ok(
+    parts.rightText.split(/\s+/).length >=
+      parts.leftText.split(/\s+/).length * 1.7
+  );
+  assert.match(parts.leftText, /muddy trail sparkled/);
+  assert.match(parts.rightText, /forest went quiet|first puddle/);
   assert.doesNotMatch(parts.rightText, /"Ta-da!"/);
 });
 
-test("children image page text splitter keeps the rest for the next page", () => {
+test("children image page text splitter keeps a larger opening chunk for the image page", () => {
   const parts = splitTextForChildrenImagePage(
-    "Mira lifted the glowing spoon. The soup sparkled blue, then green, then gold as everyone leaned closer."
+    "Mira lifted the glowing spoon while moonlight wobbled across the kitchen tiles. The soup sparkled blue, then green, then gold as everyone leaned closer. Barnaby held his breath, Pippa clapped twice, and the tiny kettle began to hum a tune nobody had heard before. One brave bubble popped into the shape of a star and floated toward the ceiling. Mira laughed so hard the cupboards rattled, but the spoon pointed toward the pantry door."
   );
 
-  assert.equal(parts.leftText, "Mira lifted the glowing spoon.");
-  assert.match(parts.rightText, /soup sparkled/);
+  assert.ok(parts.leftText.split(/\s+/).length >= 35);
+  assert.ok(parts.leftText.split(/\s+/).length <= 80);
+  assert.match(parts.leftText, /soup sparkled/);
+  assert.match(parts.rightText, /pantry door/);
 });
 
 test("detects unicode box/tree diagrams as diagram code blocks", () => {

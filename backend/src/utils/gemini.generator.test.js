@@ -113,10 +113,12 @@ test("Gemini section prompt makes children's books page-based", () => {
 
   assert.match(prompt, /two-page children's picture-book scene/);
   assert.match(prompt, /children's-book story text/);
-  assert.match(prompt, /short story line under the image/);
+  assert.match(prompt, /45-80 words work as the image-page paragraph/);
+  assert.match(prompt, /story prose, not a caption/);
+  assert.match(prompt, /roughly twice as long as the image-page paragraph/);
   assert.match(prompt, /illustration page/);
   assert.match(prompt, /Story page text amount/);
-  assert.match(prompt, /40-90 words|75-140 words/);
+  assert.match(prompt, /140-230 words|220-360 words/);
   assert.doesNotMatch(prompt, /3,500-5,000 words/);
 });
 

@@ -15,6 +15,13 @@ const {
 
 const md = new MarkdownIt();
 
+const CHILDREN_IMAGE_PAGE_TEXT = {
+  minWords: 35,
+  targetWords: 55,
+  maxWords: 80,
+  minFollowupWords: 28,
+};
+
 const PDF_CONFIG = {
   fonts: {
     heading: "Helvetica-Bold",
@@ -2180,28 +2187,56 @@ function getPlainSpreadTextFromMarkdown(markdown = "", chapterTitle = "") {
 }
 
 function splitTextForChildrenImagePage(text = "") {
-  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+  const normalizedText = String(text || "").replace(/\s+/g, " ").trim();
+  const words = normalizedText.split(/\s+/).filter(Boolean);
 
   if (words.length === 0) {
     return { leftText: "", rightText: "" };
   }
 
-  const firstSentence = String(text || "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .match(/^(.{8,150}?[.!?])(?:\s+|$)/)?.[1]
-    ?.trim();
-  const firstSentenceWordCount = firstSentence
-    ? firstSentence.split(/\s+/).filter(Boolean).length
-    : 0;
-  const leftWordCount =
-    firstSentence && firstSentenceWordCount <= 24
-      ? firstSentenceWordCount
-      : Math.min(18, Math.max(8, Math.ceil(words.length * 0.18)));
+  const minFollowupWords =
+    words.length > 90
+      ? Math.max(CHILDREN_IMAGE_PAGE_TEXT.minFollowupWords, 42)
+      : Math.max(12, Math.floor(words.length * 0.34));
+  const maxLeftWords = Math.max(8, words.length - minFollowupWords);
+  const targetWords = Math.min(
+    CHILDREN_IMAGE_PAGE_TEXT.maxWords,
+    Math.max(
+      CHILDREN_IMAGE_PAGE_TEXT.minWords,
+      Math.round(words.length * 0.34)
+    ),
+    maxLeftWords
+  );
+  const sentenceChunks =
+    normalizedText.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g) || [];
+  let leftWordCount = 0;
+  let bestBoundary = 0;
+
+  for (const sentence of sentenceChunks) {
+    leftWordCount += sentence.trim().split(/\s+/).filter(Boolean).length;
+
+    if (leftWordCount > maxLeftWords) break;
+    if (leftWordCount >= Math.min(CHILDREN_IMAGE_PAGE_TEXT.minWords, targetWords)) {
+      if (leftWordCount > targetWords + 8) {
+        bestBoundary = bestBoundary || targetWords;
+        break;
+      }
+
+      bestBoundary = leftWordCount;
+
+      if (leftWordCount >= targetWords) break;
+    }
+  }
+
+  leftWordCount = bestBoundary || targetWords;
   const leftText = words.slice(0, leftWordCount).join(" ");
   const rightText = words.slice(leftWordCount).join(" ");
 
   return { leftText, rightText };
+}
+
+function countChildrenPageWords(text = "") {
+  return String(text || "").trim().split(/\s+/).filter(Boolean).length;
 }
 
 function getSpreadPartsFromMarkdown(markdown = "", chapterTitle = "") {
@@ -2211,6 +2246,16 @@ function getSpreadPartsFromMarkdown(markdown = "", chapterTitle = "") {
 
   if (!plainLeftText && plainRightText) {
     return splitTextForChildrenImagePage(plainRightText);
+  }
+
+  if (
+    plainLeftText &&
+    plainRightText &&
+    countChildrenPageWords(plainLeftText) < CHILDREN_IMAGE_PAGE_TEXT.minWords &&
+    countChildrenPageWords(`${plainLeftText} ${plainRightText}`) >=
+      CHILDREN_IMAGE_PAGE_TEXT.minWords + CHILDREN_IMAGE_PAGE_TEXT.minFollowupWords
+  ) {
+    return splitTextForChildrenImagePage(`${plainLeftText} ${plainRightText}`);
   }
 
   return {
@@ -2243,28 +2288,34 @@ function renderChildrenSpreadPdf(doc, chapter = {}) {
 
   doc.addPage();
 
-  doc.font(PDF_CONFIG.fonts.body).fontSize(12).fillColor(PDF_CONFIG.colors.body);
+  doc.font(PDF_CONFIG.fonts.body).fontSize(12.5).fillColor(PDF_CONFIG.colors.body);
   const leftTextHeight = leftPageText
     ? Math.min(
-        96,
+        190,
         doc.heightOfString(leftPageText, {
           width: contentWidth,
           lineGap: 5,
-        }) + 18
+        }) + 24
       )
     : 0;
-  const imageAreaHeight = Math.max(140, maxPageHeight - leftTextHeight);
+  const imageTextGap = leftPageText ? 22 : 0;
+  const imageAreaHeight = Math.max(
+    190,
+    maxPageHeight - leftTextHeight - imageTextGap
+  );
+  let imageBottom = top;
 
   if (imagePath) {
     try {
       const dimensions = fitImage(doc, imagePath, contentWidth, imageAreaHeight);
       const imageX = pageX + (contentWidth - dimensions.width) / 2;
-      const imageY = top + Math.max(0, (imageAreaHeight - dimensions.height) / 2);
+      const imageY = top;
 
       doc.image(imagePath, imageX, imageY, {
         width: dimensions.width,
         height: dimensions.height,
       });
+      imageBottom = imageY + dimensions.height;
     } catch (error) {
       console.error(`Could not embed PDF spread image: ${imagePath}`, error);
     }
@@ -2282,9 +2333,9 @@ function renderChildrenSpreadPdf(doc, chapter = {}) {
   if (leftPageText) {
     doc
       .font(PDF_CONFIG.fonts.body)
-      .fontSize(12)
+      .fontSize(12.5)
       .fillColor(PDF_CONFIG.colors.body)
-      .text(leftPageText, pageX, top + imageAreaHeight + 14, {
+      .text(leftPageText, pageX, imageBottom + imageTextGap, {
         width: contentWidth,
         align: "center",
         lineGap: 5,

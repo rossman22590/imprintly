@@ -810,18 +810,17 @@ function getLiveJobCounts(jobs = []) {
   );
 }
 
-function LiveJobsPanel({
-  liveJobs,
-  isLoading,
-  onRefresh,
-  onOpenRun,
-}) {
+function LiveJobsPanel({ liveJobs, isLoading, onRefresh, onOpenRun }) {
   const counts = getLiveJobCounts(liveJobs);
 
   return (
     <>
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-        <StatBlock icon={RefreshCw} label="Generating" value={counts.generating || 0} />
+        <StatBlock
+          icon={RefreshCw}
+          label="Generating"
+          value={counts.generating || 0}
+        />
         <StatBlock icon={Clock3} label="Queued" value={counts.queued || 0} />
         <StatBlock icon={Ban} label="Cancelling" value={counts.cancelling || 0} />
       </section>
@@ -877,7 +876,7 @@ function LiveJobsPanel({
                     {run.book?.title || run.payloadTitle || "Untitled job"}
                   </h3>
                   <p className="mt-1 truncate text-xs text-slate-500">
-                    {run.user?.email || "No user"} 
+                    {run.user?.email || "No user"}
                     {run.progress?.currentChapterTitle
                       ? ` - ${run.progress.currentChapterTitle}`
                       : ""}

@@ -37,7 +37,9 @@ test("Groq section prompt makes children's books page-based", () => {
   assert.match(prompt, /children's picture book writer/);
   assert.match(prompt, /two-page scene for individual PDF pages/);
   assert.match(prompt, /children's-book story text/);
-  assert.match(prompt, /short story line under the image/);
+  assert.match(prompt, /45-80 words work as the image-page paragraph/);
+  assert.match(prompt, /story prose, not a caption/);
+  assert.match(prompt, /roughly twice as long as the image-page paragraph/);
   assert.match(prompt, /illustration page/);
   assert.match(prompt, /Story page text amount/);
   assert.doesNotMatch(prompt, /long, comprehensive, polished chapter/);

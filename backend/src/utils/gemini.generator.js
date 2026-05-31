@@ -269,8 +269,8 @@ function buildGeminiSectionPrompt({
       ? [
           "1. Return only children's-book story text. Do not output 'Left Page' or 'Right Page' headings, page labels, art notes, image prompts, or illustration descriptions.",
           "2. Start with the story text immediately, not a repeated title page and not an introduction explaining the pages.",
-          "3. This unit must become two individual children's book pages: one image page with a short story line under the image, followed by one text page with the rest of the read-aloud copy.",
-          "4. Make the story imply exactly one clear visual beat for the illustration page. The first sentence should be strong enough to sit under the image as actual story text, not a production note.",
+          "3. This unit must become two individual children's book pages: one image page with the image on top and a real story paragraph under it, followed by one fuller text page with roughly twice as much read-aloud story copy.",
+          "4. Make the opening 45-80 words work as the image-page paragraph: 2-4 short child-friendly sentences with action, emotion, read-aloud rhythm, and one clear visual beat. It must be story prose, not a caption or production note. After that, write a fuller next-page passage with several short read-aloud beats. Do not make the text page a tiny blurb; it should be roughly twice as long as the image-page paragraph.",
           getTextGraphicsInstruction(includeTextGraphics),
           `7. ${getChapterLengthInstruction(chapterLength, { mode: "children" })}`,
           "8. Keep vocabulary age-appropriate for the audience while still sounding polished and publishable.",
@@ -555,7 +555,7 @@ async function generateGeminiBookStructure({
       ? [
           "3. For Children's Book/Picture Book, return a flat object of exactly the editable two-page scenes. Do not nest parts, lessons, units, or textbook sections.",
           "4. Scene keys must be warm storybook titles only. Do not prefix titles with numbers, decimals, hierarchy labels, Chapter, Module, Lesson, or Section.",
-          "5. Each key becomes two individual PDF pages: an image page with a short story line under the image, then a text page with the rest of the read-aloud copy.",
+          "5. Each key becomes two individual PDF pages: an image page with the illustration on top and a 45-80 word story paragraph under it, then a fuller text page with roughly twice as much read-aloud story copy.",
           "6. Each scene value must be a 2-3 sentence visual story brief with recurring characters, setting, child-readable action, emotion, repetition/rhythm notes, and one clear illustration moment.",
         ].join("\n")
     : isTextbook

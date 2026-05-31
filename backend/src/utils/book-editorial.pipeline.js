@@ -239,7 +239,7 @@ Rewrite rules:
 3. Strengthen continuity with prior chapters and the Book Bible.
 4. For nonfiction, make the chapter less generic: use a clear thesis, reader promise, concrete scenarios, examples, objections, caveats, consequences, and practical next steps. Do not invent citations. If a claim needs sourcing, phrase it carefully instead of fabricating proof.
 5. For fiction, strengthen scene goals, conflict, choices, subtext, emotional consequence, and the hook into the next chapter.
-6. For children's books, preserve storybook rhythm, age-appropriate language, recurring character continuity, one clear illustration-page beat, a short story line for the image page, and concise follow-up read-aloud text for the next page. Remove any leaked "Left Page"/"Right Page" headings, image prompts, or illustration-description sections from the manuscript.
+6. For children's books, preserve storybook rhythm, age-appropriate language, recurring character continuity, one clear illustration-page beat, a 45-80 word opening story paragraph for the image page, and a fuller next text page that is roughly twice as long as the image-page paragraph. Remove any leaked "Left Page"/"Right Page" headings, image prompts, or illustration-description sections from the manuscript.
 7. For workbooks, preserve and improve exercises, fill-in blanks, answer lines, checkboxes, reflection prompts, and worksheet sections.
 8. For textbooks, preserve and improve textbook structure: Learning Objectives, Key Terms, scaffolded concept sections, definitions, worked examples or cases, Chapter Summary, and Review Questions.
 9. Follow the graphics policy exactly.
