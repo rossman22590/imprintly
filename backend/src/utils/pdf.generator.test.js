@@ -3,6 +3,7 @@ const test = require("node:test");
 const { __private } = require("./pdf.generator");
 
 const {
+  applyChildrenSpreadViewingHints,
   isDiagramCodeBlock,
   normalizeCodeTextForPdf,
   parseAsciiTableDiagram,
@@ -18,6 +19,7 @@ const {
   getCoverImagePlacement,
   getSpreadPartsFromMarkdown,
   getSpreadTextFromMarkdown,
+  shouldInsertChildrenSpreadAlignmentPage,
 } = __private;
 
 test("scales cover images to fill the entire PDF page", () => {
@@ -73,6 +75,38 @@ test("children spread PDF parts preserve short left-page text separately", () =>
 
   assert.equal(parts.leftText, "Mud went squish under Pippa's shiny boots.");
   assert.equal(parts.rightText, '"Ta-da!" squeaked Pip.');
+});
+
+test("children spread export aligns illustration pages as left-hand pages", () => {
+  assert.equal(
+    shouldInsertChildrenSpreadAlignmentPage({
+      isChildrenBook: true,
+      renderedCoverPage: true,
+    }),
+    true
+  );
+  assert.equal(
+    shouldInsertChildrenSpreadAlignmentPage({
+      isChildrenBook: true,
+      renderedCoverPage: false,
+    }),
+    false
+  );
+  assert.equal(
+    shouldInsertChildrenSpreadAlignmentPage({
+      isChildrenBook: false,
+      renderedCoverPage: true,
+    }),
+    false
+  );
+});
+
+test("children spread PDF requests two-page right viewer layout", () => {
+  const doc = { _root: { data: {} } };
+
+  applyChildrenSpreadViewingHints(doc);
+
+  assert.equal(doc._root.data.PageLayout, "TwoPageRight");
 });
 
 test("detects unicode box/tree diagrams as diagram code blocks", () => {

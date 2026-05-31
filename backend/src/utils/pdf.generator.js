@@ -2286,6 +2286,19 @@ function renderChildrenSpreadPdf(doc, chapter = {}) {
     });
 }
 
+function applyChildrenSpreadViewingHints(doc) {
+  if (doc?._root?.data) {
+    doc._root.data.PageLayout = "TwoPageRight";
+  }
+}
+
+function shouldInsertChildrenSpreadAlignmentPage({
+  isChildrenBook = false,
+  renderedCoverPage = false,
+} = {}) {
+  return Boolean(isChildrenBook && renderedCoverPage);
+}
+
 function renderCodeBlock(doc, token) {
   const originalLines = token.content.replace(/\n$/, "").split("\n");
   const language = String(token.info || "").trim().split(/\s+/)[0] || "";
@@ -2570,6 +2583,8 @@ async function generatePdf(book, res) {
         reject(err);
       });
 
+      let renderedCoverPage = false;
+
       // PAGE 1: COVER PAGE
       if (book.coverImage && !book.coverImage.includes("pravatar")) {
         const imagePath = resolveExportImagePath(book.coverImage);
@@ -2578,6 +2593,7 @@ async function generatePdf(book, res) {
           if (imagePath) {
             renderFullPageCover(doc, imagePath);
             doc.addPage();
+            renderedCoverPage = true;
           } else {
             console.warn(`PDF cover image not found: ${book.coverImage}`);
           }
@@ -2626,6 +2642,19 @@ async function generatePdf(book, res) {
 
       const isChildrenBook = getBookTypeFamily(book.genre) === "children";
 
+      if (isChildrenBook) {
+        applyChildrenSpreadViewingHints(doc);
+
+        if (
+          shouldInsertChildrenSpreadAlignmentPage({
+            isChildrenBook,
+            renderedCoverPage,
+          })
+        ) {
+          doc.addPage();
+        }
+      }
+
       // PROCESS CHAPTERS/SPREADS (starts on page 3+)
       (book?.chapters || []).forEach((chapter, index) => {
         try {
@@ -2669,6 +2698,7 @@ async function generatePdf(book, res) {
 module.exports = {
   generatePdf,
   __private: {
+    applyChildrenSpreadViewingHints,
     getCoverImagePlacement,
     getSpreadPartsFromMarkdown,
     getSpreadTextFromMarkdown,
@@ -2684,5 +2714,6 @@ module.exports = {
     parseProcessDiagram,
     parseSystemComparisonDiagram,
     parseStackDiagram,
+    shouldInsertChildrenSpreadAlignmentPage,
   },
 };
