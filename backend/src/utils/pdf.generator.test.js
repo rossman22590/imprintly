@@ -23,6 +23,9 @@ const {
   getKdpMargins,
   getKdpPageSize,
   getKdpPdfConfig,
+  getKdpTextPageMetrics,
+  getMarkdownImageBlocks,
+  estimateKdpChapterPageCount,
 } = __private;
 
 test("scales cover images to fill the entire PDF page", () => {
@@ -92,6 +95,56 @@ test("KDP generated PDF uses trim size on every page", async () => {
   );
 });
 
+test("KDP children PDF uses the same trim size as full preview", async () => {
+  class BufferSink extends Writable {
+    constructor() {
+      super();
+      this.chunks = [];
+    }
+
+    _write(chunk, _encoding, callback) {
+      this.chunks.push(Buffer.from(chunk));
+      callback();
+    }
+  }
+
+  const sink = new BufferSink();
+  const book = {
+    title: "Children Trim Check",
+    author: "Author",
+    genre: "Children's Book",
+    coverImage: "",
+    kdp: {
+      settings: { trimSize: "6x9", fontSize: "20" },
+      assets: { backCoverBlurb: "Back cover copy." },
+    },
+    chapters: [
+      {
+        title: "Opening",
+        content:
+          "![Opening scene](/uploads/missing-test-image.png)\n\n" +
+          "A bright cloud waved from the hill. ".repeat(80),
+      },
+    ],
+  };
+  await generatePdf(book, sink);
+
+  const pdf = Buffer.concat(sink.chunks).toString("latin1");
+  const mediaBoxes = [
+    ...pdf.matchAll(/\/MediaBox\s*\[\s*0\s+0\s+([0-9.]+)\s+([0-9.]+)\s*\]/g),
+  ].map((match) => `${match[1]}x${match[2]}`);
+  const pageCountMatch = pdf.match(
+    /\/Type\s*\/Pages[\s\S]{0,80}?\/Count\s+(\d+)/
+  );
+
+  assert.ok(mediaBoxes.length > 2);
+  assert.deepEqual([...new Set(mediaBoxes)], ["432x648"]);
+  assert.equal(
+    Number(pageCountMatch?.[1]),
+    getKdpPdfConfig(book).pageCount + 2
+  );
+});
+
 test("KDP PDF body font follows saved font size", () => {
   const config = getKdpPdfConfig({
     kdp: { settings: { fontSize: "14" } },
@@ -99,6 +152,33 @@ test("KDP PDF body font follows saved font size", () => {
 
   assert.equal(config.sizes.body, 14);
   assert.equal(config.sizes.chapterTitle, 18);
+});
+
+test("KDP chapter page estimate includes markdown image pages", () => {
+  const pageSize = getKdpPageSize({ kdp: { settings: { trimSize: "6x9" } } });
+  const margins = {
+    top: 0.78,
+    bottom: 0.88,
+    inside: 0.9,
+    outside: 0.68,
+  };
+  const metrics = getKdpTextPageMetrics(pageSize, 12, margins, 1.42, 1.35);
+  const chapter = {
+    title: "Image chapter",
+    content:
+      "![Bakery scene](https://example.com/bakery.jpg)\n\n" +
+      "This is a test paragraph. ".repeat(6),
+  };
+  const textOnlyChapter = {
+    ...chapter,
+    content: chapter.content.replace(/!\[[^\]]*]\([^)]+\)\n\n/, ""),
+  };
+
+  assert.equal(getMarkdownImageBlocks(chapter.content).length, 1);
+  assert.equal(
+    estimateKdpChapterPageCount(chapter, metrics),
+    estimateKdpChapterPageCount(textOnlyChapter, metrics) + 1
+  );
 });
 
 test("KDP PDF margins follow gutter rules for final page count", () => {

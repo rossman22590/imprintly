@@ -502,6 +502,10 @@ const bookSchema = new mongoose.Schema(
         type: Boolean,
         default: false,
       },
+      includeImages: {
+        type: Boolean,
+        default: false,
+      },
       chapterLength: {
         type: String,
         enum: ["small", "medium", "large"],

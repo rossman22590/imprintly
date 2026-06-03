@@ -343,6 +343,30 @@ function getPlainParagraphs(value = "") {
     .filter(Boolean);
 }
 
+function getMarkdownImageBlocks(value = "") {
+  const source = String(value || "");
+  const imageRegex = /!\[([^\]]*)]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
+  const images = [];
+  let match;
+
+  while ((match = imageRegex.exec(source)) !== null) {
+    const url = String(match[2] || "").trim();
+
+    if (url) {
+      images.push({
+        alt: String(match[1] || "Chapter illustration").trim(),
+        url,
+      });
+    }
+  }
+
+  return images;
+}
+
+function getChapterImagePageCount(chapter = {}) {
+  return getMarkdownImageBlocks(chapter.content).length;
+}
+
 function normalizeTextPageMetrics(metricsOrWordsPerPage = 220) {
   if (
     metricsOrWordsPerPage &&
@@ -632,8 +656,12 @@ function estimateTextPageCount({
       }).length,
     0
   );
+  const chapterImagePages = chapters.reduce(
+    (sum, chapter) => sum + getChapterImagePageCount(chapter),
+    0
+  );
 
-  return frontMatterPages + chapterPages;
+  return frontMatterPages + chapterImagePages + chapterPages;
 }
 
 function estimateBookLayout({ chapters, metadata, trim, fontSize, settings }) {
@@ -771,8 +799,37 @@ function buildPreviewPages({
   const firstPageReserveLines = getChapterOpeningReserveLines(textMetrics);
 
   chapters.forEach((chapter, chapterIndex) => {
+    const imageBlocks = getMarkdownImageBlocks(chapter.content);
+    let tocPageNumber = null;
+    const addTocEntryOnce = (previewPage) => {
+      if (tocPageNumber) return;
+
+      tocPageNumber = previewPage.interiorPageNumber;
+      tocEntries.push({
+        chapterLabel: `Chapter ${chapterIndex + 1}`,
+        title: chapter.title || `Chapter ${chapterIndex + 1}`,
+        pageNumber: tocPageNumber,
+      });
+    };
+
+    imageBlocks.forEach((image, imageIndex) => {
+      const previewPage = addInteriorPage({
+        id: `chapter-${chapterIndex}-image-${imageIndex}`,
+        kind: "chapter-image",
+        label: `${chapter.title || `Chapter ${chapterIndex + 1}`} illustration${
+          imageIndex > 0 ? ` ${imageIndex + 1}` : ""
+        }`,
+        chapterLabel: `Chapter ${chapterIndex + 1}`,
+        title:
+          imageIndex === 0 ? chapter.title || `Chapter ${chapterIndex + 1}` : "",
+        image,
+      });
+
+      addTocEntryOnce(previewPage);
+    });
+
     splitTextIntoPreviewPages(chapter.content, textMetrics, {
-      firstPageReserveLines,
+      firstPageReserveLines: imageBlocks.length ? 0 : firstPageReserveLines,
     }).forEach((pageContent, pageIndex) => {
         const previewPage = {
           id: `chapter-${chapterIndex}-${pageIndex}`,
@@ -782,19 +839,15 @@ function buildPreviewPages({
           }`,
           chapterLabel: `Chapter ${chapterIndex + 1}`,
           title:
-            pageIndex === 0 ? chapter.title || `Chapter ${chapterIndex + 1}` : "",
+            pageIndex === 0 && !imageBlocks.length
+              ? chapter.title || `Chapter ${chapterIndex + 1}`
+              : "",
           paragraphs: pageContent.paragraphs,
         };
 
         const addedPreviewPage = addInteriorPage(previewPage);
 
-        if (pageIndex === 0) {
-          tocEntries.push({
-            chapterLabel: previewPage.chapterLabel,
-            title: previewPage.title,
-            pageNumber: addedPreviewPage.interiorPageNumber,
-          });
-        }
+        addTocEntryOnce(addedPreviewPage);
       });
   });
 
@@ -2732,6 +2785,41 @@ function KDPStudioPage() {
                                       <span className="absolute bottom-[3.5%] left-1/2 -translate-x-1/2 font-mono text-[0.95em] font-medium opacity-80">
                                         {previewPage.interiorPageNumber}
                                       </span>
+                                    </div>
+                                  ) : previewPage.kind === "chapter-image" ? (
+                                    <div
+                                      className="relative flex h-full flex-col font-serif"
+                                      style={{
+                                        ...pagePadding,
+                                        fontFamily: PREVIEW_SERIF_FONT_FAMILY,
+                                        fontSize: previewTextFontSize,
+                                      }}
+                                    >
+                                      {previewPage.chapterLabel && previewPage.title && (
+                                        <div className="mb-[1em] text-center">
+                                          <p className="mb-[0.45em] text-[0.78em] font-semibold uppercase tracking-[0.16em] opacity-55">
+                                            {previewPage.chapterLabel}
+                                          </p>
+                                          <h3 className="text-[1.18em] font-bold leading-tight">
+                                            {previewPage.title}
+                                          </h3>
+                                        </div>
+                                      )}
+                                      <div className="flex min-h-0 flex-1 items-center justify-center pb-[1.5em]">
+                                        <img
+                                          src={resolveImageUrl(previewPage.image?.url)}
+                                          alt={
+                                            previewPage.image?.alt ||
+                                            `${previewPage.title || "Chapter"} illustration`
+                                          }
+                                          className="max-h-full max-w-full object-contain"
+                                        />
+                                      </div>
+                                      {previewPage.interiorPageNumber && (
+                                        <span className="absolute bottom-[3.5%] left-1/2 -translate-x-1/2 font-mono text-[0.95em] font-medium opacity-80">
+                                          {previewPage.interiorPageNumber}
+                                        </span>
+                                      )}
                                     </div>
                                   ) : previewPage.kind === "blank" ? (
                                     <div className="h-full" style={pagePadding} />

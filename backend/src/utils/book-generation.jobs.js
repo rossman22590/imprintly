@@ -590,6 +590,7 @@ async function runGenerationJob(jobId) {
       style: safeStyle,
       sourcePrompt: sanitizeInput(payload.topic || book.title, 300),
       useGoogleSearch,
+      includeImages: includeChapterImages,
       includeTextGraphics,
       chapterLength,
     });

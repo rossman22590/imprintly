@@ -289,6 +289,17 @@ function getPrintParagraphs(value = "") {
     .filter(Boolean);
 }
 
+function getMarkdownImageBlocks(value = "") {
+  return md
+    .parse(normalizeMarkdownForExport(value), {})
+    .flatMap((token) => collectInlineImages(token))
+    .map((image) => ({
+      alt: image.alt || "Chapter illustration",
+      src: image.src,
+    }))
+    .filter((image) => image.src);
+}
+
 function normalizeKdpTextPageMetrics(metricsOrWordsPerPage = 220) {
   if (
     metricsOrWordsPerPage &&
@@ -552,10 +563,17 @@ function getKdpFrontMatterPageCount(book = {}, tocPageCount = 1) {
 
 function estimateKdpChapterPageCount(chapter, textMetrics) {
   const normalizedMetrics = normalizeKdpTextPageMetrics(textMetrics);
+  const markdown = getChapterMarkdownForExport(chapter);
+  const imagePageCount = getMarkdownImageBlocks(markdown).length;
 
-  return estimateKdpTextPageCount(getChapterMarkdownForExport(chapter), normalizedMetrics, {
-    firstPageReserveLines: getKdpChapterOpeningReserveLines(normalizedMetrics),
-  });
+  return (
+    imagePageCount +
+    estimateKdpTextPageCount(markdown, normalizedMetrics, {
+      firstPageReserveLines: imagePageCount
+        ? 0
+        : getKdpChapterOpeningReserveLines(normalizedMetrics),
+    })
+  );
 }
 
 function estimateKdpInteriorPageCount(book = {}, pageSize, fontSize) {
@@ -645,6 +663,7 @@ function getKdpPdfConfig(book = {}) {
   );
 
   return {
+    bookTypeFamily: getBookTypeFamily(book.genre),
     hasBleed: usesKdpInteriorBleed(settings),
     margins: getKdpMargins(trimPageSize, pageCount, settings),
     pageCount,
@@ -960,21 +979,101 @@ function renderKdpFixedBodyParagraph(doc, text = "", textMetrics, options = {}) 
   doc.y = y;
 }
 
+function renderKdpChapterImagePage(
+  doc,
+  chapter,
+  chapterIndex,
+  image,
+  imageIndex,
+  textMetrics
+) {
+  doc.addPage();
+
+  const chapterLabel = `Chapter ${chapterIndex + 1}`;
+
+  if (imageIndex === 0) {
+    doc
+      .font(PDF_CONFIG.fonts.heading)
+      .fontSize(Math.max(10, PDF_CONFIG.sizes.body - 1))
+      .fillColor(PDF_CONFIG.colors.pageNumber)
+      .text(chapterLabel, { align: "center" });
+
+    doc.moveDown(0.45);
+
+    doc
+      .font(PDF_CONFIG.fonts.heading)
+      .fontSize(PDF_CONFIG.sizes.chapterTitle)
+      .fillColor(PDF_CONFIG.colors.chapterTitle)
+      .text(chapter.title || chapterLabel, { align: "center" });
+
+    doc.moveDown(0.8);
+  }
+
+  const imagePath = resolveExportImagePath(image.src);
+  const contentWidth =
+    doc.page.width - PDF_CONFIG.margins.left - PDF_CONFIG.margins.right;
+  const footerReserve = PDF_CONFIG.sizes.pageNumber * 2.5;
+  const imageTop = doc.y;
+  const imageHeight = Math.max(
+    textMetrics.lineHeightPoints * 4,
+    doc.page.height - imageTop - PDF_CONFIG.margins.bottom - footerReserve
+  );
+
+  if (imagePath) {
+    doc.image(imagePath, PDF_CONFIG.margins.left, imageTop, {
+      align: "center",
+      fit: [contentWidth, imageHeight],
+      valign: "center",
+    });
+    doc.y = imageTop + imageHeight;
+    return;
+  }
+
+  doc
+    .save()
+    .roundedRect(PDF_CONFIG.margins.left, imageTop, contentWidth, imageHeight, 8)
+    .stroke("#cbd5e1")
+    .fillColor(PDF_CONFIG.colors.pageNumber)
+    .font(PDF_CONFIG.fonts.bodyItalic)
+    .fontSize(Math.max(9, PDF_CONFIG.sizes.body - 1))
+    .text(image.alt || "Chapter illustration", PDF_CONFIG.margins.left, imageTop + imageHeight / 2 - 10, {
+      align: "center",
+      width: contentWidth,
+    })
+    .restore();
+  doc.y = imageTop + imageHeight;
+}
+
 function renderKdpChapterPrintPages(doc, chapter, chapterIndex, runtimeConfig) {
   const textMetrics = getKdpRuntimeTextMetrics(runtimeConfig);
-  const firstPageReserveLines = getKdpChapterOpeningReserveLines(textMetrics);
+  const markdown = getChapterMarkdownForExport(chapter);
+  const imageBlocks = getMarkdownImageBlocks(markdown);
+  const firstPageReserveLines = imageBlocks.length
+    ? 0
+    : getKdpChapterOpeningReserveLines(textMetrics);
   const pages = splitKdpTextIntoPrintPages(
-    getChapterMarkdownForExport(chapter),
+    markdown,
     textMetrics,
     {
       firstPageReserveLines,
     }
   );
 
+  imageBlocks.forEach((image, imageIndex) => {
+    renderKdpChapterImagePage(
+      doc,
+      chapter,
+      chapterIndex,
+      image,
+      imageIndex,
+      textMetrics
+    );
+  });
+
   pages.forEach((pageContent, pageIndex) => {
     doc.addPage();
 
-    if (pageIndex === 0) {
+    if (pageIndex === 0 && !imageBlocks.length) {
       doc
         .font(PDF_CONFIG.fonts.heading)
         .fontSize(Math.max(10, PDF_CONFIG.sizes.body - 1))
@@ -3974,16 +4073,8 @@ async function generatePdf(book, res) {
         doc.addPage();
       }
 
-      // PROCESS CHAPTERS
-      const isChildrenBook = getBookTypeFamily(book.genre) === "children";
-
       (book?.chapters || []).forEach((chapter, index) => {
         try {
-          if (isChildrenBook) {
-            renderChildrenScenePdf(doc, chapter);
-            return;
-          }
-
           renderKdpChapterPrintPages(doc, chapter, index, runtimeConfig);
         } catch (chapterErr) {
           console.error(
@@ -4028,6 +4119,7 @@ module.exports = {
     getKdpPageSize,
     getKdpPdfConfig,
     getKdpTextPageMetrics,
+    getMarkdownImageBlocks,
     getKdpChapterOpeningReserveLines,
     isDiagramCodeBlock,
     normalizeCodeTextForPdf,
