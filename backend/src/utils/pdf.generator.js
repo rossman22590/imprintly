@@ -126,7 +126,7 @@ function usesKdpInteriorBleed(settings = {}) {
 }
 
 function roundToEvenPageCount(value) {
-  const pageCount = Math.max(24, Math.ceil(value));
+  const pageCount = Math.max(1, Math.ceil(value));
 
   return pageCount % 2 === 0 ? pageCount : pageCount + 1;
 }

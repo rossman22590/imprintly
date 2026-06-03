@@ -322,7 +322,7 @@ function getTextPageMetrics(
 }
 
 function roundToEvenPageCount(value) {
-  const pageCount = Math.max(24, Math.ceil(value));
+  const pageCount = Math.max(1, Math.ceil(value));
 
   return pageCount % 2 === 0 ? pageCount : pageCount + 1;
 }
@@ -1442,6 +1442,14 @@ function KDPStudioPage() {
           pageCount >= 80
             ? "Spine text can be considered."
             : "KDP generally prints spine text only above 79 pages.",
+      },
+      {
+        title: "Print page minimum",
+        status: pageCount >= 24 ? "pass" : "warn",
+        detail:
+          pageCount >= 24
+            ? "Interior page count meets the common KDP paperback minimum."
+            : "KDP print books commonly require at least 24 interior pages; add content instead of padding blanks.",
       },
       {
         title: "Listing copy",

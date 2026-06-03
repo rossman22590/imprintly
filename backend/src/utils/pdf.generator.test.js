@@ -139,10 +139,50 @@ test("KDP children PDF uses the same trim size as full preview", async () => {
 
   assert.ok(mediaBoxes.length > 2);
   assert.deepEqual([...new Set(mediaBoxes)], ["432x648"]);
-  assert.equal(
-    Number(pageCountMatch?.[1]),
-    getKdpPdfConfig(book).pageCount + 2
+  assert.ok(Number(pageCountMatch?.[1]) < 24);
+});
+
+test("KDP short PDFs are not padded with blank pages up to 24", async () => {
+  class BufferSink extends Writable {
+    constructor() {
+      super();
+      this.chunks = [];
+    }
+
+    _write(chunk, _encoding, callback) {
+      this.chunks.push(Buffer.from(chunk));
+      callback();
+    }
+  }
+
+  const sink = new BufferSink();
+  const book = {
+    title: "Short Check",
+    author: "Author",
+    genre: "Fiction",
+    coverImage: "",
+    kdp: {
+      settings: { trimSize: "6x9", fontSize: "12" },
+      assets: { backCoverBlurb: "Back cover copy." },
+    },
+    chapters: [
+      {
+        title: "Opening",
+        content: "This is a very short test chapter.",
+      },
+    ],
+  };
+  await generatePdf(book, sink);
+
+  const pdf = Buffer.concat(sink.chunks).toString("latin1");
+  const pageCountMatch = pdf.match(
+    /\/Type\s*\/Pages[\s\S]{0,80}?\/Count\s+(\d+)/
   );
+  const exportedPageCount = Number(pageCountMatch?.[1]);
+
+  assert.ok(exportedPageCount > 2);
+  assert.ok(exportedPageCount < 24);
+  assert.equal(exportedPageCount, getKdpPdfConfig(book).pageCount + 2);
 });
 
 test("KDP PDF body font follows saved font size", () => {
