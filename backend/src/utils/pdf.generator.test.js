@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
+const { Writable } = require("node:stream");
 const test = require("node:test");
-const { __private } = require("./pdf.generator");
+const { generatePdf, __private } = require("./pdf.generator");
 
 const {
   countChildrenPageWords,
@@ -19,6 +20,9 @@ const {
   parseSystemComparisonDiagram,
   splitTextForChildrenImagePage,
   getCoverImagePlacement,
+  getKdpMargins,
+  getKdpPageSize,
+  getKdpPdfConfig,
 } = __private;
 
 test("scales cover images to fill the entire PDF page", () => {
@@ -28,6 +32,81 @@ test("scales cover images to fill the entire PDF page", () => {
   assert.ok(placement.width >= 595.28);
   assert.ok(placement.x <= 0);
   assert.ok(Math.abs(placement.y) < 0.001);
+});
+
+test("KDP PDF page size follows saved trim size", () => {
+  assert.deepEqual(
+    getKdpPageSize({
+      kdp: { settings: { trimSize: "5x8" } },
+    }),
+    [360, 576]
+  );
+});
+
+test("KDP generated PDF uses trim size on every page", async () => {
+  class BufferSink extends Writable {
+    constructor() {
+      super();
+      this.chunks = [];
+    }
+
+    _write(chunk, _encoding, callback) {
+      this.chunks.push(Buffer.from(chunk));
+      callback();
+    }
+  }
+
+  const sink = new BufferSink();
+  const book = {
+    title: "Trim Check",
+    author: "Author",
+    genre: "Mystery",
+    coverImage: "",
+    kdp: {
+      settings: { trimSize: "6x9", fontSize: "12" },
+      assets: { backCoverBlurb: "Back cover copy." },
+    },
+    chapters: [
+      {
+        title: "Opening",
+        content: "This is a test paragraph. ".repeat(120),
+      },
+    ],
+  };
+  await generatePdf(book, sink);
+
+  const pdf = Buffer.concat(sink.chunks).toString("latin1");
+  const mediaBoxes = [
+    ...pdf.matchAll(/\/MediaBox\s*\[\s*0\s+0\s+([0-9.]+)\s+([0-9.]+)\s*\]/g),
+  ].map((match) => `${match[1]}x${match[2]}`);
+  const pageCountMatch = pdf.match(
+    /\/Type\s*\/Pages[\s\S]{0,80}?\/Count\s+(\d+)/
+  );
+
+  assert.ok(mediaBoxes.length > 2);
+  assert.deepEqual([...new Set(mediaBoxes)], ["432x648"]);
+  assert.match(pdf, /\/PageLayout\s*\/TwoPageRight/);
+  assert.equal(
+    Number(pageCountMatch?.[1]),
+    getKdpPdfConfig(book).pageCount + 2
+  );
+});
+
+test("KDP PDF body font follows saved font size", () => {
+  const config = getKdpPdfConfig({
+    kdp: { settings: { fontSize: "14" } },
+  });
+
+  assert.equal(config.sizes.body, 14);
+  assert.equal(config.sizes.chapterTitle, 18);
+});
+
+test("KDP PDF margins follow gutter rules for final page count", () => {
+  const margins = getKdpMargins([6 * 72, 9 * 72], 320);
+
+  assert.equal(margins.inside, 0.9 * 72);
+  assert.equal(margins.outside, 0.68 * 72);
+  assert.equal(margins.gutterMinimum, 0.625 * 72);
 });
 
 test("splits children text so the image page is short and text page is longer", () => {

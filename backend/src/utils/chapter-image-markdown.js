@@ -188,6 +188,16 @@ function normalizeChapterImages(images = [], { requireExisting = false } = {}) {
     .filter(Boolean);
 }
 
+function filterChapterImagesToContent(
+  content = "",
+  images = [],
+  { requireExisting = false } = {}
+) {
+  return normalizeChapterImages(images, { requireExisting }).filter((image) =>
+    contentHasImageUrl(content, image.url)
+  );
+}
+
 function stripGeneratedImageMarkdown(content = "") {
   const removeLeadingGeneratedImages = (value = "") => {
     let nextValue = String(value || "").trimStart();
@@ -303,6 +313,7 @@ module.exports = {
   contentHasImageUrl,
   escapeMarkdownAlt,
   ensureChapterImageInContent,
+  filterChapterImagesToContent,
   getImageUrlPath,
   getMarkdownImageUrl,
   getUploadUrlFromImageUrl,

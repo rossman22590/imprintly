@@ -6,6 +6,7 @@ import {
   Maximize2,
   Minimize2,
   Sparkles,
+  Trash2,
   TypeOutline,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -15,6 +16,12 @@ import Input from "../ui/Input";
 import Select from "../ui/Select";
 import SimpleMDEditor from "./SimpleMDEditor";
 import { formatMdContent } from "../../utils/helpers";
+import { resolveImageUrl } from "../../utils/api-endpoints";
+import {
+  getMarkdownImages,
+  removeImageAssetForMarkdown,
+  removeMarkdownImage,
+} from "../../utils/markdown-images";
 
 function ChapterEditorTab({
   book = {
@@ -64,6 +71,8 @@ function ChapterEditorTab({
     Array.isArray(book.chapters) &&
     Boolean(book.chapters[selectedChapterIndex]);
   const currentChapter = hasSelectedChapter ? book.chapters[selectedChapterIndex] : {};
+  const currentChapterContent = currentChapter.content || "";
+  const chapterImages = getMarkdownImages(currentChapterContent);
   const visualCharacters = Array.isArray(book?.visualBible?.characters)
     ? book.visualBible.characters.filter((reference) => reference.imageUrl)
     : [];
@@ -173,6 +182,15 @@ function ChapterEditorTab({
       aspectRatio: imageAspectRatio,
       imageSize,
       model: imageModel,
+    });
+  };
+
+  const handleRemoveChapterImage = (image) => {
+    if (isEditorLocked) return;
+
+    onEditChapter({
+      content: removeMarkdownImage(currentChapterContent, image),
+      images: removeImageAssetForMarkdown(currentChapter.images, image),
     });
   };
 
@@ -326,6 +344,65 @@ function ChapterEditorTab({
 
       {isImagePanelOpen && (
         <section className="bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 py-4">
+          {chapterImages.length > 0 && (
+            <div className="mb-4">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-800">
+                  Images in chapter
+                </p>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                  {chapterImages.length}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                {chapterImages.map((image, index) => {
+                  const imageUrl = resolveImageUrl(image.url);
+
+                  return (
+                    <article
+                      key={`${image.start}-${image.end}-${image.url}`}
+                      className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-2"
+                    >
+                      <div className="flex aspect-video items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white">
+                        {imageUrl ? (
+                          <img
+                            src={imageUrl}
+                            alt={image.alt || `Chapter image ${index + 1}`}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <ImageIcon className="size-5 text-slate-300" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-800">
+                          {image.alt || `Image ${index + 1}`}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
+                          {image.url}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveChapterImage(image)}
+                        disabled={isEditorLocked}
+                        aria-label={`Remove chapter image ${index + 1}`}
+                        title="Remove image"
+                        className="rounded-lg border border-rose-200 bg-white p-2 text-rose-600 transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <form
             onSubmit={handleGenerateImage}
             className="grid grid-cols-1 xl:grid-cols-[1fr,10rem,8rem,13rem,auto] gap-3 xl:items-end"
@@ -547,6 +624,7 @@ function ChapterEditorTab({
                       options={mdEditorOptions}
                       isGeneratingImageCommand={isGeneratingImage}
                       onGenerateImageCommand={handleGenerateInlineImageCommand}
+                      onRemoveMarkdownImage={handleRemoveChapterImage}
                       isLocked={isEditorLocked}
                       lockMessage={editorLockMessage}
                     />

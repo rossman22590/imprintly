@@ -1,7 +1,11 @@
 import { useState, useEffect } from "react";
-import { Lock, Loader2, Sparkles, TypeOutline } from "lucide-react";
+import { Lock, Loader2, Sparkles, Trash2, TypeOutline } from "lucide-react";
 import MDEditor, { commands } from "@uiw/react-md-editor";
 import rehypeSanitize from "rehype-sanitize";
+import {
+  findMarkdownImageAtSelection,
+  removeMarkdownImage,
+} from "../../utils/markdown-images";
 
 function findImageCommandAtCursor(content = "", cursorPosition = 0) {
   const safeCursor = Math.max(0, Math.min(cursorPosition, content.length));
@@ -30,28 +34,53 @@ function SimpleMDEditor({
   options,
   isGeneratingImageCommand = false,
   onGenerateImageCommand,
+  onRemoveMarkdownImage,
   isLocked = false,
   lockMessage = "AI is updating this chapter.",
 }) {
   const [isLargeScreen, setIsLargeScreen] = useState(false);
   const [imageCommand, setImageCommand] = useState(null);
+  const [activeImage, setActiveImage] = useState(null);
   const { textareaProps: externalTextareaProps = {}, ...editorOptions } =
     options || {};
 
-  const updateImageCommand = (event) => {
+  const updateEditorContext = (event) => {
     const textarea = event.currentTarget;
     const nextCommand = findImageCommandAtCursor(
       textarea.value,
       textarea.selectionStart
     );
+    const nextImage = findMarkdownImageAtSelection(
+      textarea.value,
+      textarea.selectionStart,
+      textarea.selectionEnd
+    );
 
     setImageCommand(nextCommand);
+    setActiveImage(nextImage);
   };
 
   const handleGenerateImageCommand = async () => {
     if (!imageCommand || !onGenerateImageCommand) return;
 
     await onGenerateImageCommand(imageCommand);
+    setImageCommand(null);
+  };
+
+  const handleRemoveActiveImage = () => {
+    if (!activeImage || isLocked) return;
+
+    if (onRemoveMarkdownImage) {
+      onRemoveMarkdownImage(activeImage);
+      setActiveImage(null);
+      setImageCommand(null);
+      return;
+    }
+
+    const nextValue = removeMarkdownImage(value || "", activeImage);
+
+    onChange(nextValue);
+    setActiveImage(null);
     setImageCommand(null);
   };
 
@@ -76,14 +105,24 @@ function SimpleMDEditor({
   const handleEditorChange = (nextValue) => {
     if (isLocked) return;
 
-    onChange(nextValue);
+    const nextContent = nextValue || "";
+
+    onChange(nextContent);
 
     setImageCommand((currentCommand) => {
       if (!currentCommand) return null;
 
-      return nextValue.slice(currentCommand.start, currentCommand.end) ===
+      return nextContent.slice(currentCommand.start, currentCommand.end) ===
         currentCommand.commandText
         ? currentCommand
+        : null;
+    });
+    setActiveImage((currentImage) => {
+      if (!currentImage) return null;
+
+      return nextContent.slice(currentImage.start, currentImage.end) ===
+        currentImage.markdown
+        ? currentImage
         : null;
     });
   };
@@ -102,7 +141,23 @@ function SimpleMDEditor({
             <span className="font-medium">Markdown Editor</span>
           </div>
 
-          {imageCommand ? (
+          {activeImage ? (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <span className="max-w-full sm:max-w-80 truncate text-[11px] sm:text-xs text-rose-700 font-medium">
+                {activeImage.alt || activeImage.url || "Markdown image"}
+              </span>
+
+              <button
+                type="button"
+                onClick={handleRemoveActiveImage}
+                disabled={isLocked}
+                className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-rose-600 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Trash2 className="size-3.5" />
+                Remove
+              </button>
+            </div>
+          ) : imageCommand ? (
             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <span className="max-w-full sm:max-w-80 truncate text-[11px] sm:text-xs text-violet-700 font-medium">
                 {imageCommand.prompt}
@@ -161,15 +216,15 @@ function SimpleMDEditor({
               "Start writing your chapter content here...\n\nTip: Use ```language to create code blocks with syntax highlighting",
             onClick: (event) => {
               externalTextareaProps.onClick?.(event);
-              updateImageCommand(event);
+              updateEditorContext(event);
             },
             onKeyUp: (event) => {
               externalTextareaProps.onKeyUp?.(event);
-              updateImageCommand(event);
+              updateEditorContext(event);
             },
             onSelect: (event) => {
               externalTextareaProps.onSelect?.(event);
-              updateImageCommand(event);
+              updateEditorContext(event);
             },
           }}
         />

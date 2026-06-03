@@ -11,6 +11,7 @@ const {
 const { buildEbookCoverPrompt } = require("../utils/book-image-prompts");
 const {
   ensureChapterImageInContent,
+  filterChapterImagesToContent,
   normalizeChapterImages,
   removeMissingUploadImageMarkdown,
 } = require("../utils/chapter-image-markdown");
@@ -40,6 +41,14 @@ const KDP_SETTING_LIMITS = {
   trimSize: 30,
   paperType: 50,
   pageCountOverride: 20,
+  fontSize: 10,
+  interiorBleed: 20,
+  marginTop: 10,
+  marginBottom: 10,
+  marginInside: 10,
+  marginOutside: 10,
+  lineSpacing: 10,
+  paragraphIndent: 10,
   coverImageSize: 10,
   tocDesign: 30,
 };
@@ -86,23 +95,36 @@ function normalizeVisualBibleForSave(visualBible) {
   };
 }
 
-async function normalizeChapterPayloads(chapters = []) {
+async function normalizeChapterPayloads(
+  chapters = [],
+  { syncImagesToContent = false } = {}
+) {
   if (!Array.isArray(chapters)) return [];
 
   return Promise.all(
     chapters.map(async (chapter) => {
       const migrated = await migrateChapterPayloadImagesToStorage(chapter);
+      const content = removeMissingUploadImageMarkdown(
+        migrated.chapter.content || ""
+      );
+      const images = syncImagesToContent
+        ? filterChapterImagesToContent(content, migrated.chapter.images, {
+            requireExisting: true,
+          })
+        : normalizeChapterImages(migrated.chapter.images, {
+            requireExisting: true,
+          });
       const normalizedChapter = {
         ...migrated.chapter,
-        images: normalizeChapterImages(migrated.chapter.images, {
-          requireExisting: true,
-        }),
+        content,
+        images,
       };
 
-      normalizedChapter.content = removeMissingUploadImageMarkdown(
-        normalizedChapter.content || ""
-      );
-      normalizedChapter.content = ensureChapterImageInContent(normalizedChapter);
+      if (!syncImagesToContent) {
+        normalizedChapter.content = ensureChapterImageInContent(
+          normalizedChapter
+        );
+      }
 
       return normalizedChapter;
     })
@@ -446,7 +468,9 @@ async function updateBookContent(req, res) {
       chapters:
         req.body.chapters === undefined
           ? undefined
-          : await normalizeChapterPayloads(req.body.chapters),
+          : await normalizeChapterPayloads(req.body.chapters, {
+              syncImagesToContent: true,
+            }),
       genre: req.body.genre,
       audience: req.body.audience,
       language: req.body.language,

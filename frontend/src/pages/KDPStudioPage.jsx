@@ -38,17 +38,65 @@ const TRIM_SIZES = [
 ];
 
 const PAPER_TYPES = [
-  { id: "bw-white", label: "B&W white paper", spinePerPage: 0.002252 },
-  { id: "bw-cream", label: "B&W cream paper", spinePerPage: 0.0025 },
-  { id: "color", label: "Color interior", spinePerPage: 0.002347 },
+  {
+    id: "bw-white",
+    label: "B&W white paper",
+    spinePerPage: 0.002252,
+    previewPaper: "#ffffff",
+    previewInk: "#111827",
+  },
+  {
+    id: "bw-cream",
+    label: "B&W cream paper",
+    spinePerPage: 0.0025,
+    previewPaper: "#f8f1df",
+    previewInk: "#17120b",
+  },
+  {
+    id: "color",
+    label: "Color interior",
+    spinePerPage: 0.002347,
+    previewPaper: "#ffffff",
+    previewInk: "#111827",
+  },
+];
+
+const FONT_SIZE_OPTIONS = [
+  { value: "10", label: "10 pt compact" },
+  { value: "11", label: "11 pt standard" },
+  { value: "12", label: "12 pt trade" },
+  { value: "13", label: "13 pt large" },
+  { value: "14", label: "14 pt reader" },
+  { value: "16", label: "16 pt large print" },
+  { value: "18", label: "18 pt early reader" },
+  { value: "20", label: "20 pt children's" },
+  { value: "22", label: "22 pt picture book" },
+  { value: "24", label: "24 pt read-aloud" },
+  { value: "28", label: "28 pt board book" },
+  { value: "32", label: "32 pt display text" },
 ];
 
 const TABS = [
   { id: "interior", label: "Interior PDF", icon: BookOpen },
   { id: "cover", label: "Cover Builder", icon: ImageIcon },
   { id: "metadata", label: "Listing Copy", icon: FileText },
+  { id: "preview", label: "Full Preview", icon: Eye },
   { id: "preflight", label: "Preflight", icon: ClipboardCheck },
 ];
+
+const KDP_GUTTER_RULES = [
+  { maxPages: 150, gutter: 0.375 },
+  { maxPages: 300, gutter: 0.5 },
+  { maxPages: 500, gutter: 0.625 },
+  { maxPages: 700, gutter: 0.75 },
+  { maxPages: 828, gutter: 0.875 },
+];
+
+const PREVIEW_SERIF_FONT_FAMILY =
+  '"Times New Roman", Times, serif';
+const PRINT_AVERAGE_CHAR_WIDTH_RATIO = 0.45;
+const PRINT_PAGE_LINE_SAFETY = 0;
+const MAX_PRINT_FONT_SIZE = 32;
 
 const TOC_DESIGNS = [
   { id: "basic", label: "Standard" },
@@ -115,6 +163,14 @@ const DEFAULT_SETTINGS = {
   trimSize: "6x9",
   paperType: "bw-white",
   pageCountOverride: "",
+  fontSize: "12",
+  interiorBleed: "none",
+  marginTop: "",
+  marginBottom: "",
+  marginInside: "",
+  marginOutside: "",
+  lineSpacing: "1.44",
+  paragraphIndent: "1.35",
   coverImageSize: "2K",
   tocDesign: "basic",
 };
@@ -147,6 +203,633 @@ function stripMarkdown(value = "") {
     .trim();
 }
 
+function normalizeFontSize(value) {
+  const size = Number.parseFloat(value);
+
+  if (!Number.isFinite(size)) return 12;
+
+  return Math.min(MAX_PRINT_FONT_SIZE, Math.max(9, size));
+}
+
+function normalizeMeasurement(value, fallback, min, max = 2) {
+  const size = Number.parseFloat(value);
+
+  if (!Number.isFinite(size)) return fallback;
+
+  return Math.min(max, Math.max(min, size));
+}
+
+function normalizeLineSpacing(value) {
+  return normalizeMeasurement(value, 1.44, 1.15, 1.8);
+}
+
+function normalizeParagraphIndent(value) {
+  return normalizeMeasurement(value, 1.35, 0, 2.25);
+}
+
+function usesInteriorBleed(settings = {}) {
+  return settings.interiorBleed === "bleed";
+}
+
+function getKdpGutterMinimum(pageCount = 24) {
+  const normalizedPageCount = Math.max(24, Number(pageCount) || 24);
+
+  return (
+    KDP_GUTTER_RULES.find((rule) => normalizedPageCount <= rule.maxPages)
+      ?.gutter || KDP_GUTTER_RULES[KDP_GUTTER_RULES.length - 1].gutter
+  );
+}
+
+function getKdpBookMargins(trim, pageCount = 24, settings = {}) {
+  const gutterMinimum = getKdpGutterMinimum(pageCount);
+  const outsideMinimum = usesInteriorBleed(settings) ? 0.375 : 0.25;
+  const compactTrim = trim.width <= 5.5 || trim.height <= 8;
+  const baseMargins = compactTrim
+    ? { top: 0.68, bottom: 0.78, inside: 0.78, outside: 0.58 }
+    : { top: 0.78, bottom: 0.88, inside: 0.9, outside: 0.68 };
+
+  return {
+    top: normalizeMeasurement(
+      settings.marginTop,
+      baseMargins.top,
+      outsideMinimum
+    ),
+    bottom: normalizeMeasurement(
+      settings.marginBottom,
+      baseMargins.bottom,
+      outsideMinimum
+    ),
+    inside: normalizeMeasurement(
+      settings.marginInside,
+      Math.max(gutterMinimum + 0.2, baseMargins.inside),
+      gutterMinimum
+    ),
+    outside: normalizeMeasurement(
+      settings.marginOutside,
+      Math.max(outsideMinimum, baseMargins.outside),
+      outsideMinimum
+    ),
+    gutterMinimum,
+    outsideMinimum,
+  };
+}
+
+function getTextPageMetrics(
+  trim,
+  fontSize,
+  margins,
+  lineSpacing = 1.44,
+  paragraphIndentRatio = 1.35
+) {
+  const textArea = Math.max(
+    8,
+    (trim.width - margins.inside - margins.outside) *
+      (trim.height - margins.top - margins.bottom)
+  );
+  const densityAt12pt = 8.95;
+  const fontScale = Math.pow(12 / fontSize, 1.82);
+  const contentWidth = Math.max(2, trim.width - margins.inside - margins.outside);
+  const contentHeight = Math.max(3, trim.height - margins.top - margins.bottom);
+  const lineHeightInches = (fontSize * lineSpacing) / 72;
+  const linesPerPage = Math.max(
+    10,
+    Math.round(contentHeight / lineHeightInches) - PRINT_PAGE_LINE_SAFETY
+  );
+  const effectiveLineHeightInches = contentHeight / linesPerPage;
+  const effectiveLineSpacing = (effectiveLineHeightInches * 72) / fontSize;
+  const lineScale = 1.44 / effectiveLineSpacing;
+  const charsPerLine = Math.max(
+    28,
+    Math.floor(
+      (contentWidth * 72) / (fontSize * PRINT_AVERAGE_CHAR_WIDTH_RATIO)
+    )
+  );
+
+  return {
+    charsPerLine,
+    effectiveLineSpacing,
+    fontSize,
+    lineHeightPoints: effectiveLineHeightInches * 72,
+    lineWidthPoints: contentWidth * 72,
+    linesPerPage,
+    paragraphIndentPoints: fontSize * paragraphIndentRatio,
+    paragraphIndentRatio,
+    wordsPerPage: Math.max(
+      70,
+      Math.round(textArea * densityAt12pt * fontScale * lineScale)
+    ),
+  };
+}
+
+function roundToEvenPageCount(value) {
+  const pageCount = Math.max(24, Math.ceil(value));
+
+  return pageCount % 2 === 0 ? pageCount : pageCount + 1;
+}
+
+function getPlainParagraphs(value = "") {
+  return String(value || "")
+    .replace(/!\[[^\]]*]\([^)]+\)/g, "")
+    .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
+    .replace(/\r\n/g, "\n")
+    .split(/\n{2,}/)
+    .map((paragraph) =>
+      paragraph
+        .replace(/[`*_>#]/g, " ")
+        .replace(/^\s*[-+]\s+/gm, "")
+        .replace(/[ \t\n]+/g, " ")
+        .trim()
+    )
+    .filter(Boolean);
+}
+
+function normalizeTextPageMetrics(metricsOrWordsPerPage = 220) {
+  if (
+    metricsOrWordsPerPage &&
+    typeof metricsOrWordsPerPage === "object" &&
+    Number.isFinite(metricsOrWordsPerPage.linesPerPage) &&
+    Number.isFinite(metricsOrWordsPerPage.charsPerLine)
+  ) {
+    return metricsOrWordsPerPage;
+  }
+
+  const wordsPerPage = Math.max(70, Number(metricsOrWordsPerPage) || 220);
+
+  return {
+    charsPerLine: 54,
+    linesPerPage: Math.max(10, Math.round(wordsPerPage / 9.2)),
+    wordsPerPage,
+  };
+}
+
+function getChapterOpeningReserveLines(textMetrics) {
+  return Math.max(3, Math.floor(textMetrics.linesPerPage * 0.1));
+}
+
+let previewMeasureContext;
+const previewWordWidthCache = new Map();
+
+function getPreviewMeasureContext(fontSize) {
+  if (typeof document === "undefined") return null;
+
+  if (!previewMeasureContext) {
+    previewMeasureContext = document.createElement("canvas").getContext("2d");
+  }
+
+  if (!previewMeasureContext) return null;
+
+  previewMeasureContext.font = `${fontSize}px ${PREVIEW_SERIF_FONT_FAMILY}`;
+
+  return previewMeasureContext;
+}
+
+function getPreviewMeasuredTokenWidth(token, fontSize) {
+  const cacheKey = `${fontSize}:${token}`;
+
+  if (previewWordWidthCache.has(cacheKey)) {
+    return previewWordWidthCache.get(cacheKey);
+  }
+
+  const context = getPreviewMeasureContext(fontSize);
+
+  if (!context) return null;
+
+  const width = context.measureText(token).width;
+
+  if (previewWordWidthCache.size > 12000) {
+    previewWordWidthCache.clear();
+  }
+
+  previewWordWidthCache.set(cacheKey, width);
+
+  return width;
+}
+
+function estimateMeasuredPreviewTextLines(normalized, textMetrics, options = {}) {
+  const fontSize = Number(textMetrics.fontSize);
+  const lineWidth = Number(textMetrics.lineWidthPoints);
+
+  if (!Number.isFinite(fontSize) || !Number.isFinite(lineWidth)) return null;
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+
+  if (!words.length) return 0;
+
+  const spaceWidth = getPreviewMeasuredTokenWidth(" ", fontSize);
+
+  if (!Number.isFinite(spaceWidth)) return null;
+
+  const indentWidth = options.continuation
+    ? 0
+    : Number(textMetrics.paragraphIndentPoints) ||
+      fontSize * (Number(textMetrics.paragraphIndentRatio) || 1.35);
+  let lineCount = 1;
+  let lineLimit = Math.max(fontSize * 2, lineWidth - indentWidth);
+  let currentLineWidth = 0;
+
+  for (const word of words) {
+    const wordWidth = getPreviewMeasuredTokenWidth(word, fontSize);
+
+    if (!Number.isFinite(wordWidth)) return null;
+
+    if (currentLineWidth === 0) {
+      currentLineWidth = wordWidth;
+      continue;
+    }
+
+    if (currentLineWidth + spaceWidth + wordWidth <= lineLimit) {
+      currentLineWidth += spaceWidth + wordWidth;
+      continue;
+    }
+
+    lineCount += 1;
+    lineLimit = lineWidth;
+    currentLineWidth = wordWidth;
+  }
+
+  return Math.max(1, lineCount);
+}
+
+function estimatePreviewTextLines(text = "", textMetrics, options = {}) {
+  const normalized = String(text || "").trim();
+
+  if (!normalized) return 0;
+
+  const measuredLineCount = estimateMeasuredPreviewTextLines(
+    normalized,
+    textMetrics,
+    options
+  );
+
+  if (Number.isFinite(measuredLineCount)) {
+    return measuredLineCount;
+  }
+
+  const indentCharacters = options.continuation
+    ? 0
+    : Math.ceil(
+        (Number(textMetrics.paragraphIndentRatio) || 1.35) /
+          PRINT_AVERAGE_CHAR_WIDTH_RATIO
+      );
+  const words = normalized.split(/\s+/).filter(Boolean);
+  let lineCount = 1;
+  let lineLimit = Math.max(8, textMetrics.charsPerLine - indentCharacters);
+  let currentLineLength = 0;
+
+  words.forEach((word) => {
+    const wordLength = word.length;
+
+    if (currentLineLength === 0) {
+      currentLineLength = wordLength;
+      return;
+    }
+
+    if (currentLineLength + 1 + wordLength <= lineLimit) {
+      currentLineLength += 1 + wordLength;
+      return;
+    }
+
+    lineCount += 1;
+    lineLimit = textMetrics.charsPerLine;
+    currentLineLength = wordLength;
+  });
+
+  return Math.max(1, lineCount);
+}
+
+function getWordCountForLineBudget(
+  words,
+  maxLines,
+  textMetrics,
+  options = {}
+) {
+  if (maxLines <= 0 || !words.length) return 0;
+
+  let low = 1;
+  let high = words.length;
+  let best = 0;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const candidate = words.slice(0, mid).join(" ");
+    const lineCount = estimatePreviewTextLines(candidate, textMetrics, options);
+
+    if (lineCount <= maxLines) {
+      best = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return best;
+}
+
+function splitTextIntoPreviewPages(
+  text = "",
+  metricsOrWordsPerPage = 220,
+  options = {}
+) {
+  const textMetrics = normalizeTextPageMetrics(metricsOrWordsPerPage);
+  const paragraphs = getPlainParagraphs(text);
+  const firstPageReserveLines = Math.max(
+    0,
+    Number(options.firstPageReserveLines) || 0
+  );
+  const pages = [];
+  let currentParagraphs = [];
+  let currentLines = firstPageReserveLines;
+
+  const flushPage = () => {
+    if (!currentParagraphs.length) return;
+    pages.push({ paragraphs: currentParagraphs });
+    currentParagraphs = [];
+    currentLines = 0;
+  };
+
+  paragraphs.forEach((paragraph) => {
+    let words = paragraph.split(/\s+/).filter(Boolean);
+    let isContinuation = false;
+
+    while (words.length) {
+      let remainingLines = textMetrics.linesPerPage - currentLines;
+
+      if (remainingLines <= 0) {
+        if (currentParagraphs.length) {
+          flushPage();
+          continue;
+        }
+
+        remainingLines = textMetrics.linesPerPage;
+      }
+
+      const chunkSize =
+        words.length <= 1
+          ? 1
+          : getWordCountForLineBudget(words, remainingLines, textMetrics, {
+              continuation: isContinuation,
+            });
+      const safeChunkSize = Math.max(1, chunkSize);
+      const chunk = words.slice(0, safeChunkSize).join(" ");
+      currentParagraphs.push({
+        continuation: isContinuation,
+        text: chunk,
+      });
+      currentLines += estimatePreviewTextLines(chunk, textMetrics, {
+        continuation: isContinuation,
+      });
+      words = words.slice(safeChunkSize);
+
+      if (words.length) {
+        isContinuation = true;
+        flushPage();
+      }
+    }
+  });
+
+  flushPage();
+
+  return pages.length ? pages : [{ paragraphs: [""] }];
+}
+
+function getTocEntriesPerPage(trim, fontSize, margins) {
+  const usableHeight = Math.max(4, trim.height - margins.top - margins.bottom);
+  const reservedHeaderHeight = 0.85;
+  const entryHeight = Math.max(0.17, (fontSize / 72) * 1.35);
+
+  return Math.max(
+    12,
+    Math.floor((usableHeight - reservedHeaderHeight) / entryHeight)
+  );
+}
+
+function getTocPageCount(chapters, trim, fontSize, margins) {
+  return Math.max(
+    1,
+    Math.ceil(
+      Math.max(1, chapters.length) / getTocEntriesPerPage(trim, fontSize, margins)
+    )
+  );
+}
+
+function estimateTextPageCount({
+  chapters,
+  metadata,
+  tocPageCount,
+  textMetrics,
+}) {
+  const frontMatterBasePages =
+    1 + (String(metadata.copyrightPage || "").trim() ? 1 : 0) + tocPageCount;
+  const rectoBlankPage =
+    chapters.length && (frontMatterBasePages + 1) % 2 === 0 ? 1 : 0;
+  const frontMatterPages = frontMatterBasePages + rectoBlankPage;
+  const firstPageReserveLines = getChapterOpeningReserveLines(textMetrics);
+  const chapterPages = chapters.reduce(
+    (sum, chapter) =>
+      sum +
+      splitTextIntoPreviewPages(chapter.content, textMetrics, {
+        firstPageReserveLines,
+      }).length,
+    0
+  );
+
+  return frontMatterPages + chapterPages;
+}
+
+function estimateBookLayout({ chapters, metadata, trim, fontSize, settings }) {
+  const lineSpacing = normalizeLineSpacing(settings.lineSpacing);
+  const paragraphIndent = normalizeParagraphIndent(settings.paragraphIndent);
+  let pageCount = 120;
+  let margins = getKdpBookMargins(trim, pageCount, settings);
+  let textMetrics = getTextPageMetrics(
+    trim,
+    fontSize,
+    margins,
+    lineSpacing,
+    paragraphIndent
+  );
+  let tocPageCount = getTocPageCount(chapters, trim, fontSize, margins);
+  let textPageCount = estimateTextPageCount({
+    chapters,
+    metadata,
+    tocPageCount,
+    textMetrics,
+  });
+
+  for (let index = 0; index < 5; index += 1) {
+    pageCount = roundToEvenPageCount(textPageCount);
+    margins = getKdpBookMargins(trim, pageCount, settings);
+    textMetrics = getTextPageMetrics(
+      trim,
+      fontSize,
+      margins,
+      lineSpacing,
+      paragraphIndent
+    );
+    tocPageCount = getTocPageCount(chapters, trim, fontSize, margins);
+    textPageCount = estimateTextPageCount({
+      chapters,
+      metadata,
+      tocPageCount,
+      textMetrics,
+    });
+  }
+
+  return {
+    margins,
+    pageCount: roundToEvenPageCount(textPageCount),
+    textPageCount,
+    textMetrics,
+    tocPageCount,
+    tocEntriesPerPage: getTocEntriesPerPage(trim, fontSize, margins),
+    wordsPerPage: textMetrics.wordsPerPage,
+  };
+}
+
+function getPreviewPagePadding(page, margins, pageCanvas, hasBleed = false) {
+  if (!page?.interiorPageNumber) return undefined;
+
+  const isRightHandPage = page.interiorPageNumber % 2 === 1;
+  const bleedEdge = hasBleed ? 0.125 : 0;
+  const left = isRightHandPage ? margins.inside : margins.outside + bleedEdge;
+  const right = isRightHandPage ? margins.outside + bleedEdge : margins.inside;
+  const toPageWidthUnit = (inches) =>
+    `${((inches / pageCanvas.width) * 100).toFixed(4)}cqw`;
+
+  return {
+    paddingTop: toPageWidthUnit(margins.top + bleedEdge),
+    paddingRight: toPageWidthUnit(right),
+    paddingBottom: toPageWidthUnit(margins.bottom + bleedEdge),
+    paddingLeft: toPageWidthUnit(left),
+  };
+}
+
+function buildPreviewPages({
+  book,
+  chapters,
+  metadata,
+  tocEntriesPerPage,
+  tocPageCount,
+  textMetrics,
+  finalInteriorPageCount,
+}) {
+  const pages = [
+    { id: "front-cover-blank", kind: "spread-blank", label: "Front Cover" },
+    { id: "front-cover", kind: "cover", label: "Front Cover" },
+  ];
+  let interiorPageNumber = 0;
+  const addInteriorPage = (page) => {
+    interiorPageNumber += 1;
+    const previewPage = { ...page, interiorPageNumber };
+    pages.push(previewPage);
+
+    return previewPage;
+  };
+
+  addInteriorPage({
+    id: "title",
+    kind: "title",
+    label: "Title Page",
+    title: book?.title || "Untitled",
+    subtitle: book?.subtitle || "",
+    author: book?.author || "",
+  });
+
+  if (String(metadata.copyrightPage || "").trim()) {
+    addInteriorPage({
+      id: "copyright",
+      kind: "front-matter",
+      label: "Copyright",
+      title: "Copyright",
+      paragraphs: getPlainParagraphs(metadata.copyrightPage),
+    });
+  }
+
+  const tocPages = [];
+
+  for (let tocIndex = 0; tocIndex < tocPageCount; tocIndex += 1) {
+    const tocPage = {
+      id: `toc-${tocIndex + 1}`,
+      kind: "toc",
+      label: tocIndex === 0 ? "Contents" : `Contents, p. ${tocIndex + 1}`,
+      title: "Contents",
+      entries: [],
+    };
+    tocPages.push(addInteriorPage(tocPage));
+  }
+
+  if (chapters.length && (interiorPageNumber + 1) % 2 === 0) {
+    addInteriorPage({
+      id: "blank-before-chapter-1",
+      kind: "blank",
+      label: "Blank verso",
+      paragraphs: [],
+    });
+  }
+
+  const tocEntries = [];
+  const firstPageReserveLines = getChapterOpeningReserveLines(textMetrics);
+
+  chapters.forEach((chapter, chapterIndex) => {
+    splitTextIntoPreviewPages(chapter.content, textMetrics, {
+      firstPageReserveLines,
+    }).forEach((pageContent, pageIndex) => {
+        const previewPage = {
+          id: `chapter-${chapterIndex}-${pageIndex}`,
+          kind: "chapter",
+          label: `${chapter.title || `Chapter ${chapterIndex + 1}`}${
+            pageIndex > 0 ? `, p. ${pageIndex + 1}` : ""
+          }`,
+          chapterLabel: `Chapter ${chapterIndex + 1}`,
+          title:
+            pageIndex === 0 ? chapter.title || `Chapter ${chapterIndex + 1}` : "",
+          paragraphs: pageContent.paragraphs,
+        };
+
+        const addedPreviewPage = addInteriorPage(previewPage);
+
+        if (pageIndex === 0) {
+          tocEntries.push({
+            chapterLabel: previewPage.chapterLabel,
+            title: previewPage.title,
+            pageNumber: addedPreviewPage.interiorPageNumber,
+          });
+        }
+      });
+  });
+
+  tocPages.forEach((tocPage, tocIndex) => {
+    tocPage.entries = tocEntries.slice(
+      tocIndex * tocEntriesPerPage,
+      (tocIndex + 1) * tocEntriesPerPage
+    );
+  });
+
+  while (interiorPageNumber < finalInteriorPageCount) {
+    addInteriorPage({
+      id: `blank-${interiorPageNumber + 1}`,
+      kind: "blank",
+      label: "Blank Page",
+      paragraphs: [],
+    });
+  }
+
+  pages.push(
+    {
+      id: "back-cover",
+      kind: "back-cover",
+      label: "Back Cover",
+      paragraphs: getPlainParagraphs(metadata.backCoverBlurb),
+    },
+    { id: "back-cover-blank", kind: "spread-blank", label: "Back Cover" }
+  );
+
+  return {
+    interiorPageCount: interiorPageNumber,
+    pages,
+  };
+}
+
 function safeFileName(value = "book") {
   return String(value || "book").replace(/[^a-zA-Z0-9-_]+/g, "_");
 }
@@ -169,6 +852,14 @@ Audience: ${book?.audience || ""}
 KDP format: ${settings.format}
 Trim size: ${settings.trimSize}
 Paper type: ${settings.paperType}
+Interior bleed: ${settings.interiorBleed}
+Font size: ${settings.fontSize}
+Margins: top ${settings.marginTop || "auto"}, bottom ${
+    settings.marginBottom || "auto"
+  }, inside ${settings.marginInside || "auto"}, outside ${
+    settings.marginOutside || "auto"
+  }
+Line spacing: ${settings.lineSpacing}
 
 Current KDP assets:
 Table of contents: ${metadata.tableOfContents}
@@ -338,7 +1029,7 @@ function StudioTextarea({ label, value, onChange, action, rows = 8, hint }) {
                 style={{
                   backgroundColor: "transparent",
                   color: "#374151",
-                  fontFamily: "Georgia, 'Times New Roman', serif",
+                  fontFamily: PREVIEW_SERIF_FONT_FAMILY,
                   fontSize: 14,
                   lineHeight: 1.8,
                 }}
@@ -499,6 +1190,7 @@ function KDPStudioPage() {
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const [saveError, setSaveError] = useState("");
   const [manualSaveState, setManualSaveState] = useState("idle");
+  const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [hasHydratedKdp, setHasHydratedKdp] = useState(false);
   const lastPersistedPayloadRef = useRef("");
   const saveRequestIdRef = useRef(0);
@@ -571,19 +1263,100 @@ function KDPStudioPage() {
     () => chapters.reduce((sum, chapter) => sum + countWords(chapter.content), 0),
     [chapters]
   );
-  const estimatedPageCount = Math.max(24, Math.ceil(wordCount / 280) + 8);
-  const pageCount =
-    Number(settings.pageCountOverride) > 0
-      ? Number(settings.pageCountOverride)
-      : estimatedPageCount;
   const trim = TRIM_SIZES.find((item) => item.id === settings.trimSize) || TRIM_SIZES[3];
   const paper =
     PAPER_TYPES.find((item) => item.id === settings.paperType) || PAPER_TYPES[0];
+  const fontSize = normalizeFontSize(settings.fontSize);
+  const lineSpacing = normalizeLineSpacing(settings.lineSpacing);
+  const paragraphIndent = normalizeParagraphIndent(settings.paragraphIndent);
+  const hasInteriorBleed = usesInteriorBleed(settings);
+  const pageCanvas = {
+    width: trim.width + (hasInteriorBleed ? 0.125 : 0),
+    height: trim.height + (hasInteriorBleed ? 0.25 : 0),
+  };
+  const bookLayout = useMemo(
+    () => estimateBookLayout({ chapters, metadata, trim, fontSize, settings }),
+    [chapters, fontSize, metadata, settings, trim]
+  );
+  const {
+    margins: bookMargins,
+    textMetrics,
+    tocEntriesPerPage,
+    tocPageCount,
+    wordsPerPage,
+  } = bookLayout;
+  const bodyLineSpacing = textMetrics.effectiveLineSpacing || lineSpacing;
+  const estimatedPageCount = bookLayout.pageCount;
+  const requestedPageCount = Number(settings.pageCountOverride);
+  const pageCount =
+    requestedPageCount > estimatedPageCount
+      ? roundToEvenPageCount(requestedPageCount)
+      : estimatedPageCount;
   const spineWidth = pageCount * paper.spinePerPage;
   const coverWidth = trim.width * 2 + spineWidth + 0.25;
   const coverHeight = trim.height + 0.25;
-  const spinePercent = Math.min(17, Math.max(3, (spineWidth / coverWidth) * 100));
   const coverImageUrl = book?.coverImage ? resolveImageUrl(book.coverImage) : "";
+  const coverMockupStyle = {
+    aspectRatio: `${coverWidth} / ${coverHeight}`,
+    gridTemplateColumns: `${trim.width}fr ${Math.max(spineWidth, 0.015)}fr ${trim.width}fr`,
+  };
+  const previewPageWidth = Math.min(460, Math.round(pageCanvas.width * 72));
+  const previewTextFontSize = `clamp(${Math.max(7.5, fontSize * 0.66).toFixed(
+    2
+  )}px, ${((fontSize / Math.max(1, pageCanvas.width * 72)) * 100).toFixed(
+    4
+  )}cqw, ${Math.max(18, fontSize).toFixed(2)}px)`;
+  const pagePreviewStyle = {
+    maxWidth: `${previewPageWidth}px`,
+    width: "100%",
+    aspectRatio: `${pageCanvas.width} / ${pageCanvas.height}`,
+    backgroundColor: paper.previewPaper,
+    color: paper.previewInk,
+    containerType: "inline-size",
+  };
+  const { pages: previewPages } = useMemo(
+    () =>
+      buildPreviewPages({
+        book,
+        chapters,
+        metadata,
+        tocEntriesPerPage,
+        tocPageCount,
+        textMetrics,
+        finalInteriorPageCount: pageCount,
+      }),
+    [
+      book,
+      chapters,
+      metadata,
+      pageCount,
+      tocEntriesPerPage,
+      tocPageCount,
+      textMetrics,
+    ]
+  );
+  const lastPreviewSpreadIndex = Math.max(
+    0,
+    previewPages.length <= 2
+      ? 0
+      : (previewPages.length - 1) % 2 === 0
+        ? previewPages.length - 1
+        : previewPages.length - 2
+  );
+  const normalizedPreviewPageIndex =
+    previewPageIndex <= 1
+      ? 0
+      : previewPageIndex % 2 === 0
+        ? previewPageIndex
+        : previewPageIndex - 1;
+  const spreadStartIndex = Math.min(
+    normalizedPreviewPageIndex,
+    lastPreviewSpreadIndex
+  );
+  const currentPreviewPage = previewPages[spreadStartIndex] || previewPages[0];
+  const spreadPages = previewPages
+    .slice(spreadStartIndex, spreadStartIndex + 2)
+    .filter(Boolean);
 
   const preflightChecks = useMemo(
     () => [
@@ -604,10 +1377,10 @@ function KDPStudioPage() {
       },
       {
         title: "Table of contents",
-        status: metadata.tableOfContents.trim() ? "pass" : "warn",
-        detail: metadata.tableOfContents.trim()
-          ? "TOC draft is ready."
-          : "Generate a table of contents for front matter review.",
+        status: chapters.length ? "pass" : "warn",
+        detail: chapters.length
+          ? "Dynamic TOC page numbers are generated from the full preview."
+          : "Add chapters before generating table of contents page numbers.",
       },
       {
         title: "Print spine",
@@ -625,7 +1398,7 @@ function KDPStudioPage() {
       {
         title: "Interior PDF",
         status: chapters.length && wordCount > 1000 ? "pass" : "warn",
-        detail: `${chapters.length} chapters, ${wordCount.toLocaleString()} estimated words.`,
+        detail: `${chapters.length} chapters, ${wordCount.toLocaleString()} words, ${fontSize} pt at ${trim.label}.`,
       },
       {
         title: "Wrap cover dimensions",
@@ -640,10 +1413,11 @@ function KDPStudioPage() {
       chapters.length,
       coverHeight,
       coverWidth,
+      fontSize,
       metadata.description,
       metadata.keywords,
-      metadata.tableOfContents,
       pageCount,
+      trim.label,
       wordCount,
     ]
   );
@@ -739,10 +1513,26 @@ function KDPStudioPage() {
     return () => window.clearTimeout(timeoutId);
   }, [hasHydratedKdp, isLoading, metadata, persistKdp, settings]);
 
+  useEffect(() => {
+    setPreviewPageIndex((current) =>
+      Math.min(current, Math.max(0, previewPages.length - 1))
+    );
+  }, [previewPages.length]);
+
   const handleManualKdpSave = async () => {
     markManualSaveState("saving");
     const wasSaved = await persistKdp(metadata, settings, { showToast: true });
     markManualSaveState(wasSaved ? "saved" : "error");
+  };
+
+  const goToPreviewPage = (nextIndex) => {
+    const spreadIndex = nextIndex <= 1 ? 0 : nextIndex % 2 === 0 ? nextIndex : nextIndex - 1;
+    const clampedIndex = Math.min(
+      Math.max(0, spreadIndex),
+      lastPreviewSpreadIndex
+    );
+
+    setPreviewPageIndex(clampedIndex);
   };
 
   const runPublishingTool = async (action, target) => {
@@ -790,6 +1580,14 @@ function KDPStudioPage() {
     const loadingToast = toast.loading(`Preparing ${extension.toUpperCase()}...`);
 
     try {
+      const wasSaved = await persistKdp(metadata, settings);
+
+      if (!wasSaved) {
+        toast.dismiss(loadingToast);
+        toast.error("Save current KDP settings before exporting.");
+        return;
+      }
+
       const { data } = await axiosInstance.get(
         `${endpoint}/${bookId}/${extension}`,
         { responseType: "blob" }
@@ -1148,6 +1946,96 @@ function KDPStudioPage() {
                   ))}
                 </StudioSelect>
 
+                <StudioSelect
+                  label="Body font size"
+                  value={String(settings.fontSize || "12")}
+                  onChange={(e) => updateSetting("fontSize", e.target.value)}
+                >
+                  {FONT_SIZE_OPTIONS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </StudioSelect>
+
+                <StudioSelect
+                  label="Interior bleed"
+                  value={settings.interiorBleed || "none"}
+                  onChange={(e) => updateSetting("interiorBleed", e.target.value)}
+                >
+                  <option value="none">No bleed</option>
+                  <option value="bleed">Bleed interior PDF</option>
+                </StudioSelect>
+
+                <div>
+                  <StudioLabel>Margins (inches)</StudioLabel>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      ["marginTop", "Top", bookMargins.top],
+                      ["marginBottom", "Bottom", bookMargins.bottom],
+                      ["marginInside", "Inside", bookMargins.inside],
+                      ["marginOutside", "Outside", bookMargins.outside],
+                    ].map(([key, label, value]) => (
+                      <label key={key} className="block">
+                        <span className="mb-1 block text-[10px] font-medium text-gray-500">
+                          {label}
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.05"
+                          value={settings[key] || ""}
+                          onChange={(e) => updateSetting(key, e.target.value)}
+                          placeholder={Number(value).toFixed(2)}
+                          className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 placeholder-gray-400 transition shadow-sm"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-4 text-gray-500">
+                    Blank values use KDP-safe defaults. Below-minimum values are
+                    clamped during preview and export.
+                  </p>
+                </div>
+
+                <div>
+                  <StudioLabel>Body measurements</StudioLabel>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-medium text-gray-500">
+                        Line spacing
+                      </span>
+                      <input
+                        type="number"
+                        min="1.15"
+                        max="1.8"
+                        step="0.05"
+                        value={settings.lineSpacing || ""}
+                        onChange={(e) => updateSetting("lineSpacing", e.target.value)}
+                        placeholder="1.44"
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 placeholder-gray-400 transition shadow-sm"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[10px] font-medium text-gray-500">
+                        First-line indent
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="2.25"
+                        step="0.05"
+                        value={settings.paragraphIndent || ""}
+                        onChange={(e) =>
+                          updateSetting("paragraphIndent", e.target.value)
+                        }
+                        placeholder="1.35"
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 placeholder-gray-400 transition shadow-sm"
+                      />
+                    </label>
+                  </div>
+                </div>
+
                 <label className="block">
                   <StudioLabel>Final page count</StudioLabel>
                   <input
@@ -1157,6 +2045,13 @@ function KDPStudioPage() {
                     placeholder={`${estimatedPageCount} (estimated)`}
                     className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 placeholder-gray-400 transition shadow-sm"
                   />
+                  <p className="mt-1.5 text-[11px] leading-4 text-gray-500">
+                    Preview uses {trim.label}, {fontSize} pt justified type,
+                    {bookMargins.inside.toFixed(3)}" inside margins,{" "}
+                    {bodyLineSpacing.toFixed(2)} line spacing, and about {wordsPerPage}{" "}
+                    words per page. Lower overrides are ignored so the count
+                    still matches the full preview.
+                  </p>
                 </label>
               </div>
             </aside>
@@ -1209,7 +2104,11 @@ function KDPStudioPage() {
                       <Metric
                         label="Pages"
                         value={pageCount}
-                        note={settings.pageCountOverride ? "Override" : "Estimated"}
+                        note={
+                          requestedPageCount > estimatedPageCount
+                            ? "Manual override"
+                            : "Matches preview"
+                        }
                         highlight
                       />
                       <Metric
@@ -1318,8 +2217,8 @@ function KDPStudioPage() {
 
                       <div className="rounded-2xl border border-gray-200 bg-gray-900 p-4">
                         <div
-                          className="grid overflow-hidden rounded-xl min-h-72"
-                          style={{ gridTemplateColumns: `1fr ${spinePercent}% 1fr` }}
+                          className="grid w-full overflow-hidden rounded-xl max-h-[32rem]"
+                          style={coverMockupStyle}
                         >
                           {/* Back cover */}
                           <div className="relative bg-gradient-to-br from-slate-900 to-[#0c0f18] p-5 border-r border-white/5">
@@ -1336,7 +2235,7 @@ function KDPStudioPage() {
                           </div>
 
                           {/* Spine */}
-                          <div className="grid place-items-center bg-[#0c0f18] border-r border-white/5">
+                          <div className="grid min-w-[2px] place-items-center bg-[#0c0f18] border-r border-white/5">
                             <span className="[writing-mode:vertical-rl] rotate-180 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">
                               {pageCount >= 80 ? book.title : "—"}
                             </span>
@@ -1348,7 +2247,7 @@ function KDPStudioPage() {
                               <img
                                 src={coverImageUrl}
                                 alt={`${book.title} cover`}
-                                className="absolute inset-0 h-full w-full object-cover"
+                                className="absolute inset-0 h-full w-full object-contain"
                               />
                             ) : (
                               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-700">
@@ -1551,7 +2450,7 @@ function KDPStudioPage() {
                                     style={{
                                       backgroundColor: "transparent",
                                       color: "#374151",
-                                      fontFamily: "Georgia, 'Times New Roman', serif",
+                                      fontFamily: PREVIEW_SERIF_FONT_FAMILY,
                                       fontSize: 14,
                                       lineHeight: 1.8,
                                     }}
@@ -1591,6 +2490,348 @@ function KDPStudioPage() {
                 )}
 
                 {/* ── Preflight ─────────────────────────────────────────── */}
+                {activeTab === "preview" && (
+                  <div className="space-y-5">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">
+                          Full book preview
+                        </p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          {trim.label}, {paper.label.toLowerCase()}, {fontSize} pt justified body type, {hasInteriorBleed ? "bleed" : "no bleed"}. Interior pages: {pageCount}.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <GhostButton onClick={() => exportFile("pdf")} icon={Download}>
+                          Save PDF
+                        </GhostButton>
+                        <GhostButton onClick={() => exportFile("epub")} icon={Download}>
+                          Save EPUB
+                        </GhostButton>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <Metric
+                        label="Interior pages"
+                        value={pageCount}
+                        note={`${pageCount + 2} pages with covers`}
+                        highlight
+                      />
+                      <Metric
+                        label="Margins"
+                        value={`${bookMargins.inside.toFixed(3)}" / ${bookMargins.outside.toFixed(3)}"`}
+                        note={`Inside / outside, min outside ${bookMargins.outsideMinimum.toFixed(3)}"`}
+                      />
+                      <Metric
+                        label="Font"
+                        value={`${fontSize} pt`}
+                        note={`${bodyLineSpacing.toFixed(2)} leading, about ${wordsPerPage} words/page`}
+                      />
+                      <Metric
+                        label="Paper"
+                        value={paper.id === "bw-cream" ? "Cream" : paper.id === "color" ? "Color" : "White"}
+                        note={paper.label}
+                      />
+                    </div>
+
+                    <div className="rounded-2xl border border-gray-200 bg-gray-100 p-5">
+                      <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-4">
+                        <div className="flex w-full items-center justify-between gap-3 text-xs text-gray-500">
+                          <span className="truncate font-medium text-gray-700">
+                            {currentPreviewPage?.label}
+                          </span>
+                          <span className="font-mono">
+                            {previewPageIndex + 1}/{previewPages.length}
+                          </span>
+                        </div>
+
+                        {currentPreviewPage?.kind === "cover-wrap" ? (
+                          <div className="w-full rounded-2xl border border-gray-200 bg-gray-900 p-4 shadow-inner">
+                            <div
+                              className="grid w-full overflow-hidden rounded-xl max-h-[32rem]"
+                              style={coverMockupStyle}
+                            >
+                              <div className="relative bg-gradient-to-br from-slate-900 to-[#0c0f18] p-5 border-r border-white/5">
+                                <p className="text-[9px] uppercase tracking-[0.18em] text-slate-700 mb-4">
+                                  Back cover
+                                </p>
+                                <p className="text-xs text-slate-400 leading-5 line-clamp-8">
+                                  {metadata.backCoverBlurb ||
+                                    "Generate a back-cover blurb to preview this panel."}
+                                </p>
+                                <div className="absolute bottom-4 right-4 grid h-14 w-24 place-items-center rounded-lg border border-white/10 bg-white/5">
+                                  <p className="text-[9px] text-slate-600">
+                                    Barcode
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="grid min-w-[2px] place-items-center bg-[#0c0f18] border-r border-white/5">
+                                <span className="[writing-mode:vertical-rl] rotate-180 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-600">
+                                  {pageCount >= 80 ? book.title : "—"}
+                                </span>
+                              </div>
+
+                              <div className="relative bg-slate-900 overflow-hidden">
+                                {coverImageUrl ? (
+                                  <img
+                                    src={coverImageUrl}
+                                    alt={`${book.title} cover`}
+                                    className="absolute inset-0 h-full w-full object-contain"
+                                  />
+                                ) : (
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-700">
+                                    <ImageIcon className="size-6" />
+                                    <p className="text-[10px]">No cover</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="relative w-full rounded-sm bg-gray-300 p-3 shadow-inner">
+                            <div className="absolute inset-y-3 left-1/2 hidden w-px bg-black/10 md:block" />
+                            <div className="grid w-full grid-cols-2 gap-3">
+                              {spreadPages.map((previewPage) => {
+                                const isSpreadPlaceholder =
+                                  previewPage.kind === "spread-blank";
+                                const isBackCover =
+                                  previewPage.kind === "back-cover";
+                                const pagePadding = getPreviewPagePadding(
+                                  previewPage,
+                                  bookMargins,
+                                  pageCanvas,
+                                  hasInteriorBleed
+                                );
+                                const previewPageStyle = {
+                                  ...pagePreviewStyle,
+                                  ...(isSpreadPlaceholder
+                                    ? {
+                                        backgroundColor: "transparent",
+                                        borderColor: "transparent",
+                                        boxShadow: "none",
+                                      }
+                                    : {}),
+                                  ...(isBackCover
+                                    ? {
+                                        backgroundColor: "#0f172a",
+                                        color: "#cbd5e1",
+                                      }
+                                    : {}),
+                                };
+
+                                return (
+                                  <article
+                                    key={previewPage.id}
+                                    className={`relative w-full min-w-0 justify-self-center overflow-hidden border transition duration-300 ease-out ${
+                                      isSpreadPlaceholder
+                                        ? "border-transparent shadow-none"
+                                        : "border-gray-300 shadow-2xl"
+                                    }`}
+                                    style={previewPageStyle}
+                                  >
+                                  {isSpreadPlaceholder ? null : previewPage.kind === "cover" ? (
+                                    coverImageUrl ? (
+                                      <img
+                                        src={coverImageUrl}
+                                        alt={`${book.title} cover`}
+                                        className="absolute inset-0 h-full w-full object-contain"
+                                      />
+                                    ) : (
+                                      <div className="absolute inset-0 grid place-items-center bg-slate-900 text-slate-500">
+                                        <ImageIcon className="size-8" />
+                                      </div>
+                                    )
+                                  ) : previewPage.kind === "back-cover" ? (
+                                    <div
+                                      className="flex h-full flex-col justify-between bg-slate-900 p-[9%] font-serif text-slate-300"
+                                      style={{
+                                        fontFamily: PREVIEW_SERIF_FONT_FAMILY,
+                                        fontSize: previewTextFontSize,
+                                      }}
+                                    >
+                                      <div>
+                                        <p className="text-[0.62em] font-bold uppercase tracking-[0.16em] opacity-50">
+                                          Back Cover
+                                        </p>
+                                        <div className="mt-6 space-y-[0.35em] text-[0.82em] leading-[1.55] text-justify">
+                                          {(previewPage.paragraphs?.length
+                                            ? previewPage.paragraphs
+                                            : [
+                                                "Back-cover copy will appear here after it is written.",
+                                              ]
+                                          ).map((paragraph, paragraphIndex) => (
+                                            <p
+                                              key={`${previewPage.id}-${paragraphIndex}`}
+                                              className="m-0"
+                                            >
+                                              {paragraph}
+                                            </p>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <div className="ml-auto grid h-14 w-24 place-items-center border border-current/25 text-[0.62em] opacity-50">
+                                        Barcode
+                                      </div>
+                                    </div>
+                                  ) : previewPage.kind === "title" ? (
+                                    <div
+                                      className="flex h-full flex-col items-center justify-center font-serif text-center"
+                                      style={{
+                                        ...pagePadding,
+                                        fontFamily: PREVIEW_SERIF_FONT_FAMILY,
+                                        fontSize: previewTextFontSize,
+                                      }}
+                                    >
+                                      <h2 className="text-[1.45em] font-bold leading-tight">
+                                        {previewPage.title}
+                                      </h2>
+                                      {previewPage.subtitle && (
+                                        <p className="mt-4 text-[0.9em] leading-snug opacity-70">
+                                          {previewPage.subtitle}
+                                        </p>
+                                      )}
+                                      {previewPage.author && (
+                                        <p className="mt-10 text-[0.78em] uppercase tracking-[0.14em] opacity-65">
+                                          by {previewPage.author}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ) : previewPage.kind === "toc" ? (
+                                    <div
+                                      className="relative h-full font-serif"
+                                      style={{
+                                        ...pagePadding,
+                                        fontFamily: PREVIEW_SERIF_FONT_FAMILY,
+                                        fontSize: previewTextFontSize,
+                                      }}
+                                    >
+                                      <h3 className="mb-[1.25em] text-center text-[1.25em] font-bold leading-tight">
+                                        Contents
+                                      </h3>
+                                      <div className="space-y-[0.46em] text-[0.86em] leading-tight">
+                                        {previewPage.entries.map((entry) => (
+                                          <div
+                                            key={`${entry.chapterLabel}-${entry.pageNumber}`}
+                                            className="grid grid-cols-[auto_1fr_auto] items-end gap-2"
+                                          >
+                                            <span className="whitespace-nowrap text-[0.78em] uppercase tracking-[0.08em] opacity-55">
+                                              {entry.chapterLabel}
+                                            </span>
+                                            <span className="overflow-hidden whitespace-nowrap font-medium">
+                                              {entry.title}
+                                            </span>
+                                            <span className="font-mono text-[0.9em]">
+                                              {entry.pageNumber}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <span className="absolute bottom-[3.5%] left-1/2 -translate-x-1/2 font-mono text-[0.95em] font-medium opacity-80">
+                                        {previewPage.interiorPageNumber}
+                                      </span>
+                                    </div>
+                                  ) : previewPage.kind === "blank" ? (
+                                    <div className="h-full" style={pagePadding} />
+                                  ) : (
+                                    <div
+                                      className="relative h-full font-serif"
+                                      style={{
+                                        ...pagePadding,
+                                        fontFamily: PREVIEW_SERIF_FONT_FAMILY,
+                                        fontSize: previewTextFontSize,
+                                      }}
+                                    >
+                                      {previewPage.chapterLabel && previewPage.title && (
+                                        <div className="mb-[1.25em] text-center">
+                                          <p className="mb-[0.55em] text-[0.78em] font-semibold uppercase tracking-[0.16em] opacity-55">
+                                            {previewPage.chapterLabel}
+                                          </p>
+                                          <h3 className="text-[1.25em] font-bold leading-tight">
+                                            {previewPage.title}
+                                          </h3>
+                                        </div>
+                                      )}
+                                      <div
+                                        className="text-[1em]"
+                                        style={{ lineHeight: bodyLineSpacing }}
+                                      >
+                                        {(previewPage.paragraphs?.length
+                                          ? previewPage.paragraphs
+                                          : [" "]
+                                        ).map((paragraph, paragraphIndex) => {
+                                          const paragraphText =
+                                            typeof paragraph === "object"
+                                              ? paragraph.text
+                                              : paragraph;
+                                          const isContinuation =
+                                            typeof paragraph === "object" &&
+                                            paragraph.continuation;
+
+                                          return (
+                                            <p
+                                              key={`${previewPage.id}-${paragraphIndex}`}
+                                              className="m-0 text-justify"
+                                              style={{
+                                                textIndent:
+                                                  previewPage.kind === "chapter" &&
+                                                  !isContinuation
+                                                    ? `${paragraphIndent}em`
+                                                    : "0",
+                                              }}
+                                            >
+                                              {paragraphText}
+                                            </p>
+                                          );
+                                        })}
+                                      </div>
+                                      {previewPage.interiorPageNumber && (
+                                        <span className="absolute bottom-[3.5%] left-1/2 -translate-x-1/2 font-mono text-[0.95em] font-medium opacity-80">
+                                          {previewPage.interiorPageNumber}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex w-full items-center justify-center gap-2">
+                          <GhostButton
+                            onClick={() => goToPreviewPage(0)}
+                            disabled={spreadStartIndex === 0}
+                          >
+                            First spread
+                          </GhostButton>
+                          <GhostButton
+                            onClick={() => goToPreviewPage(spreadStartIndex - 2)}
+                            disabled={spreadStartIndex === 0}
+                          >
+                            Previous spread
+                          </GhostButton>
+                          <GhostButton
+                            onClick={() => goToPreviewPage(spreadStartIndex + 2)}
+                            disabled={spreadStartIndex >= lastPreviewSpreadIndex}
+                          >
+                            Next spread
+                          </GhostButton>
+                          <GhostButton
+                            onClick={() => goToPreviewPage(lastPreviewSpreadIndex)}
+                            disabled={spreadStartIndex >= lastPreviewSpreadIndex}
+                          >
+                            Last spread
+                          </GhostButton>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {activeTab === "preflight" && (
                   <div className="space-y-6">
 

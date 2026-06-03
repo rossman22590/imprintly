@@ -859,9 +859,21 @@ function EditBookPage() {
   const handleEditChapter = (name, value) => {
     if (isGenerating || isGeneratingChapterImage) return;
 
-    const updatedChapters = [...book.chapters];
-    updatedChapters[selectedChapterIndex][name] = value;
-    setBook((prev) => ({ ...prev, chapters: updatedChapters }));
+    setBook((prev) => {
+      const updatedChapters = [...prev.chapters];
+      const currentChapter = updatedChapters[selectedChapterIndex] || {};
+      const updates =
+        name && typeof name === "object" && !Array.isArray(name)
+          ? name
+          : { [name]: value };
+
+      updatedChapters[selectedChapterIndex] = {
+        ...currentChapter,
+        ...updates,
+      };
+
+      return { ...prev, chapters: updatedChapters };
+    });
   };
 
   const handleDeleteChapter = (index) => {
@@ -885,7 +897,11 @@ function EditBookPage() {
     setSelectedChapterIndex(newIndex);
   };
 
-  const saveBookSnapshot = useCallback(async (bookToSave, showToast = true) => {
+  const saveBookSnapshot = useCallback(async (
+    bookToSave,
+    showToast = true,
+    { syncLocalState = true } = {}
+  ) => {
     setIsSaving(true);
 
     try {
@@ -895,8 +911,10 @@ function EditBookPage() {
       );
       const savedBook = normalizeBook(data?.book) || bookToSave;
 
-      skipNextAutosaveRef.current = true;
-      setBook(savedBook);
+      if (syncLocalState) {
+        skipNextAutosaveRef.current = true;
+        setBook(savedBook);
+      }
 
       if (showToast) {
         toast.success("Changes saved successfully!");
@@ -915,8 +933,12 @@ function EditBookPage() {
     }
   }, [bookId]);
 
-  const handleSaveChanges = useCallback(async (bookToSave = book, showToast = true) => {
-    const savedBook = await saveBookSnapshot(bookToSave, showToast);
+  const handleSaveChanges = useCallback(async (
+    bookToSave = book,
+    showToast = true,
+    options
+  ) => {
+    const savedBook = await saveBookSnapshot(bookToSave, showToast, options);
 
     return Boolean(savedBook);
   }, [book, saveBookSnapshot]);
@@ -1424,7 +1446,7 @@ function EditBookPage() {
 
     clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => {
-      handleSaveChanges(book, false);
+      handleSaveChanges(book, false, { syncLocalState: false });
     }, 1500);
 
     return () => clearTimeout(autosaveTimerRef.current);

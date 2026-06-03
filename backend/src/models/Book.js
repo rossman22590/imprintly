@@ -183,6 +183,46 @@ const kdpSettingsSchema = new mongoose.Schema(
       default: "",
       maxLength: [20, "Page count override cannot exceed 20 characters"],
     },
+    fontSize: {
+      type: String,
+      default: "12",
+      maxLength: [10, "Font size cannot exceed 10 characters"],
+    },
+    interiorBleed: {
+      type: String,
+      default: "none",
+      maxLength: [20, "Interior bleed setting cannot exceed 20 characters"],
+    },
+    marginTop: {
+      type: String,
+      default: "",
+      maxLength: [10, "Top margin cannot exceed 10 characters"],
+    },
+    marginBottom: {
+      type: String,
+      default: "",
+      maxLength: [10, "Bottom margin cannot exceed 10 characters"],
+    },
+    marginInside: {
+      type: String,
+      default: "",
+      maxLength: [10, "Inside margin cannot exceed 10 characters"],
+    },
+    marginOutside: {
+      type: String,
+      default: "",
+      maxLength: [10, "Outside margin cannot exceed 10 characters"],
+    },
+    lineSpacing: {
+      type: String,
+      default: "1.44",
+      maxLength: [10, "Line spacing cannot exceed 10 characters"],
+    },
+    paragraphIndent: {
+      type: String,
+      default: "1.35",
+      maxLength: [10, "Paragraph indent cannot exceed 10 characters"],
+    },
     coverImageSize: {
       type: String,
       default: "2K",

@@ -21,10 +21,10 @@ const CHILDREN_IMAGE_PAGE_TEXT = {
 
 const PDF_CONFIG = {
   fonts: {
-    heading: "Helvetica-Bold",
-    body: "Helvetica",
-    bodyBold: "Helvetica-Bold",
-    bodyItalic: "Helvetica-Oblique",
+    heading: "Times-Bold",
+    body: "Times-Roman",
+    bodyBold: "Times-Bold",
+    bodyItalic: "Times-Italic",
     code: "Courier",
   },
   sizes: {
@@ -59,17 +59,1042 @@ const PDF_CONFIG = {
     right: 72,
   },
   spacing: {
-    paragraphGap: 12,
+    paragraphGap: 0,
     chapterGap: 40,
     headingGap: 20,
     listItemGap: 8,
-    lineHeight: 1.5,
+    lineHeight: 1.42,
+  },
+  typography: {
+    firstLineIndentRatio: 1.35,
+    bodyLineGapRatio: 0.18,
+    paragraphAfter: 0.08,
   },
   list: {
     bulletIndent: 20, // Distance from left margin to bullet
     textIndent: 35, // Distance from left margin to text (bullet + spacing)
   },
 };
+
+const KDP_TRIM_SIZES = {
+  "5x8": [5 * 72, 8 * 72],
+  "5.25x8": [5.25 * 72, 8 * 72],
+  "5.5x8.5": [5.5 * 72, 8.5 * 72],
+  "6x9": [6 * 72, 9 * 72],
+  "7x10": [7 * 72, 10 * 72],
+  "8.5x11": [8.5 * 72, 11 * 72],
+};
+
+const KDP_GUTTER_RULES = [
+  { maxPages: 150, gutter: 0.375 },
+  { maxPages: 300, gutter: 0.5 },
+  { maxPages: 500, gutter: 0.625 },
+  { maxPages: 700, gutter: 0.75 },
+  { maxPages: 828, gutter: 0.875 },
+];
+
+const PRINT_AVERAGE_CHAR_WIDTH_RATIO = 0.45;
+const PRINT_PAGE_LINE_SAFETY = 0;
+const MAX_KDP_FONT_SIZE = 32;
+
+function normalizeKdpFontSize(value) {
+  const size = Number.parseFloat(value);
+
+  if (!Number.isFinite(size)) return 12;
+
+  return Math.min(MAX_KDP_FONT_SIZE, Math.max(9, size));
+}
+
+function normalizeKdpMeasurement(value, fallback, min, max = 2) {
+  const size = Number.parseFloat(value);
+
+  if (!Number.isFinite(size)) return fallback;
+
+  return Math.min(max, Math.max(min, size));
+}
+
+function normalizeKdpLineSpacing(value) {
+  return normalizeKdpMeasurement(value, 1.44, 1.15, 1.8);
+}
+
+function normalizeKdpParagraphIndent(value) {
+  return normalizeKdpMeasurement(value, 1.35, 0, 2.25);
+}
+
+function usesKdpInteriorBleed(settings = {}) {
+  return settings.interiorBleed === "bleed";
+}
+
+function roundToEvenPageCount(value) {
+  const pageCount = Math.max(24, Math.ceil(value));
+
+  return pageCount % 2 === 0 ? pageCount : pageCount + 1;
+}
+
+function getKdpPageSize(book = {}) {
+  const trimPageSize = getKdpTrimPageSize(book);
+  const hasBleed = usesKdpInteriorBleed(book?.kdp?.settings || {});
+
+  if (!hasBleed) return trimPageSize;
+
+  return [trimPageSize[0] + 0.125 * 72, trimPageSize[1] + 0.25 * 72];
+}
+
+function getKdpTrimPageSize(book = {}) {
+  const trimSize = book?.kdp?.settings?.trimSize || "6x9";
+
+  return KDP_TRIM_SIZES[trimSize] || KDP_TRIM_SIZES["6x9"];
+}
+
+function getKdpGutterMinimum(pageCount = 24) {
+  const normalizedPageCount = Math.max(24, Number(pageCount) || 24);
+
+  return (
+    KDP_GUTTER_RULES.find((rule) => normalizedPageCount <= rule.maxPages)
+      ?.gutter || KDP_GUTTER_RULES[KDP_GUTTER_RULES.length - 1].gutter
+  );
+}
+
+function getKdpMarginSpec(
+  pageSize = KDP_TRIM_SIZES["6x9"],
+  pageCount = 24,
+  settings = {}
+) {
+  const [width, height] = pageSize;
+  const trimWidth = width / 72;
+  const trimHeight = height / 72;
+  const compactTrim = trimWidth <= 5.5 || trimHeight <= 8;
+  const gutterMinimum = getKdpGutterMinimum(pageCount);
+  const outsideMinimum = usesKdpInteriorBleed(settings) ? 0.375 : 0.25;
+  const baseMargins = compactTrim
+    ? { top: 0.68, bottom: 0.78, inside: 0.78, outside: 0.58 }
+    : { top: 0.78, bottom: 0.88, inside: 0.9, outside: 0.68 };
+
+  return {
+    top: normalizeKdpMeasurement(settings.marginTop, baseMargins.top, outsideMinimum),
+    bottom: normalizeKdpMeasurement(
+      settings.marginBottom,
+      baseMargins.bottom,
+      outsideMinimum
+    ),
+    inside: normalizeKdpMeasurement(
+      settings.marginInside,
+      Math.max(gutterMinimum + 0.2, baseMargins.inside),
+      gutterMinimum
+    ),
+    outside: normalizeKdpMeasurement(
+      settings.marginOutside,
+      Math.max(outsideMinimum, baseMargins.outside),
+      outsideMinimum
+    ),
+    gutterMinimum,
+    outsideMinimum,
+  };
+}
+
+function getKdpTextPageMetrics(
+  pageSize,
+  fontSize,
+  marginSpec,
+  lineSpacing = 1.44,
+  paragraphIndentRatio = PDF_CONFIG.typography.firstLineIndentRatio
+) {
+  const trimWidth = pageSize[0] / 72;
+  const trimHeight = pageSize[1] / 72;
+  const textArea = Math.max(
+    8,
+    (trimWidth - marginSpec.inside - marginSpec.outside) *
+      (trimHeight - marginSpec.top - marginSpec.bottom)
+  );
+  const densityAt12pt = 8.95;
+  const fontScale = Math.pow(12 / fontSize, 1.82);
+  const contentWidth = Math.max(2, trimWidth - marginSpec.inside - marginSpec.outside);
+  const contentHeight = Math.max(3, trimHeight - marginSpec.top - marginSpec.bottom);
+  const lineHeightInches = (fontSize * lineSpacing) / 72;
+  const linesPerPage = Math.max(
+    10,
+    Math.round(contentHeight / lineHeightInches) - PRINT_PAGE_LINE_SAFETY
+  );
+  const effectiveLineHeightInches = contentHeight / linesPerPage;
+  const effectiveLineSpacing = (effectiveLineHeightInches * 72) / fontSize;
+  const lineScale = 1.44 / effectiveLineSpacing;
+  const charsPerLine = Math.max(
+    28,
+    Math.floor(
+      (contentWidth * 72) / (fontSize * PRINT_AVERAGE_CHAR_WIDTH_RATIO)
+    )
+  );
+
+  return {
+    charsPerLine,
+    effectiveLineSpacing,
+    font: PDF_CONFIG.fonts.body,
+    fontSize,
+    lineHeightPoints: effectiveLineHeightInches * 72,
+    lineWidthPoints: contentWidth * 72,
+    linesPerPage,
+    paragraphIndentPoints: fontSize * paragraphIndentRatio,
+    paragraphIndentRatio,
+    wordsPerPage: Math.max(
+      70,
+      Math.round(textArea * densityAt12pt * fontScale * lineScale)
+    ),
+  };
+}
+
+function getKdpWordsPerPage(pageSize, fontSize, marginSpec, lineSpacing = 1.44) {
+  return getKdpTextPageMetrics(
+    pageSize,
+    fontSize,
+    marginSpec,
+    lineSpacing
+  ).wordsPerPage;
+}
+
+function getKdpTocEntriesPerPage(pageSize, fontSize, marginSpec) {
+  const trimHeight = pageSize[1] / 72;
+  const usableHeight = Math.max(4, trimHeight - marginSpec.top - marginSpec.bottom);
+  const reservedHeaderHeight = 0.85;
+  const entryHeight = Math.max(0.17, (fontSize / 72) * 1.35);
+
+  return Math.max(
+    12,
+    Math.floor((usableHeight - reservedHeaderHeight) / entryHeight)
+  );
+}
+
+function getKdpTocPageCount(chapters, pageSize, fontSize, marginSpec) {
+  return Math.max(
+    1,
+    Math.ceil(
+      Math.max(1, chapters.length) /
+        getKdpTocEntriesPerPage(pageSize, fontSize, marginSpec)
+    )
+  );
+}
+
+function getPlainWordCount(value = "") {
+  return stripInlineMarkdown(value)
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+function getPrintParagraphs(value = "") {
+  return stripInlineMarkdown(value)
+    .replace(/\r\n/g, "\n")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function normalizeKdpTextPageMetrics(metricsOrWordsPerPage = 220) {
+  if (
+    metricsOrWordsPerPage &&
+    typeof metricsOrWordsPerPage === "object" &&
+    Number.isFinite(metricsOrWordsPerPage.linesPerPage) &&
+    Number.isFinite(metricsOrWordsPerPage.charsPerLine)
+  ) {
+    return metricsOrWordsPerPage;
+  }
+
+  const wordsPerPage = Math.max(70, Number(metricsOrWordsPerPage) || 220);
+
+  return {
+    charsPerLine: 54,
+    linesPerPage: Math.max(10, Math.round(wordsPerPage / 9.2)),
+    wordsPerPage,
+  };
+}
+
+function getKdpChapterOpeningReserveLines(textMetrics) {
+  return Math.max(3, Math.floor(textMetrics.linesPerPage * 0.1));
+}
+
+let kdpMeasureDoc;
+const kdpWordWidthCache = new Map();
+
+function getKdpMeasureDoc() {
+  if (!kdpMeasureDoc) {
+    kdpMeasureDoc = new PDFDocument({ autoFirstPage: false });
+  }
+
+  return kdpMeasureDoc;
+}
+
+function getKdpMeasuredTokenWidth(token, font, fontSize) {
+  const cacheKey = `${font}:${fontSize}:${token}`;
+
+  if (kdpWordWidthCache.has(cacheKey)) {
+    return kdpWordWidthCache.get(cacheKey);
+  }
+
+  const doc = getKdpMeasureDoc();
+  doc.font(font).fontSize(fontSize);
+
+  const width = doc.widthOfString(token);
+
+  if (kdpWordWidthCache.size > 12000) {
+    kdpWordWidthCache.clear();
+  }
+
+  kdpWordWidthCache.set(cacheKey, width);
+
+  return width;
+}
+
+function estimateMeasuredKdpTextLines(normalized, textMetrics, options = {}) {
+  const font = textMetrics.font || PDF_CONFIG.fonts.body;
+  const fontSize = Number(textMetrics.fontSize);
+  const lineWidth = Number(textMetrics.lineWidthPoints);
+
+  if (!Number.isFinite(fontSize) || !Number.isFinite(lineWidth)) return null;
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+
+  if (!words.length) return 0;
+
+  const spaceWidth = getKdpMeasuredTokenWidth(" ", font, fontSize);
+
+  if (!Number.isFinite(spaceWidth)) return null;
+
+  const indentWidth = options.continuation
+    ? 0
+    : Number(textMetrics.paragraphIndentPoints) ||
+      fontSize *
+        (Number(textMetrics.paragraphIndentRatio) ||
+          PDF_CONFIG.typography.firstLineIndentRatio);
+  let lineCount = 1;
+  let lineLimit = Math.max(fontSize * 2, lineWidth - indentWidth);
+  let currentLineWidth = 0;
+
+  for (const word of words) {
+    const wordWidth = getKdpMeasuredTokenWidth(word, font, fontSize);
+
+    if (!Number.isFinite(wordWidth)) return null;
+
+    if (currentLineWidth === 0) {
+      currentLineWidth = wordWidth;
+      continue;
+    }
+
+    if (currentLineWidth + spaceWidth + wordWidth <= lineLimit) {
+      currentLineWidth += spaceWidth + wordWidth;
+      continue;
+    }
+
+    lineCount += 1;
+    lineLimit = lineWidth;
+    currentLineWidth = wordWidth;
+  }
+
+  return Math.max(1, lineCount);
+}
+
+function estimateKdpTextLines(text = "", textMetrics, options = {}) {
+  const normalized = String(text || "").trim();
+
+  if (!normalized) return 0;
+
+  const measuredLineCount = estimateMeasuredKdpTextLines(
+    normalized,
+    textMetrics,
+    options
+  );
+
+  if (Number.isFinite(measuredLineCount)) {
+    return measuredLineCount;
+  }
+
+  const indentCharacters = options.continuation
+    ? 0
+    : Math.ceil(
+        (Number(textMetrics.paragraphIndentRatio) ||
+          PDF_CONFIG.typography.firstLineIndentRatio) /
+          PRINT_AVERAGE_CHAR_WIDTH_RATIO
+      );
+  const words = normalized.split(/\s+/).filter(Boolean);
+  let lineCount = 1;
+  let lineLimit = Math.max(8, textMetrics.charsPerLine - indentCharacters);
+  let currentLineLength = 0;
+
+  words.forEach((word) => {
+    const wordLength = word.length;
+
+    if (currentLineLength === 0) {
+      currentLineLength = wordLength;
+      return;
+    }
+
+    if (currentLineLength + 1 + wordLength <= lineLimit) {
+      currentLineLength += 1 + wordLength;
+      return;
+    }
+
+    lineCount += 1;
+    lineLimit = textMetrics.charsPerLine;
+    currentLineLength = wordLength;
+  });
+
+  return Math.max(1, lineCount);
+}
+
+function getKdpWordCountForLineBudget(
+  words,
+  maxLines,
+  textMetrics,
+  options = {}
+) {
+  if (maxLines <= 0 || !words.length) return 0;
+
+  let low = 1;
+  let high = words.length;
+  let best = 0;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const candidate = words.slice(0, mid).join(" ");
+    const lineCount = estimateKdpTextLines(candidate, textMetrics, options);
+
+    if (lineCount <= maxLines) {
+      best = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return best;
+}
+
+function splitKdpTextIntoPrintPages(
+  text = "",
+  metricsOrWordsPerPage = 220,
+  options = {}
+) {
+  const textMetrics = normalizeKdpTextPageMetrics(metricsOrWordsPerPage);
+  const paragraphs = getPrintParagraphs(text);
+  const firstPageReserveLines = Math.max(
+    0,
+    Number(options.firstPageReserveLines) || 0
+  );
+  const pages = [];
+  let currentParagraphs = [];
+  let currentLines = firstPageReserveLines;
+
+  const flushPage = () => {
+    if (!currentParagraphs.length) return;
+    pages.push({ paragraphs: currentParagraphs });
+    currentParagraphs = [];
+    currentLines = 0;
+  };
+
+  paragraphs.forEach((paragraph) => {
+    let words = paragraph.split(/\s+/).filter(Boolean);
+    let isContinuation = false;
+
+    while (words.length) {
+      let remainingLines = textMetrics.linesPerPage - currentLines;
+
+      if (remainingLines <= 0) {
+        if (currentParagraphs.length) {
+          flushPage();
+          continue;
+        }
+
+        remainingLines = textMetrics.linesPerPage;
+      }
+
+      const chunkSize =
+        words.length <= 1
+          ? 1
+          : getKdpWordCountForLineBudget(words, remainingLines, textMetrics, {
+              continuation: isContinuation,
+            });
+      const safeChunkSize = Math.max(1, chunkSize);
+
+      const chunk = words.slice(0, safeChunkSize).join(" ");
+      currentParagraphs.push({
+        continuation: isContinuation,
+        text: chunk,
+      });
+      currentLines += estimateKdpTextLines(chunk, textMetrics, {
+        continuation: isContinuation,
+      });
+      words = words.slice(safeChunkSize);
+
+      if (words.length) {
+        isContinuation = true;
+        flushPage();
+      }
+    }
+  });
+
+  flushPage();
+
+  return pages.length ? pages : [{ paragraphs: [""] }];
+}
+
+function estimateKdpTextPageCount(text = "", textMetrics = 220, options = {}) {
+  return splitKdpTextIntoPrintPages(text, textMetrics, options).length;
+}
+
+function getKdpFrontMatterPageCount(book = {}, tocPageCount = 1) {
+  const chapters = Array.isArray(book?.chapters) ? book.chapters : [];
+  const hasCopyrightPage = String(book?.kdp?.assets?.copyrightPage || "").trim();
+  const basePageCount = 1 + (hasCopyrightPage ? 1 : 0) + tocPageCount;
+  const rectoBlankPage =
+    chapters.length && (basePageCount + 1) % 2 === 0 ? 1 : 0;
+
+  return basePageCount + rectoBlankPage;
+}
+
+function estimateKdpChapterPageCount(chapter, textMetrics) {
+  const normalizedMetrics = normalizeKdpTextPageMetrics(textMetrics);
+
+  return estimateKdpTextPageCount(getChapterMarkdownForExport(chapter), normalizedMetrics, {
+    firstPageReserveLines: getKdpChapterOpeningReserveLines(normalizedMetrics),
+  });
+}
+
+function estimateKdpInteriorPageCount(book = {}, pageSize, fontSize) {
+  const override = Number.parseInt(book?.kdp?.settings?.pageCountOverride, 10);
+  const chapters = Array.isArray(book?.chapters) ? book.chapters : [];
+  const settings = book?.kdp?.settings || {};
+  const lineSpacing = normalizeKdpLineSpacing(settings.lineSpacing);
+  const paragraphIndent = normalizeKdpParagraphIndent(settings.paragraphIndent);
+  let pageCount = 120;
+
+  for (let index = 0; index < 5; index += 1) {
+    const marginSpec = getKdpMarginSpec(pageSize, pageCount, settings);
+    const textMetrics = getKdpTextPageMetrics(
+      pageSize,
+      fontSize,
+      marginSpec,
+      lineSpacing,
+      paragraphIndent
+    );
+    const tocPageCount = getKdpTocPageCount(
+      chapters,
+      pageSize,
+      fontSize,
+      marginSpec
+    );
+    const frontMatterPages = getKdpFrontMatterPageCount(book, tocPageCount);
+    const chapterPages = chapters.reduce((sum, chapter) => {
+      return sum + estimateKdpChapterPageCount(chapter, textMetrics);
+    }, 0);
+
+    pageCount = roundToEvenPageCount(frontMatterPages + chapterPages);
+  }
+
+  return Number.isFinite(override) && override > pageCount
+    ? roundToEvenPageCount(override)
+    : pageCount;
+}
+
+function getKdpMargins(
+  pageSize = KDP_TRIM_SIZES["6x9"],
+  pageCount = 24,
+  settings = {}
+) {
+  const marginSpec = getKdpMarginSpec(pageSize, pageCount, settings);
+
+  return {
+    top: marginSpec.top * 72,
+    bottom: marginSpec.bottom * 72,
+    left: marginSpec.inside * 72,
+    right: marginSpec.outside * 72,
+    inside: marginSpec.inside * 72,
+    outside: marginSpec.outside * 72,
+    gutterMinimum: marginSpec.gutterMinimum * 72,
+    outsideMinimum: marginSpec.outsideMinimum * 72,
+  };
+}
+
+function getKdpPdfConfig(book = {}) {
+  const settings = book?.kdp?.settings || {};
+  const bodySize = normalizeKdpFontSize(book?.kdp?.settings?.fontSize);
+  const lineSpacing = normalizeKdpLineSpacing(settings.lineSpacing);
+  const paragraphIndent = normalizeKdpParagraphIndent(settings.paragraphIndent);
+  const scale = bodySize / PDF_CONFIG.sizes.body;
+  const trimPageSize = getKdpTrimPageSize(book);
+  const pageSize = getKdpPageSize(book);
+  const pageCount = estimateKdpInteriorPageCount(book, trimPageSize, bodySize);
+  const marginSpec = getKdpMarginSpec(trimPageSize, pageCount, settings);
+  const textMetrics = getKdpTextPageMetrics(
+    trimPageSize,
+    bodySize,
+    marginSpec,
+    lineSpacing,
+    paragraphIndent
+  );
+  const effectiveLineSpacing = textMetrics.effectiveLineSpacing || lineSpacing;
+  const chapters = Array.isArray(book?.chapters) ? book.chapters : [];
+  const tocEntriesPerPage = getKdpTocEntriesPerPage(
+    pageSize,
+    bodySize,
+    marginSpec
+  );
+  const tocPageCount = getKdpTocPageCount(
+    chapters,
+    pageSize,
+    bodySize,
+    marginSpec
+  );
+
+  return {
+    hasBleed: usesKdpInteriorBleed(settings),
+    margins: getKdpMargins(trimPageSize, pageCount, settings),
+    pageCount,
+    pageSize,
+    trimPageSize,
+    folioStartPageNumber: getKdpFrontMatterPageCount(book, tocPageCount) + 1,
+    tocEntriesPerPage,
+    tocPageCount,
+    sizes: {
+      ...PDF_CONFIG.sizes,
+      title: Math.max(24, Math.round(32 * Math.min(scale, 1.18))),
+      subtitle: Math.max(16, Math.round(20 * Math.min(scale, 1.12))),
+      author: Math.max(13, Math.round(16 * Math.min(scale, 1.08))),
+      chapterTitle: Math.max(15, Math.round(bodySize * 1.25)),
+      h1: Math.max(16, Math.round(bodySize * 1.55)),
+      h2: Math.max(14, Math.round(bodySize * 1.35)),
+      h3: Math.max(13, Math.round(bodySize * 1.18)),
+      body: bodySize,
+      code: Math.max(7.5, bodySize - 2),
+      pageNumber: Math.max(9, bodySize - 1.5),
+    },
+    typography: {
+      ...PDF_CONFIG.typography,
+      bodyLineGapRatio: Math.max(0, effectiveLineSpacing - 1.26),
+      firstLineIndentRatio: paragraphIndent,
+      lineSpacing: effectiveLineSpacing,
+    },
+  };
+}
+
+function applyPdfRuntimeConfig(runtimeConfig) {
+  const previous = {
+    margins: { ...PDF_CONFIG.margins },
+    sizes: { ...PDF_CONFIG.sizes },
+    typography: { ...PDF_CONFIG.typography },
+  };
+
+  Object.assign(PDF_CONFIG.margins, runtimeConfig.margins);
+  Object.assign(PDF_CONFIG.sizes, runtimeConfig.sizes);
+  Object.assign(PDF_CONFIG.typography, runtimeConfig.typography);
+
+  return () => {
+    Object.keys(PDF_CONFIG.margins).forEach((key) => {
+      if (!(key in previous.margins)) delete PDF_CONFIG.margins[key];
+    });
+    Object.assign(PDF_CONFIG.margins, previous.margins);
+    Object.assign(PDF_CONFIG.sizes, previous.sizes);
+    Object.assign(PDF_CONFIG.typography, previous.typography);
+  };
+}
+
+function getKdpInteriorPageMargins(runtimeConfig, interiorPageNumber = 1) {
+  const isRightHandPage = interiorPageNumber % 2 === 1;
+  const { margins } = runtimeConfig;
+  const bleedEdge = runtimeConfig.hasBleed ? 0.125 * 72 : 0;
+
+  return {
+    top: margins.top + bleedEdge,
+    bottom: margins.bottom + bleedEdge,
+    left: isRightHandPage ? margins.inside : margins.outside + bleedEdge,
+    right: isRightHandPage ? margins.outside + bleedEdge : margins.inside,
+  };
+}
+
+function setPdfCurrentMargins(doc, margins) {
+  Object.assign(PDF_CONFIG.margins, margins);
+
+  if (doc.page) {
+    doc.page.margins = { ...margins };
+    doc.x = margins.left;
+    doc.y = margins.top;
+  }
+}
+
+function configureKdpInteriorPagination(doc, runtimeConfig, interiorPageNumber = 1) {
+  const originalAddPage = doc.addPage.bind(doc);
+
+  doc._kdpInteriorPageNumber = interiorPageNumber;
+  setPdfCurrentMargins(
+    doc,
+    getKdpInteriorPageMargins(runtimeConfig, doc._kdpInteriorPageNumber)
+  );
+
+  doc.addPage = (options = {}) => {
+    doc._kdpInteriorPageNumber += 1;
+    const margins = getKdpInteriorPageMargins(
+      runtimeConfig,
+      doc._kdpInteriorPageNumber
+    );
+    const result = originalAddPage({
+      ...options,
+      size: options.size || runtimeConfig.pageSize,
+      margins,
+    });
+    setPdfCurrentMargins(doc, margins);
+
+    return result;
+  };
+
+  return originalAddPage;
+}
+
+function shouldRenderKdpFolio(interiorPageNumber, runtimeConfig) {
+  return interiorPageNumber >= (runtimeConfig.folioStartPageNumber || 1);
+}
+
+function renderKdpPageFolios(doc, runtimeConfig, firstInteriorPageIndex = 0) {
+  if (typeof doc.bufferedPageRange !== "function") return;
+
+  const range = doc.bufferedPageRange();
+  const end = range.start + range.count;
+
+  for (
+    let pageIndex = Math.max(range.start, firstInteriorPageIndex);
+    pageIndex < end;
+    pageIndex += 1
+  ) {
+    const interiorPageNumber = pageIndex - firstInteriorPageIndex + 1;
+
+    if (!shouldRenderKdpFolio(interiorPageNumber, runtimeConfig)) continue;
+
+    const margins = getKdpInteriorPageMargins(runtimeConfig, interiorPageNumber);
+    const contentWidth = runtimeConfig.pageSize[0] - margins.left - margins.right;
+    const footerY =
+      runtimeConfig.pageSize[1] - Math.max(28, margins.bottom * 0.52);
+
+    doc.switchToPage(pageIndex);
+    const previousPageMargins = { ...doc.page.margins };
+    const previousX = doc.x;
+    const previousY = doc.y;
+    doc.page.margins = {
+      ...doc.page.margins,
+      bottom: -10000,
+    };
+    doc
+      .font(PDF_CONFIG.fonts.body)
+      .fontSize(PDF_CONFIG.sizes.pageNumber)
+      .fillColor(PDF_CONFIG.colors.pageNumber)
+      .text(String(interiorPageNumber), margins.left, footerY, {
+        align: "center",
+        height: PDF_CONFIG.sizes.pageNumber * 2,
+        lineBreak: false,
+        width: contentWidth,
+      });
+    doc.page.margins = previousPageMargins;
+    doc.x = previousX;
+    doc.y = previousY;
+  }
+
+  if (end > range.start) {
+    doc.switchToPage(end - 1);
+  }
+}
+
+function getKdpRuntimeTextMetrics(runtimeConfig) {
+  const marginSpec = {
+    top: runtimeConfig.margins.top / 72,
+    bottom: runtimeConfig.margins.bottom / 72,
+    inside: runtimeConfig.margins.inside / 72,
+    outside: runtimeConfig.margins.outside / 72,
+  };
+  return getKdpTextPageMetrics(
+    runtimeConfig.trimPageSize || runtimeConfig.pageSize,
+    runtimeConfig.sizes.body,
+    marginSpec,
+    runtimeConfig.typography?.lineSpacing || 1.44,
+    runtimeConfig.typography?.firstLineIndentRatio ||
+      PDF_CONFIG.typography.firstLineIndentRatio
+  );
+}
+
+function getKdpRuntimeWordsPerPage(runtimeConfig) {
+  return getKdpRuntimeTextMetrics(runtimeConfig).wordsPerPage;
+}
+
+function getChapterPrintPageEstimate(chapter, runtimeConfig) {
+  const textMetrics = getKdpRuntimeTextMetrics(runtimeConfig);
+
+  return estimateKdpChapterPageCount(chapter, textMetrics);
+}
+
+function buildKdpTocEntries(book = {}, runtimeConfig) {
+  const chapters = Array.isArray(book?.chapters) ? book.chapters : [];
+  let nextPageNumber = runtimeConfig.folioStartPageNumber || 3;
+
+  return chapters.map((chapter, index) => {
+    const entry = {
+      chapterLabel: `Chapter ${index + 1}`,
+      pageNumber: nextPageNumber,
+      title: chapter.title || `Chapter ${index + 1}`,
+    };
+    nextPageNumber += getChapterPrintPageEstimate(chapter, runtimeConfig);
+
+    return entry;
+  });
+}
+
+function wrapKdpFixedLines(text = "", textMetrics, options = {}) {
+  const normalized = String(text || "").trim();
+
+  if (!normalized) return [];
+
+  const font = textMetrics.font || PDF_CONFIG.fonts.body;
+  const fontSize = Number(textMetrics.fontSize) || PDF_CONFIG.sizes.body;
+  const lineWidth = Number(textMetrics.lineWidthPoints) || 300;
+  const indentWidth = options.continuation
+    ? 0
+    : Number(textMetrics.paragraphIndentPoints) ||
+      fontSize * PDF_CONFIG.typography.firstLineIndentRatio;
+  const spaceWidth = getKdpMeasuredTokenWidth(" ", font, fontSize);
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const lines = [];
+  let currentWords = [];
+  let currentWidth = 0;
+  let lineIndent = indentWidth;
+  let lineLimit = Math.max(fontSize * 2, lineWidth - lineIndent);
+
+  const flushLine = () => {
+    if (!currentWords.length) return;
+
+    lines.push({
+      indent: lineIndent,
+      limit: lineLimit,
+      text: currentWords.join(" "),
+      width: currentWidth,
+    });
+    currentWords = [];
+    currentWidth = 0;
+    lineIndent = 0;
+    lineLimit = lineWidth;
+  };
+
+  words.forEach((word) => {
+    const wordWidth = getKdpMeasuredTokenWidth(word, font, fontSize);
+
+    if (!currentWords.length) {
+      currentWords = [word];
+      currentWidth = wordWidth;
+      return;
+    }
+
+    if (currentWidth + spaceWidth + wordWidth <= lineLimit) {
+      currentWords.push(word);
+      currentWidth += spaceWidth + wordWidth;
+      return;
+    }
+
+    flushLine();
+    currentWords = [word];
+    currentWidth = wordWidth;
+  });
+
+  flushLine();
+
+  return lines;
+}
+
+function renderKdpFixedBodyParagraph(doc, text = "", textMetrics, options = {}) {
+  const lines = wrapKdpFixedLines(text, textMetrics, options);
+
+  if (!lines.length) return;
+
+  const font = textMetrics.font || PDF_CONFIG.fonts.body;
+  const fontSize = Number(textMetrics.fontSize) || PDF_CONFIG.sizes.body;
+  const lineHeight =
+    Number(textMetrics.lineHeightPoints) ||
+    fontSize * (PDF_CONFIG.typography.lineSpacing || 1.42);
+  const x = PDF_CONFIG.margins.left;
+  let y = doc.y;
+
+  doc.font(font).fontSize(fontSize).fillColor(PDF_CONFIG.colors.body);
+
+  lines.forEach((line, index) => {
+    const isLastLine = index === lines.length - 1;
+    const words = line.text.split(/\s+/).filter(Boolean);
+    const spaceCount = Math.max(0, words.length - 1);
+    const wordWidths = words.map((word) =>
+      getKdpMeasuredTokenWidth(word, font, fontSize)
+    );
+    const totalWordWidth = wordWidths.reduce((sum, width) => sum + width, 0);
+    const naturalSpaceWidth = getKdpMeasuredTokenWidth(" ", font, fontSize);
+    const justifiedSpaceWidth =
+      !isLastLine && spaceCount
+        ? Math.max(
+            naturalSpaceWidth,
+            (line.limit - totalWordWidth) / spaceCount
+          )
+        : naturalSpaceWidth;
+    const previousMargins = { ...doc.page.margins };
+    const previousX = doc.x;
+    const previousY = doc.y;
+    let cursorX = x + line.indent;
+
+    doc.page.margins = { ...doc.page.margins, bottom: -10000 };
+
+    words.forEach((word, wordIndex) => {
+      doc.text(word, cursorX, y, {
+        height: lineHeight,
+        lineBreak: false,
+        width: wordWidths[wordIndex] + fontSize,
+      });
+      cursorX +=
+        wordWidths[wordIndex] +
+        (wordIndex < words.length - 1 ? justifiedSpaceWidth : 0);
+    });
+
+    doc.page.margins = previousMargins;
+    doc.x = previousX;
+    doc.y = previousY;
+    y += lineHeight;
+  });
+
+  doc.y = y;
+}
+
+function renderKdpChapterPrintPages(doc, chapter, chapterIndex, runtimeConfig) {
+  const textMetrics = getKdpRuntimeTextMetrics(runtimeConfig);
+  const firstPageReserveLines = getKdpChapterOpeningReserveLines(textMetrics);
+  const pages = splitKdpTextIntoPrintPages(
+    getChapterMarkdownForExport(chapter),
+    textMetrics,
+    {
+      firstPageReserveLines,
+    }
+  );
+
+  pages.forEach((pageContent, pageIndex) => {
+    doc.addPage();
+
+    if (pageIndex === 0) {
+      doc
+        .font(PDF_CONFIG.fonts.heading)
+        .fontSize(Math.max(10, PDF_CONFIG.sizes.body - 1))
+        .fillColor(PDF_CONFIG.colors.pageNumber)
+        .text(`Chapter ${chapterIndex + 1}`, {
+          align: "center",
+        });
+
+      doc.moveDown(0.5);
+
+      doc
+        .font(PDF_CONFIG.fonts.heading)
+        .fontSize(PDF_CONFIG.sizes.chapterTitle)
+        .fillColor(PDF_CONFIG.colors.chapterTitle)
+        .text(chapter.title || `Chapter ${chapterIndex + 1}`, {
+          align: "center",
+        });
+
+      doc.y = Math.max(
+        doc.y + PDF_CONFIG.sizes.body * 0.55,
+        PDF_CONFIG.margins.top + firstPageReserveLines * textMetrics.lineHeightPoints
+      );
+    }
+
+    pageContent.paragraphs.forEach((paragraph) => {
+      const paragraphText =
+        typeof paragraph === "object" ? paragraph.text : paragraph;
+      const isContinuation =
+        typeof paragraph === "object" && paragraph.continuation;
+
+      renderKdpFixedBodyParagraph(doc, paragraphText, textMetrics, {
+        continuation: isContinuation,
+      });
+    });
+  });
+}
+
+function renderKdpFrontMatterPage(doc, title, paragraphs = []) {
+  doc
+    .font(PDF_CONFIG.fonts.heading)
+    .fontSize(PDF_CONFIG.sizes.h2)
+    .fillColor(PDF_CONFIG.colors.heading)
+    .text(title, { align: "center" });
+  doc.moveDown(1.4);
+
+  paragraphs.forEach((paragraph, index) => {
+    renderTextBlock(doc, paragraph, {
+      bodyParagraph: true,
+      indent:
+        index === 0
+          ? 0
+          : PDF_CONFIG.sizes.body * PDF_CONFIG.typography.firstLineIndentRatio,
+    });
+  });
+}
+
+function renderKdpTableOfContents(doc, entries, pageIndex = 0) {
+  doc
+    .font(PDF_CONFIG.fonts.heading)
+    .fontSize(PDF_CONFIG.sizes.h2)
+    .fillColor(PDF_CONFIG.colors.heading)
+    .text("Contents", { align: "center" });
+  doc.moveDown(1);
+
+  const contentWidth = getContentWidth(doc);
+  const labelWidth = Math.min(72, contentWidth * 0.26);
+  const pageWidth = 34;
+  const titleWidth = contentWidth - labelWidth - pageWidth - 16;
+  const start = pageIndex * 1000;
+  const rowHeight = Math.max(PDF_CONFIG.sizes.body * 1.35, 14);
+
+  entries.forEach((entry, index) => {
+    ensureSpace(doc, rowHeight + 2);
+
+    const y = doc.y;
+    doc
+      .font(PDF_CONFIG.fonts.bodyBold)
+      .fontSize(Math.max(8.5, PDF_CONFIG.sizes.body - 2))
+      .fillColor(PDF_CONFIG.colors.pageNumber)
+      .text(entry.chapterLabel, PDF_CONFIG.margins.left, y, {
+        width: labelWidth,
+        lineBreak: false,
+      });
+
+    doc
+      .font(PDF_CONFIG.fonts.body)
+      .fontSize(PDF_CONFIG.sizes.body)
+      .fillColor(PDF_CONFIG.colors.body)
+      .text(entry.title, PDF_CONFIG.margins.left + labelWidth + 8, y, {
+        width: titleWidth,
+        lineBreak: false,
+      });
+
+    doc
+      .font(PDF_CONFIG.fonts.body)
+      .fontSize(PDF_CONFIG.sizes.body)
+      .fillColor(PDF_CONFIG.colors.body)
+      .text(
+        String(entry.pageNumber),
+        PDF_CONFIG.margins.left + labelWidth + titleWidth + 16,
+        y,
+        {
+          align: "right",
+          width: pageWidth,
+          lineBreak: false,
+        }
+      );
+
+    doc.y = y + rowHeight;
+
+    if (start + index < entries.length - 1) {
+      doc
+        .moveTo(PDF_CONFIG.margins.left + labelWidth + 8, doc.y - 4)
+        .lineTo(PDF_CONFIG.margins.left + labelWidth + titleWidth + 10, doc.y - 4)
+        .dash(1, { space: 3 })
+        .stroke("#cbd5e1")
+        .undash();
+    }
+  });
+}
 
 // Parse inline markdown with proper pattern priority
 // Key fix: Bold (**) MUST come before italic (*) to avoid conflicts
@@ -263,6 +1288,80 @@ function renderFullPageCover(doc, imagePath) {
     height: placement.height,
   });
   doc.restore();
+}
+
+function renderContainedFullPageImage(doc, imagePath) {
+  const image = doc.openImage(imagePath);
+  const scale = Math.min(doc.page.width / image.width, doc.page.height / image.height);
+  const width = image.width * scale;
+  const height = image.height * scale;
+  const x = (doc.page.width - width) / 2;
+  const y = (doc.page.height - height) / 2;
+
+  doc.rect(0, 0, doc.page.width, doc.page.height).fill("#ffffff");
+  doc.image(imagePath, x, y, {
+    width,
+    height,
+  });
+}
+
+function renderKdpBackCoverPage(doc, book = {}) {
+  const padding = 42;
+  const blurb = stripInlineMarkdown(book?.kdp?.assets?.backCoverBlurb || "");
+
+  doc.rect(0, 0, doc.page.width, doc.page.height).fill("#0f172a");
+  doc
+    .font(PDF_CONFIG.fonts.heading)
+    .fontSize(9)
+    .fillColor("#334155")
+    .text("BACK COVER", padding, padding, {
+      characterSpacing: 1.2,
+      width: doc.page.width - padding * 2,
+    });
+
+  doc
+    .font(PDF_CONFIG.fonts.body)
+    .fontSize(11)
+    .fillColor("#cbd5e1")
+    .text(blurb || "Back-cover copy will appear here after it is written.", padding, padding + 48, {
+      lineGap: 5,
+      width: doc.page.width - padding * 2,
+    });
+
+  doc
+    .roundedRect(doc.page.width - padding - 96, doc.page.height - padding - 54, 96, 54, 6)
+    .stroke("#334155");
+  doc
+    .font(PDF_CONFIG.fonts.body)
+    .fontSize(8)
+    .fillColor("#475569")
+    .text("Barcode", doc.page.width - padding - 96, doc.page.height - padding - 33, {
+      align: "center",
+      width: 96,
+    });
+}
+
+function renderKdpFrontCoverFallback(doc, book = {}) {
+  doc.rect(0, 0, doc.page.width, doc.page.height).fill("#0f172a");
+  doc
+    .font(PDF_CONFIG.fonts.heading)
+    .fontSize(PDF_CONFIG.sizes.title)
+    .fillColor("#f8fafc")
+    .text(book.title || "Untitled", 48, doc.page.height * 0.34, {
+      align: "center",
+      width: doc.page.width - 96,
+    });
+
+  if (book.subtitle) {
+    doc
+      .font(PDF_CONFIG.fonts.body)
+      .fontSize(PDF_CONFIG.sizes.subtitle)
+      .fillColor("#cbd5e1")
+      .text(book.subtitle, 48, doc.y + 18, {
+        align: "center",
+        width: doc.page.width - 96,
+      });
+  }
 }
 
 function renderImageBlock(doc, src, alt = "") {
@@ -2311,6 +3410,7 @@ function renderTextBlock(doc, text, options = {}) {
   const font = options.font ?? PDF_CONFIG.fonts.body;
   const size = options.size ?? PDF_CONFIG.sizes.body;
   const color = options.color ?? PDF_CONFIG.colors.body;
+  const isBodyParagraph = Boolean(options.bodyParagraph);
 
   ensureSpace(doc, options.minHeight ?? size * 4);
 
@@ -2320,11 +3420,19 @@ function renderTextBlock(doc, text, options = {}) {
     .fillColor(color)
     .text(cleanText, x, doc.y, {
       width,
-      align: options.align || "left",
-      lineGap: options.lineGap ?? 4,
+      align: options.align || (isBodyParagraph ? "justify" : "left"),
+      indent: options.indent ?? 0,
+      lineGap:
+        options.lineGap ??
+        (isBodyParagraph
+          ? Math.max(1, size * PDF_CONFIG.typography.bodyLineGapRatio)
+          : 4),
     });
 
-  doc.moveDown(options.after ?? 0.75);
+  doc.moveDown(
+    options.after ??
+      (isBodyParagraph ? PDF_CONFIG.typography.paragraphAfter : 0.75)
+  );
 }
 
 function renderCodeBlock(doc, token) {
@@ -2460,6 +3568,7 @@ function processMdContentForPdf(doc, mdContent) {
 
   const tokens = md.parse(normalizeMarkdownForExport(mdContent), {});
   let i = 0;
+  let nextBodyParagraphStartsSection = false;
 
   while (i < tokens.length) {
     const token = tokens[i];
@@ -2495,6 +3604,7 @@ function processMdContentForPdf(doc, mdContent) {
             after: 0.45,
             minHeight: 80,
           });
+          nextBodyParagraphStartsSection = true;
 
           i += 2; // Skip heading_open and inline tokens
           continue;
@@ -2518,14 +3628,23 @@ function processMdContentForPdf(doc, mdContent) {
             ? inlineTextWithoutImages(nextToken).trim()
             : nextToken.content;
 
-          doc.moveDown(0.5);
+          if (images.length) {
+            doc.moveDown(0.5);
+          }
 
           images.forEach((image) => {
             renderImageBlock(doc, image.src, image.alt);
           });
 
           if (textContent) {
-            renderTextBlock(doc, textContent);
+            renderTextBlock(doc, textContent, {
+              bodyParagraph: true,
+              indent: nextBodyParagraphStartsSection
+                ? 0
+                : PDF_CONFIG.sizes.body *
+                  PDF_CONFIG.typography.firstLineIndentRatio,
+            });
+            nextBodyParagraphStartsSection = false;
           }
 
           i += 2; // Skip paragraph_open and inline tokens
@@ -2740,11 +3859,19 @@ async function generatePdf(book, res) {
   await prepareExportImages(book);
 
   return new Promise((resolve, reject) => {
+    const runtimeConfig = getKdpPdfConfig(book);
+    const restorePdfConfig = applyPdfRuntimeConfig(runtimeConfig);
+
     try {
       const doc = new PDFDocument({
-        size: "A4",
-        margins: PDF_CONFIG.margins,
+        bufferPages: true,
+        size: runtimeConfig.pageSize,
+        margins: { top: 0, bottom: 0, left: 0, right: 0 },
       });
+
+      if (doc._root?.data) {
+        doc._root.data.PageLayout = "TwoPageRight";
+      }
 
       doc.pipe(res);
 
@@ -2753,23 +3880,35 @@ async function generatePdf(book, res) {
         reject(err);
       });
 
-      // PAGE 1: COVER PAGE
+      // Front cover is page 1 so two-page viewers place it on the right.
       if (book.coverImage && !book.coverImage.includes("pravatar")) {
         const imagePath = resolveExportImagePath(book.coverImage);
 
         try {
           if (imagePath) {
-            renderFullPageCover(doc, imagePath);
-            doc.addPage();
+            renderContainedFullPageImage(doc, imagePath);
           } else {
             console.warn(`PDF cover image not found: ${book.coverImage}`);
+            renderKdpFrontCoverFallback(doc, book);
           }
         } catch (imgErr) {
           console.error(`Could not embed cover image: ${book.coverImage}`, imgErr);
+          renderKdpFrontCoverFallback(doc, book);
         }
+      } else {
+        renderKdpFrontCoverFallback(doc, book);
       }
 
-      // PAGE 2: TITLE PAGE
+      doc.addPage({
+        size: runtimeConfig.pageSize,
+        margins: getKdpInteriorPageMargins(runtimeConfig, 1),
+      });
+
+      const firstInteriorPageIndex = 1;
+
+      const addRawPdfPage = configureKdpInteriorPagination(doc, runtimeConfig, 1);
+
+      // TITLE PAGE
       doc.moveDown(8);
 
       doc
@@ -2807,7 +3946,35 @@ async function generatePdf(book, res) {
         .lineTo(doc.page.width / 2 + 100, doc.y)
         .stroke("#4f46e5");
 
-      // PROCESS CHAPTERS (starts on page 3+)
+      const copyrightPage = String(
+        book?.kdp?.assets?.copyrightPage || ""
+      ).trim();
+      const tocEntries = buildKdpTocEntries(book, runtimeConfig);
+
+      if (copyrightPage) {
+        doc.addPage();
+        renderKdpFrontMatterPage(
+          doc,
+          "Copyright",
+          copyrightPage.split(/\n{2,}/).filter(Boolean)
+        );
+      }
+
+      for (let tocIndex = 0; tocIndex < runtimeConfig.tocPageCount; tocIndex += 1) {
+        const startIndex = tocIndex * runtimeConfig.tocEntriesPerPage;
+        const entriesForPage = tocEntries.slice(
+          startIndex,
+          startIndex + runtimeConfig.tocEntriesPerPage
+        );
+        doc.addPage();
+        renderKdpTableOfContents(doc, entriesForPage, tocIndex);
+      }
+
+      if ((book?.chapters || []).length && (doc._kdpInteriorPageNumber + 1) % 2 === 0) {
+        doc.addPage();
+      }
+
+      // PROCESS CHAPTERS
       const isChildrenBook = getBookTypeFamily(book.genre) === "children";
 
       (book?.chapters || []).forEach((chapter, index) => {
@@ -2817,19 +3984,7 @@ async function generatePdf(book, res) {
             return;
           }
 
-          doc.addPage();
-
-          doc
-            .font(PDF_CONFIG.fonts.heading)
-            .fontSize(PDF_CONFIG.sizes.chapterTitle)
-            .fillColor(PDF_CONFIG.colors.chapterTitle)
-            .text(chapter.title, {
-              align: "left",
-            });
-
-          doc.moveDown(2);
-
-          processMdContentForPdf(doc, getChapterMarkdownForExport(chapter));
+          renderKdpChapterPrintPages(doc, chapter, index, runtimeConfig);
         } catch (chapterErr) {
           console.error(
             `Error processing chapter ${index + 1} for PDF:`,
@@ -2838,12 +3993,24 @@ async function generatePdf(book, res) {
         }
       });
 
+      while (doc._kdpInteriorPageNumber < runtimeConfig.pageCount) {
+        doc.addPage();
+      }
+
+      renderKdpPageFolios(doc, runtimeConfig, firstInteriorPageIndex);
+      addRawPdfPage({
+        size: runtimeConfig.pageSize,
+        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      });
+      renderKdpBackCoverPage(doc, book);
       doc.end();
+      restorePdfConfig();
 
       doc.on("end", () => {
         resolve();
       });
     } catch (error) {
+      restorePdfConfig();
       reject(error);
     }
   });
@@ -2855,9 +4022,16 @@ module.exports = {
     countChildrenPageWords,
     getChildrenPagePartsFromMarkdown,
     getCoverImagePlacement,
+    estimateKdpChapterPageCount,
     getFirstMarkdownImage,
+    getKdpMargins,
+    getKdpPageSize,
+    getKdpPdfConfig,
+    getKdpTextPageMetrics,
+    getKdpChapterOpeningReserveLines,
     isDiagramCodeBlock,
     normalizeCodeTextForPdf,
+    splitKdpTextIntoPrintPages,
     splitTextForChildrenImagePage,
     parseAsciiTableDiagram,
     parseBoxedListDiagram,

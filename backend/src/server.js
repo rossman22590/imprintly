@@ -24,6 +24,30 @@ const {
 } = require("./utils/public-share-meta");
 
 const app = express();
+function getCspImageSources() {
+  const configuredHosts = [
+    ENV.TRUSTED_IMAGE_HOSTS,
+    ENV.IMAGE_UPLOAD_API_URL,
+  ]
+    .flatMap((value) => String(value || "").split(","))
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => {
+      if (/^https?:\/\//i.test(value)) {
+        try {
+          return new URL(value).origin;
+        } catch {
+          return "";
+        }
+      }
+
+      return `https://${value.replace(/^\/+|\/+$/g, "")}`;
+    })
+    .filter(Boolean);
+
+  return ["'self'", "data:", "blob:", ...new Set(configuredHosts)];
+}
+
 const configuredOrigins = [ENV.CLIENT_URL, ...ENV.CLIENT_URLS.split(",")]
   .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
@@ -68,6 +92,11 @@ const authLimiter = rateLimit({
 // Middlewares
 app.use(
   helmet({
+    contentSecurityPolicy: {
+      directives: {
+        imgSrc: getCspImageSources(),
+      },
+    },
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
