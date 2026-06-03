@@ -16,9 +16,7 @@ export function normalizeBook(book) {
       isListed: Boolean(book.communityListing?.isListed),
       listedAt: book.communityListing?.listedAt || null,
       purchaseUrl: book.communityListing?.purchaseUrl || "",
-      freeFullPdfEnabled: Boolean(
-        book.communityListing?.freeFullPdfEnabled
-      ),
+      freeFullPdfEnabled: Boolean(book.communityListing?.freeFullPdfEnabled),
       freeFullPdfEnabledAt:
         book.communityListing?.freeFullPdfEnabledAt || null,
     },

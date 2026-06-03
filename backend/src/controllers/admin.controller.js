@@ -417,13 +417,21 @@ async function listRuns(req, res) {
     const limit = normalizeLimit(req.query.limit);
     const page = normalizePage(req.query.page);
     const search = String(req.query.search || "").trim();
-    const status = normalizeRunStatus(String(req.query.status || "").trim());
+    const liveOnly =
+      req.query.live === "true" || req.query.active === "true";
+    const status = liveOnly
+      ? ""
+      : normalizeRunStatus(String(req.query.status || "").trim());
     const provider = normalizeRunProvider(String(req.query.provider || "").trim());
     const query = await buildRunQuery({ search, status, provider });
 
+    if (liveOnly) {
+      query.status = { $in: ["queued", "generating", "cancelling"] };
+    }
+
     const [runs, total, summary] = await Promise.all([
       GenerationJob.find(query)
-        .sort({ createdAt: -1 })
+        .sort(liveOnly ? { updatedAt: -1 } : { createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .populate({
@@ -440,9 +448,12 @@ async function listRuns(req, res) {
       getAdminRunsSummary(),
     ]);
 
+    const serializedRuns = runs.map(serializeAdminRun);
+
     return res.status(200).json({
-      message: "Admin runs retrieved.",
-      runs: runs.map(serializeAdminRun),
+      message: "Admin jobs retrieved.",
+      jobs: serializedRuns,
+      runs: serializedRuns,
       pagination: {
         total,
         page,

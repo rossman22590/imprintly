@@ -7,7 +7,6 @@ const {
   generateChapterContent,
   generateChapterImage,
   generateCoverImage,
-  generateFullBook,
   getFullBookJob,
   listFullBookJobs,
   retryFullBookJob,
@@ -20,7 +19,7 @@ router.post("/generate-book-outline", generateBookOutline);
 router.post("/generate-chapter-content", generateChapterContent);
 router.post("/generate-cover-image", generateCoverImage);
 router.post("/generate-chapter-image", generateChapterImage);
-router.post("/generate-full-book", generateFullBook);
+router.post("/generate-full-book", createFullBookJob);
 router.post("/quality-tool", runQualityTool);
 router.post("/full-book-jobs", createFullBookJob);
 router.get("/full-book-jobs", listFullBookJobs);

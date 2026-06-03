@@ -21,7 +21,7 @@ function Input({
   };
 
   return (
-    <div className="w-full grid grid-cols-1 gap-y-2">
+    <div className="w-full grid grid-cols-1 content-start gap-y-2">
       {label && (
         <label htmlFor={name} className="text-gray-700 text-sm font-medium">
           {isRequired ? (

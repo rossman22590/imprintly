@@ -42,3 +42,57 @@ test("graphics policy blocks ASCII diagrams unless graphics are enabled and expl
     /unless the chapter brief explicitly asks for an ASCII diagram/
   );
 });
+
+test("chapter critique prompts preserve workbook exercise formatting", () => {
+  const {
+    buildChapterCritiquePrompt,
+    buildChapterRewritePrompt,
+  } = require("./book-editorial.pipeline");
+  const critiquePrompt = buildChapterCritiquePrompt({
+    bookTitle: "Practice Better",
+    genre: "Workbook",
+    audience: "Adult learners",
+    chapterTitle: "Find the Pattern",
+    draftContent: "Write your answer here: ________",
+    includeTextGraphics: false,
+  });
+  const rewritePrompt = buildChapterRewritePrompt({
+    bookTitle: "Practice Better",
+    genre: "Workbook",
+    audience: "Adult learners",
+    chapterTitle: "Find the Pattern",
+    draftContent: "Write your answer here: ________",
+    includeTextGraphics: false,
+  });
+
+  assert.match(critiquePrompt, /workbook problems/);
+  assert.match(critiquePrompt, /missing fill-in blanks or answer lines/);
+  assert.match(rewritePrompt, /For workbooks, preserve and improve exercises/);
+});
+
+test("chapter critique prompts enforce textbook structure", () => {
+  const {
+    buildChapterCritiquePrompt,
+    buildChapterRewritePrompt,
+  } = require("./book-editorial.pipeline");
+  const critiquePrompt = buildChapterCritiquePrompt({
+    bookTitle: "Biology Foundations",
+    genre: "Textbook",
+    audience: "High school students",
+    chapterTitle: "Cellular Respiration",
+    draftContent: "Cells make energy.",
+    includeTextGraphics: false,
+  });
+  const rewritePrompt = buildChapterRewritePrompt({
+    bookTitle: "Biology Foundations",
+    genre: "Textbook",
+    audience: "High school students",
+    chapterTitle: "Cellular Respiration",
+    draftContent: "Cells make energy.",
+    includeTextGraphics: false,
+  });
+
+  assert.match(critiquePrompt, /textbook problems/);
+  assert.match(critiquePrompt, /missing learning objectives/);
+  assert.match(rewritePrompt, /For textbooks, preserve and improve textbook structure/);
+});

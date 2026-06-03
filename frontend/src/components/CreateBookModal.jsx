@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { useAuthContext } from "../contexts/AuthContext";
 import Modal from "./ui/Modal";
 import Input from "./ui/Input";
@@ -37,11 +38,6 @@ const CHAPTER_LENGTH_OPTIONS = [
   { value: "medium", label: "Medium - detailed" },
   { value: "large", label: "Large - most pages" },
 ];
-const CHILDREN_PAGE_LIMITS = {
-  min: 2,
-  max: 52,
-  default: 20,
-};
 const EMPTY_VISUAL_BIBLE = {
   enabled: true,
   matchBookStyle: true,
@@ -97,17 +93,10 @@ function hasVisualBibleContent(visualBible = EMPTY_VISUAL_BIBLE) {
   );
 }
 
-function isChildrenBookType(bookType = "") {
-  return /children|kid|picture|storybook|early reader/i.test(bookType);
-}
+function isChildrensBookType(value = "") {
+  const normalized = String(value || "").toLowerCase();
 
-function getChildrenSceneCount(pageCount) {
-  const parsedPages = parseInt(pageCount, 10);
-  const safePages = Number.isFinite(parsedPages)
-    ? Math.max(CHILDREN_PAGE_LIMITS.min, Math.min(CHILDREN_PAGE_LIMITS.max, parsedPages))
-    : CHILDREN_PAGE_LIMITS.default;
-
-  return Math.ceil(safePages / 2);
+  return /children|kid|picture|storybook/.test(normalized);
 }
 
 function CreateBookModal({ isOpen, onClose, onBookCreate }) {
@@ -135,46 +124,15 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   const [isGeneratingOutline, setIsGeneratingOutline] = useState(false);
   const [isGeneratingFullBook, setIsGeneratingFullBook] = useState(false);
   const [isFinalisingBook, setIsFinalisingBook] = useState(false);
+  const isChildrensBook = isChildrensBookType(bookGenre);
 
   const chaptersContainerRef = useRef(null);
-  const activePollRef = useRef(null);
   const modalScrollRef = useRef(null);
 
   const { user } = useAuthContext();
-  const isChildrenBook = isChildrenBookType(bookGenre);
-  const structureUnitLabel = isChildrenBook ? "scene" : "chapter";
-  const structureUnitLabelPlural = isChildrenBook ? "scenes" : "chapters";
-  const structureCountLabel = isChildrenBook
-    ? "Interior Pages"
-    : "Number of Chapters";
-  const structureLengthLabel = isChildrenBook
-    ? "Story Text Amount"
-    : "Chapter Length";
-  const selectedPageCount = parseInt(chapterCount, 10) || 0;
-  const childrenSceneCount = isChildrenBook
-    ? getChildrenSceneCount(chapterCount)
-    : chapters.length;
-
-  const handleBookGenreChange = (event) => {
-    const nextGenre = event.target.value;
-    const nextIsChildren = isChildrenBookType(nextGenre);
-    const previousWasChildren = isChildrenBookType(bookGenre);
-
-    setBookGenre(nextGenre);
-
-    if (nextIsChildren) {
-      setIncludeImages(true);
-
-      if (!previousWasChildren && Number(chapterCount) <= 5) {
-        setChapterCount(CHILDREN_PAGE_LIMITS.default);
-      }
-    } else if (previousWasChildren && Number(chapterCount) > 26) {
-      setChapterCount(5);
-    }
-  };
+  const navigate = useNavigate();
 
   const resetModal = () => {
-    activePollRef.current = null;
     setStep(1);
     setBookTitle("");
     setBookSubtitle("");
@@ -211,26 +169,41 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     }
   };
 
+  const handleBookGenreChange = (event) => {
+    const nextGenre = event.target.value;
+
+    setBookGenre(nextGenre);
+
+    if (isChildrensBookType(nextGenre)) {
+      setIncludeImages(true);
+      setChapterCount((current) => {
+        const parsed = Number.parseInt(current, 10);
+
+        return !Number.isFinite(parsed) || parsed === 5 ? 20 : Math.min(parsed, 52);
+      });
+    } else {
+      setChapterCount((current) => {
+        const parsed = Number.parseInt(current, 10);
+
+        return Number.isFinite(parsed) ? Math.min(parsed, 26) : 5;
+      });
+    }
+  };
+
   const handleGenerateOutline = async () => {
     const parsedChapterCount =
       typeof chapterCount === "string" ? parseInt(chapterCount) : chapterCount;
     const validChapterCount = Number.isFinite(parsedChapterCount)
-      ? isChildrenBook
-        ? Math.max(
-            CHILDREN_PAGE_LIMITS.min,
-            Math.min(CHILDREN_PAGE_LIMITS.max, parsedChapterCount)
-          )
-        : Math.max(1, Math.min(26, parsedChapterCount))
+      ? Math.max(1, Math.min(isChildrensBook ? 52 : 26, parsedChapterCount))
       : 0;
 
-    if (
-      !bookTitle ||
-      !validChapterCount ||
-      validChapterCount < (isChildrenBook ? CHILDREN_PAGE_LIMITS.min : 1)
-    ) {
-      toast.error(`Book title and a valid ${structureCountLabel.toLowerCase()} are required!`, {
-        duration: 5000,
-      });
+    if (!bookTitle || !validChapterCount || validChapterCount < 1) {
+      toast.error(
+        isChildrensBook
+          ? "Book title and a valid number of interior pages are required!"
+          : "Book title and a valid number of chapters are required!",
+        { duration: 5000 }
+      );
 
       return;
     }
@@ -262,7 +235,9 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
       setGenerationStats(generation || null);
       setStep(2);
       toast.success(
-        `Outline generated! Review and edit ${structureUnitLabelPlural} if needed.`
+        isChildrensBook
+          ? "Page plan generated! Review and edit scenes if needed."
+          : "Outline generated! Review and edit chapters if needed."
       );
     } catch (error) {
       console.error("Error generating book outline:", error);
@@ -277,7 +252,9 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   const handleAddChapter = () => {
     if (chapters.length >= 26) {
       toast.error(
-        `AI book creation supports up to 26 ${structureUnitLabelPlural}.`
+        isChildrensBook
+          ? "AI book creation supports up to 26 illustrated scenes."
+          : "AI book creation supports up to 26 chapters."
       );
       return;
     }
@@ -285,7 +262,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setChapters((prev) => [
       ...prev,
       {
-        title: `${isChildrenBook ? "Scene" : "Chapter"} ${prev.length + 1}`,
+        title: `${isChildrensBook ? "Scene" : "Chapter"} ${prev.length + 1}`,
         description: "",
       },
     ]);
@@ -405,9 +382,12 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
 
   const handleFinaliseBook = async () => {
     if (chapters.length === 0) {
-      toast.error(`At least one ${structureUnitLabel} is required!`, {
-        duration: 5000,
-      });
+      toast.error(
+        isChildrensBook
+          ? "At least one scene is required!"
+          : "At least one chapter is required!",
+        { duration: 5000 }
+      );
 
       return;
     }
@@ -458,84 +438,14 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     }
   };
 
-  const pollFullBookJob = async (jobId) => {
-    const pollKey = Symbol(jobId);
-    activePollRef.current = pollKey;
-
-    while (activePollRef.current === pollKey) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      if (activePollRef.current !== pollKey) return;
-
-      let response;
-
-      try {
-        response = await axiosInstance.get(
-          `${API_ENDPOINTS.AI.FULL_BOOK_JOBS}/${jobId}`
-        );
-      } catch (error) {
-        if (activePollRef.current !== pollKey) return;
-
-        setIsGeneratingFullBook(false);
-        activePollRef.current = null;
-        toast.error(
-          error.response?.status === 404
-            ? "Generation was interrupted. Start a new full-book generation."
-            : "Lost generation progress. Please try again."
-        );
-        return;
-      }
-
-      const {
-        data: { job, book },
-      } = response;
-
-      setGenerationJob(job);
-
-      if (["complete", "failed", "cancelled"].includes(job.status)) {
-        setIsGeneratingFullBook(false);
-        activePollRef.current = null;
-
-        const hasGeneratedContent = Array.isArray(book?.chapters)
-          ? book.chapters.some((chapter) => chapter.content?.trim())
-          : false;
-
-        if (book && job.status === "complete") {
-          toast.success(
-            "Full AI book generated!"
-          );
-          onBookCreate(book._id);
-          onClose();
-          resetModal();
-        } else if (book && job.status === "failed" && hasGeneratedContent) {
-          toast.error(
-            `Book generated with failed ${structureUnitLabelPlural}.`
-          );
-          onBookCreate(book._id);
-          onClose();
-          resetModal();
-        } else if (job.status === "failed") {
-          const failureReason =
-            job.failedChapters?.[0]?.error ||
-            job.error ||
-            job.progress?.message ||
-            "The AI provider did not return usable chapter content.";
-
-          toast.error(failureReason, { duration: 8000 });
-        } else if (job.status === "cancelled") {
-          toast("Generation cancelled.");
-        }
-
-        return;
-      }
-    }
-  };
-
   const handleGenerateFullBook = async () => {
     if (chapters.length === 0) {
-      toast.error(`Generate or add at least one ${structureUnitLabel} first.`, {
-        duration: 5000,
-      });
+      toast.error(
+        isChildrensBook
+          ? "Generate or add at least one scene first."
+          : "Generate or add at least one chapter first.",
+        { duration: 5000 }
+      );
 
       return;
     }
@@ -570,13 +480,16 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
       );
 
       setGenerationJob(job);
-      toast.success("Generation job started.");
-      await pollFullBookJob(job.id);
+      toast.success("Generation job queued.");
+      onClose();
+      resetModal();
+      navigate("/jobs");
     } catch (error) {
       console.error("Error generating full book:", error);
       toast.error(
         error.response?.data?.error || "Failed to generate the full book."
       );
+    } finally {
       setIsGeneratingFullBook(false);
     }
   };
@@ -612,12 +525,6 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   }, [step, chapters.length]);
 
   useEffect(() => {
-    return () => {
-      activePollRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!includeImages && modalScrollRef.current) {
       modalScrollRef.current.scrollTop = 0;
     }
@@ -637,9 +544,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
         step === 1 ? (
           <div className="flex items-center justify-between gap-3">
             <p className="text-slate-500 text-xs">
-              Step 1 of 2 &middot; Review the{" "}
-              {isChildrenBook ? "scene plan" : "outline"} before generating
-              the book
+              Step 1 of 2 &middot; Review the outline before generating the book
             </p>
             <Button
               type="button"
@@ -712,12 +617,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
 
                 if (!isNaN(parsed)) {
                   setChapterCount(
-                    isChildrenBook
-                      ? Math.max(
-                          CHILDREN_PAGE_LIMITS.min,
-                          Math.min(CHILDREN_PAGE_LIMITS.max, parsed)
-                        )
-                      : Math.max(1, Math.min(26, parsed))
+                    Math.max(1, Math.min(isChildrensBook ? 52 : 26, parsed))
                   );
                 }
               }}
@@ -725,40 +625,32 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                 const value = event.target.value;
 
                 if (value === "" || isNaN(parseInt(value))) {
-                  setChapterCount(
-                    isChildrenBook ? CHILDREN_PAGE_LIMITS.default : 5
-                  );
+                  setChapterCount(isChildrensBook ? 20 : 5);
                 }
               }}
               icon={Hash}
-              label={structureCountLabel}
-              min={isChildrenBook ? CHILDREN_PAGE_LIMITS.min : 1}
-              max={isChildrenBook ? CHILDREN_PAGE_LIMITS.max : 26}
+              label={isChildrensBook ? "Interior Pages" : "Number of Chapters"}
+              min="1"
+              max={isChildrensBook ? "52" : "26"}
               step="1"
-              placeholder={isChildrenBook ? "20" : "5"}
-              helperText={
-                isChildrenBook
-                  ? `${selectedPageCount || CHILDREN_PAGE_LIMITS.default} interior pages creates ${childrenSceneCount} image pages and ${childrenSceneCount} text pages.`
-                  : undefined
-              }
+              placeholder={isChildrensBook ? "20" : "5"}
             />
 
-            <div className="grid grid-cols-1 gap-y-2">
-              <Select
-                name="chapterLength"
-                value={chapterLength}
-                onChange={(event) => setChapterLength(event.target.value)}
-                options={CHAPTER_LENGTH_OPTIONS}
-                icon={BookOpen}
-                label={structureLengthLabel}
-              />
-              {isChildrenBook && (
-                <p className="text-gray-500 text-xs">
-                  Controls how much read-aloud text is generated per scene.
-                </p>
-              )}
-            </div>
+            <Select
+              name="chapterLength"
+              value={chapterLength}
+              onChange={(event) => setChapterLength(event.target.value)}
+              options={CHAPTER_LENGTH_OPTIONS}
+              icon={BookOpen}
+              label={isChildrensBook ? "Story Text Amount" : "Chapter Length"}
+            />
           </div>
+
+          {isChildrensBook && (
+            <p className="-mt-2 text-xs text-gray-500">
+              20 interior pages creates 10 image pages and 10 text pages.
+            </p>
+          )}
 
           <div className="w-full grid grid-cols-1 gap-y-2">
             <label
@@ -843,7 +735,9 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                     Ground Gemini with Google Search
                   </span>
                   <span className="block text-blue-700 text-xs mt-1">
-                    Use live web search for Gemini outline and chapter writing.
+                    {isChildrensBook
+                      ? "Use live web search for Gemini children's page planning and writing."
+                      : "Use live web search for Gemini outline and chapter writing."}
                   </span>
                 </span>
               </span>
@@ -913,11 +807,11 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
 
               <span className="min-w-0">
                 <span className="block text-slate-900 text-sm font-semibold">
-                  {isChildrenBook ? "Add page images" : "Add chapter images"}
+                  {isChildrensBook ? "Add page images" : "Add chapter images"}
                 </span>
                 <span className="block text-slate-500 text-xs mt-1">
-                  {isChildrenBook
-                    ? "Creates one image page for each illustrated scene using Visual Bible references."
+                  {isChildrensBook
+                    ? "When generating the full book, Bookify creates one image page for each two-page scene using Visual Bible references."
                     : "When generating the full book, Bookify creates one inline image per chapter using Visual Bible references."}
                 </span>
               </span>
@@ -1166,7 +1060,9 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                 </span>
                 <span className="block text-slate-500 text-xs mt-1">
                   Allows charts, diagrams, and visual explainers in the written
-                  content. Off means the AI is prompted for no graphs.
+                  {isChildrensBook
+                    ? " pages. Off means the AI is prompted for no graphs."
+                    : " chapters. Off means the AI is prompted for no graphs."}
                 </span>
               </span>
             </span>
@@ -1219,20 +1115,24 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           <section className="mb-3 md:mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <h3 className="text-gray-900 text-base md:text-lg font-semibold">
-                {isChildrenBook ? "Review Scenes" : "Review Chapters"}
+                {isChildrensBook ? "Review Pages" : "Review Chapters"}
               </h3>
               <p className="text-gray-500 text-xs md:text-sm mt-1">
-                Confirm the title, subtitle, and{" "}
-                {isChildrenBook ? "scene/page plan" : "chapter plan"} before
-                creating the book.
+                {isChildrensBook
+                  ? "Confirm the title, subtitle, and image/text page plan before creating the book."
+                  : "Confirm the title, subtitle, and chapter plan before creating the book."}
               </p>
             </div>
 
             <span className="text-gray-500 text-xs md:text-sm">
               {chapters.length}{" "}
-              {chapters.length === 1
-                ? structureUnitLabel
-                : structureUnitLabelPlural}
+              {isChildrensBook
+                ? chapters.length === 1
+                  ? "scene"
+                  : "scenes"
+                : chapters.length === 1
+                  ? "chapter"
+                  : "chapters"}
             </span>
           </section>
 
@@ -1266,7 +1166,9 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                   Search grounding on
                 </p>
                 <p className="text-blue-700 text-xs mt-1 leading-relaxed">
-                  Gemini will use Google Search when writing the full content.
+                  {isChildrensBook
+                    ? "Gemini will use Google Search when writing the children's pages."
+                    : "Gemini will use Google Search when writing the full chapters."}
                 </p>
               </div>
             </section>
@@ -1283,8 +1185,9 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                   Visual Bible active
                 </p>
                 <p className="text-slate-600 text-xs mt-1 leading-relaxed">
-                  {isChildrenBook ? "Page images" : "Chapter images"} will use
-                  your character, style, and world references as visual canon.
+                  {isChildrensBook
+                    ? "Page images will use your character, style, and world references as visual canon."
+                    : "Chapter images will use your character, style, and world references as visual canon."}
                 </p>
               </div>
             </section>
@@ -1364,7 +1267,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
             </section>
           )}
 
-          {/* Chapters list */}
+          {/* Chapters/scenes list */}
           <div
             ref={chaptersContainerRef}
             className="space-y-3 max-h-[min(20rem,34dvh)] md:max-h-[min(24rem,38dvh)] overflow-y-auto pr-1"
@@ -1374,7 +1277,9 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                 <BookOpen className="size-10 md:size-12 text-gray-300 mx-auto mb-3" />
 
                 <p className="text-gray-500 text-xs md:text-sm">
-                  No {structureUnitLabelPlural} yet. Add one to start.
+                  {isChildrensBook
+                    ? "No scenes yet. Add one to start."
+                    : "No chapters yet. Add one to start."}
                 </p>
               </div>
             ) : (
@@ -1388,16 +1293,14 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                       {index + 1}
                     </div>
 
-                    {/* Chapter title input */}
+                    {/* Chapter/scene title input */}
                     <input
                       type="text"
                       value={title}
                       onChange={(event) =>
                         handleEditChapter(index, "title", event.target.value)
                       }
-                      placeholder={
-                        isChildrenBook ? "Scene Title" : "Chapter Title"
-                      }
+                      placeholder={isChildrensBook ? "Scene Title" : "Chapter Title"}
                       className="flex-1 bg-transparent text-gray-900 text-sm md:text-base font-medium border-none focus:outline-none focus:ring-0 p-0"
                     />
 
@@ -1405,8 +1308,8 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                     <button
                       type="button"
                       onClick={() => handleDeleteChapter(index)}
-                      aria-label={`Delete ${structureUnitLabel}`}
-                      title={`Delete ${structureUnitLabel}`}
+                      aria-label={isChildrensBook ? "Delete scene" : "Delete chapter"}
+                      title={isChildrensBook ? "Delete scene" : "Delete chapter"}
                       disabled={chapters.length === 1}
                       className="opacity-0 rounded-lg p-1 md:p-1.5 transition-all duration-200 disabled:opacity-0 disabled:cursor-not-allowed group-hover:opacity-100 group-hover:bg-red-50 group-focus-within:opacity-100 group-focus-within:bg-red-50 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                     >
@@ -1414,7 +1317,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                     </button>
                   </div>
 
-                  {/* Chapter description textarea */}
+                  {/* Chapter/scene description textarea */}
                   <textarea
                     value={description}
                     onChange={(event) =>
@@ -1426,8 +1329,8 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                     }
                     rows={2}
                     placeholder={
-                      isChildrenBook
-                        ? "Brief description of what this scene shows and what happens..."
+                      isChildrensBook
+                        ? "Brief description of this two-page scene..."
                         : "Brief description of what this chapter covers..."
                     }
                     className="w-full bg-transparent text-gray-600 text-xs md:text-sm placeholder-gray-400 border-none resize-none focus:outline-none focus:ring-0 p-0"
@@ -1447,11 +1350,14 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
 
                   <div className="min-w-0">
                     <h4 className="text-slate-900 text-sm font-semibold">
-                      Start with an outline draft
+                      {isChildrensBook
+                        ? "Start with a page-plan draft"
+                        : "Start with an outline draft"}
                     </h4>
                     <p className="text-slate-500 text-xs mt-1 leading-relaxed">
-                      Saves the {isChildrenBook ? "scene/page" : "chapter"}{" "}
-                      plan so you can edit structure before writing content.
+                      {isChildrensBook
+                        ? "Saves the page plan so you can edit image/text scenes before writing the story text."
+                        : "Saves the chapter plan so you can edit structure before writing chapter content."}
                     </p>
                   </div>
                 </div>
@@ -1490,8 +1396,9 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                       Generate the full book now
                     </h4>
                     <p className="text-violet-700 text-xs mt-1 leading-relaxed">
-                      Fills every {structureUnitLabel} with the selected
-                      provider and tracks progress while it runs.
+                      {isChildrensBook
+                        ? "Fills each two-page scene with an image page, short text under the image, and a following text page."
+                        : "Fills every chapter with the selected provider and tracks progress while it runs."}
                     </p>
                   </div>
                 </div>
@@ -1510,9 +1417,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
 
                 <label className="flex items-center justify-between gap-3 rounded-lg bg-white/70 border border-violet-100 px-3 py-2 cursor-pointer">
                   <span className="text-violet-950 text-sm font-medium">
-                    {isChildrenBook
-                      ? "Include page images"
-                      : "Include chapter images"}
+                    {isChildrensBook ? "Include page images" : "Include chapter images"}
                   </span>
                   <input
                     type="checkbox"
@@ -1528,7 +1433,9 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                       Include text graphics
                     </span>
                     <span className="block text-violet-700 text-[11px] leading-relaxed">
-                      Allows charts, diagrams, and visual explainers in chapter text.
+                      {isChildrensBook
+                        ? "Allows charts, diagrams, and visual explainers in page text."
+                        : "Allows charts, diagrams, and visual explainers in chapter text."}
                     </span>
                   </span>
                   <input
@@ -1547,11 +1454,11 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                     value={chapterLength}
                     onChange={(event) => setChapterLength(event.target.value)}
                     options={CHAPTER_LENGTH_OPTIONS}
-                    label={structureLengthLabel}
+                    label={isChildrensBook ? "Story text amount" : "Chapter length"}
                   />
                   <p className="text-violet-700 text-[11px] leading-relaxed mt-2">
-                    {isChildrenBook
-                      ? "Large asks for richer read-aloud text pages."
+                    {isChildrensBook
+                      ? "Large asks for the most text-heavy two-page scene copy."
                       : "Large asks for the most detailed, page-rich chapters."}
                   </p>
                 </div>
@@ -1587,7 +1494,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                 icon={Plus}
                 disabled={chapters.length >= 26}
               >
-                Add {isChildrenBook ? "Scene" : "Chapter"}
+                {isChildrensBook ? "Add Scene" : "Add Chapter"}
               </Button>
             </div>
           </div>

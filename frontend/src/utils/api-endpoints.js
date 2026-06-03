@@ -23,6 +23,7 @@ export const API_ENDPOINTS = {
   AUTH: {
     REGISTER: "/api/auth/register",
     LOGIN: "/api/auth/login",
+    LOGOUT: "/api/auth/logout",
     REQUEST_PASSWORD_RESET: "/api/auth/password-reset/request",
     RESET_PASSWORD: "/api/auth/password-reset/confirm",
   },
@@ -32,13 +33,14 @@ export const API_ENDPOINTS = {
     UPLOAD_AVATAR: "/api/profile/avatar",
     DELETE_AVATAR: "/api/profile/avatar",
     BOOKSHELF_SHARE: "/api/profile/bookshelf-share",
+    API_KEYS: "/api/profile/api-keys",
   },
   CREDITS: {
     GET: "/api/credits",
   },
   ADMIN: {
+    JOBS: "/api/admin/jobs",
     PLANS: "/api/admin/plans",
-    RUNS: "/api/admin/runs",
     USERS: "/api/admin/users",
   },
   BOOKS: {
@@ -61,7 +63,6 @@ export const API_ENDPOINTS = {
     GENERATE_CHAPTER_IMAGE: "/api/ai/generate-chapter-image",
     GENERATE_FULL_BOOK: "/api/ai/generate-full-book",
     FULL_BOOK_JOBS: "/api/ai/full-book-jobs",
-    RUNS: "/api/ai/full-book-jobs",
     QUALITY_TOOL: "/api/ai/quality-tool",
   },
   EXPORTS: {
@@ -75,5 +76,6 @@ export const API_ENDPOINTS = {
     COMMUNITY_BOOKSHELF: "/api/public/community-bookshelf",
     BOOKSHELF: "/api/public/bookshelves",
     BOOK_PREVIEW: "/api/public/book-previews",
+    COMMUNITY_BOOKSHELF: "/api/public/community-bookshelf",
   },
 };

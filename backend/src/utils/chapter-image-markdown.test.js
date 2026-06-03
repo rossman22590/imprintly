@@ -1,48 +1,64 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
-  filterChapterImagesToContent,
-  normalizeChapterImages,
+  insertImagesThroughoutChapter,
 } = require("./chapter-image-markdown");
 
-test("filters generated chapter images that were removed from markdown content", () => {
-  const content =
-    "Intro\n\n![Keep](https://api.example.com/uploads/keep.png)\n\nOutro";
-  const images = [
-    { url: "/uploads/keep.png", alt: "Keep" },
-    { url: "/uploads/remove.png", alt: "Remove" },
-  ];
-
-  assert.deepEqual(filterChapterImagesToContent(content, images), [
-    { url: "/uploads/keep.png", alt: "Keep" },
+test("inserts multiple generated images through chapter body", () => {
+  const content = [
+    "# A Rainy Day",
+    "",
+    "Mira opened the blue umbrella.",
+    "",
+    "The puddle flashed like a tiny mirror.",
+    "",
+    "By sunset, everyone was laughing.",
+  ].join("\n");
+  const result = insertImagesThroughoutChapter(content, [
+    "![Opening](/uploads/ai-image-1.png)",
+    "![Middle](/uploads/ai-image-2.png)",
+    "![Ending](/uploads/ai-image-3.png)",
   ]);
+
+  assert.match(result, /^# A Rainy Day\n\n!\[Opening\]/);
+  assert.match(result, /Mira opened[\s\S]*!\[Middle\]/);
+  assert.match(result, /The puddle[\s\S]*!\[Ending\]/);
 });
 
-test("matches stored image assets against markdown URLs by path", () => {
-  const content =
-    "![Art](https://pixiomedia.nyc3.digitaloceanspaces.com/uploads/art.png)";
-  const images = [
-    {
-      url: "https://pixiomedia.nyc3.digitaloceanspaces.com/uploads/art.png",
-      alt: "Art",
-    },
-  ];
-
-  assert.deepEqual(filterChapterImagesToContent(content, images), [
-    {
-      url: "https://pixiomedia.nyc3.digitaloceanspaces.com/uploads/art.png",
-      alt: "Art",
-    },
+test("replaces leading generated image block when reinserting chapter images", () => {
+  const content = [
+    "# A Rainy Day",
+    "",
+    "![Old](/uploads/ai-image-old.png)",
+    "",
+    "Mira opened the blue umbrella.",
+  ].join("\n");
+  const result = insertImagesThroughoutChapter(content, [
+    "![New](/uploads/ai-image-new.png)",
   ]);
+
+  assert.doesNotMatch(result, /ai-image-old/);
+  assert.match(result, /ai-image-new/);
 });
 
-test("keeps existing normalization behavior available for repair paths", () => {
-  const images = [
-    { url: "/uploads/one.png", alt: "One" },
-    { url: "/uploads/one.png", alt: "Duplicate" },
-  ];
-
-  assert.deepEqual(normalizeChapterImages(images), [
-    { url: "/uploads/one.png", alt: "One" },
+test("replaces generated images already distributed through chapter body", () => {
+  const content = [
+    "# A Rainy Day",
+    "",
+    "![Old opening](/uploads/ai-image-old-1.png)",
+    "",
+    "Mira opened the blue umbrella.",
+    "",
+    "![Old middle](/uploads/ai-image-old-2.png)",
+    "",
+    "The puddle flashed like a tiny mirror.",
+  ].join("\n");
+  const result = insertImagesThroughoutChapter(content, [
+    "![New opening](/uploads/ai-image-new-1.png)",
+    "![New middle](/uploads/ai-image-new-2.png)",
   ]);
+
+  assert.doesNotMatch(result, /ai-image-old/);
+  assert.match(result, /ai-image-new-1/);
+  assert.match(result, /ai-image-new-2/);
 });

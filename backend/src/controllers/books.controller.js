@@ -11,7 +11,6 @@ const {
 const { buildEbookCoverPrompt } = require("../utils/book-image-prompts");
 const {
   ensureChapterImageInContent,
-  filterChapterImagesToContent,
   normalizeChapterImages,
   removeMissingUploadImageMarkdown,
 } = require("../utils/chapter-image-markdown");
@@ -41,14 +40,6 @@ const KDP_SETTING_LIMITS = {
   trimSize: 30,
   paperType: 50,
   pageCountOverride: 20,
-  fontSize: 10,
-  interiorBleed: 20,
-  marginTop: 10,
-  marginBottom: 10,
-  marginInside: 10,
-  marginOutside: 10,
-  lineSpacing: 10,
-  paragraphIndent: 10,
   coverImageSize: 10,
   tocDesign: 30,
 };
@@ -95,36 +86,23 @@ function normalizeVisualBibleForSave(visualBible) {
   };
 }
 
-async function normalizeChapterPayloads(
-  chapters = [],
-  { syncImagesToContent = false } = {}
-) {
+async function normalizeChapterPayloads(chapters = []) {
   if (!Array.isArray(chapters)) return [];
 
   return Promise.all(
     chapters.map(async (chapter) => {
       const migrated = await migrateChapterPayloadImagesToStorage(chapter);
-      const content = removeMissingUploadImageMarkdown(
-        migrated.chapter.content || ""
-      );
-      const images = syncImagesToContent
-        ? filterChapterImagesToContent(content, migrated.chapter.images, {
-            requireExisting: true,
-          })
-        : normalizeChapterImages(migrated.chapter.images, {
-            requireExisting: true,
-          });
       const normalizedChapter = {
         ...migrated.chapter,
-        content,
-        images,
+        images: normalizeChapterImages(migrated.chapter.images, {
+          requireExisting: true,
+        }),
       };
 
-      if (!syncImagesToContent) {
-        normalizedChapter.content = ensureChapterImageInContent(
-          normalizedChapter
-        );
-      }
+      normalizedChapter.content = removeMissingUploadImageMarkdown(
+        normalizedChapter.content || ""
+      );
+      normalizedChapter.content = ensureChapterImageInContent(normalizedChapter);
 
       return normalizedChapter;
     })
@@ -155,25 +133,6 @@ function normalizeOptionalHttpUrl(value = "") {
   } catch {
     return null;
   }
-}
-
-function normalizeCommunityListingEnabled(value, fallback = false) {
-  if (value === undefined) return Boolean(fallback);
-
-  if (value === true || value === "true" || value === 1 || value === "1") {
-    return true;
-  }
-
-  if (
-    value === false ||
-    value === "false" ||
-    value === 0 ||
-    value === "0"
-  ) {
-    return false;
-  }
-
-  return null;
 }
 
 function normalizeBooleanFlag(value, fallback = false) {
@@ -468,9 +427,7 @@ async function updateBookContent(req, res) {
       chapters:
         req.body.chapters === undefined
           ? undefined
-          : await normalizeChapterPayloads(req.body.chapters, {
-              syncImagesToContent: true,
-            }),
+          : await normalizeChapterPayloads(req.body.chapters),
       genre: req.body.genre,
       audience: req.body.audience,
       language: req.body.language,
@@ -796,7 +753,7 @@ async function updateBookCommunityListing(req, res) {
         .json({ error: "Forbidden: You cannot update this book!" });
     }
 
-    const nextIsListed = normalizeCommunityListingEnabled(
+    const nextIsListed = normalizeBooleanFlag(
       req.body.isListed,
       book.communityListing?.isListed
     );

@@ -4,6 +4,7 @@ const ENV = require("../configs/env");
 const User = require("../models/User");
 const { syncUserAdminRole } = require("../utils/admin.service");
 const { ensureUserCredits, serializeCredits } = require("../utils/credits.service");
+const { clearAuthCookie, setAuthCookie } = require("../utils/auth-cookie");
 const { sendPasswordResetEmail } = require("../utils/email.service");
 
 const PASSWORD_RESET_REQUEST_MESSAGE =
@@ -97,6 +98,8 @@ async function registerUser(req, res) {
     const user = await User.create({ name, email, password });
     await ensureUserCredits(user._id);
     await syncUserAdminRole(user);
+    const token = generateToken(user._id);
+    setAuthCookie(res, token);
 
     return res.status(201).json({
       message: "User registered successfully!",
@@ -115,7 +118,7 @@ async function registerUser(req, res) {
         status: user.status || "active",
         credits: serializeCredits(user),
       },
-      token: generateToken(user._id),
+      token,
     });
   } catch (error) {
     console.error("Error registering user:", error);
@@ -144,6 +147,8 @@ async function signInUser(req, res) {
 
     await ensureUserCredits(user._id);
     await syncUserAdminRole(user);
+    const token = generateToken(user._id);
+    setAuthCookie(res, token);
 
     return res.status(200).json({
       message: "User signed in successfully!",
@@ -163,7 +168,7 @@ async function signInUser(req, res) {
         status: user.status || "active",
         credits: serializeCredits(user),
       },
-      token: generateToken(user._id),
+      token,
     });
   } catch (error) {
     console.error("Error signing in user:", error);
@@ -172,6 +177,11 @@ async function signInUser(req, res) {
   }
 }
 
+function logoutUser(_, res) {
+  clearAuthCookie(res);
+
+  return res.status(200).json({ message: "User signed out successfully!" });
+}
 async function requestPasswordReset(req, res) {
   try {
     const email = normalizeEmail(req.body?.email);
@@ -268,6 +278,7 @@ async function resetPassword(req, res) {
 }
 
 module.exports = {
+  logoutUser,
   registerUser,
   signInUser,
   requestPasswordReset,

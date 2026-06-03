@@ -15,7 +15,7 @@ import Dropdown, { DropdownItem } from "../ui/Dropdown";
 import Input from "../ui/Input";
 import Select from "../ui/Select";
 import SimpleMDEditor from "./SimpleMDEditor";
-import { formatMdContent } from "../../utils/helpers";
+import MarkdownPreview from "./MarkdownPreview";
 import { resolveImageUrl } from "../../utils/api-endpoints";
 import {
   getMarkdownImages,
@@ -601,33 +601,30 @@ function ChapterEditorTab({
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                      <article
+                      <MarkdownPreview
+                        source={currentChapter.content}
+                        emptyMessage="No content yet. Start typing to see preview here."
                         style={{
                           fontFamily:
                             "Charter, Georgia, 'Times New Roman', serif",
                           lineHeight: 1.7,
                         }}
                         className="formatted-content prose prose-slate max-w-none"
-                        dangerouslySetInnerHTML={{
-                          __html: currentChapter.content
-                            ? formatMdContent(currentChapter.content)
-                            : "<p class='text-slate-400 italic text-center py-12'>No content yet. Start typing to see preview here.</p>",
-                        }}
                       />
                     </div>
                   </div>
                 ) : (
                   <div className="h-full">
-                    <SimpleMDEditor
-                      value={currentChapter.content || ""}
-                      onChange={(value) => onEditChapter("content", value)}
-                      options={mdEditorOptions}
-                      isGeneratingImageCommand={isGeneratingImage}
-                      onGenerateImageCommand={handleGenerateInlineImageCommand}
-                      onRemoveMarkdownImage={handleRemoveChapterImage}
-                      isLocked={isEditorLocked}
-                      lockMessage={editorLockMessage}
-                    />
+                      <SimpleMDEditor
+                        value={currentChapter.content || ""}
+                        onChange={(value) => onEditChapter("content", value)}
+                        options={mdEditorOptions}
+                        isGeneratingImageCommand={isGeneratingImage}
+                        onGenerateImageCommand={handleGenerateInlineImageCommand}
+                        onRemoveMarkdownImage={handleRemoveChapterImage}
+                        isLocked={isEditorLocked}
+                        lockMessage={editorLockMessage}
+                      />
                   </div>
                 )}
               </div>

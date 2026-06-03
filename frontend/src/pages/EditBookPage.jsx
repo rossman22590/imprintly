@@ -78,22 +78,32 @@ async function copyToClipboard(value = "") {
 function normalizeOptionalHttpUrl(value = "") {
   const trimmed = String(value || "").trim();
 
-  if (!trimmed) return { url: "", error: "" };
+  if (!trimmed) {
+    return { url: "", error: "" };
+  }
 
-  const normalized = /^https?:\/\//i.test(trimmed)
+  const withProtocol = /^https?:\/\//i.test(trimmed)
     ? trimmed
     : `https://${trimmed}`;
 
   try {
-    const parsed = new URL(normalized);
+    const parsed = new URL(withProtocol);
 
     if (!["http:", "https:"].includes(parsed.protocol)) {
-      return { url: "", error: "Purchase link must start with http:// or https://" };
+      return {
+        url: "",
+        error: "Purchase link must start with http:// or https://",
+      };
     }
 
-    return parsed.href.length <= 500
-      ? { url: parsed.href, error: "" }
-      : { url: "", error: "Purchase link cannot exceed 500 characters." };
+    if (withProtocol.length > 500) {
+      return {
+        url: "",
+        error: "Purchase link cannot exceed 500 characters.",
+      };
+    }
+
+    return { url: parsed.toString(), error: "" };
   } catch {
     return { url: "", error: "Please enter a valid purchase link." };
   }
@@ -859,21 +869,9 @@ function EditBookPage() {
   const handleEditChapter = (name, value) => {
     if (isGenerating || isGeneratingChapterImage) return;
 
-    setBook((prev) => {
-      const updatedChapters = [...prev.chapters];
-      const currentChapter = updatedChapters[selectedChapterIndex] || {};
-      const updates =
-        name && typeof name === "object" && !Array.isArray(name)
-          ? name
-          : { [name]: value };
-
-      updatedChapters[selectedChapterIndex] = {
-        ...currentChapter,
-        ...updates,
-      };
-
-      return { ...prev, chapters: updatedChapters };
-    });
+    const updatedChapters = [...book.chapters];
+    updatedChapters[selectedChapterIndex][name] = value;
+    setBook((prev) => ({ ...prev, chapters: updatedChapters }));
   };
 
   const handleDeleteChapter = (index) => {
@@ -897,11 +895,7 @@ function EditBookPage() {
     setSelectedChapterIndex(newIndex);
   };
 
-  const saveBookSnapshot = useCallback(async (
-    bookToSave,
-    showToast = true,
-    { syncLocalState = true } = {}
-  ) => {
+  const saveBookSnapshot = useCallback(async (bookToSave, showToast = true) => {
     setIsSaving(true);
 
     try {
@@ -911,10 +905,8 @@ function EditBookPage() {
       );
       const savedBook = normalizeBook(data?.book) || bookToSave;
 
-      if (syncLocalState) {
-        skipNextAutosaveRef.current = true;
-        setBook(savedBook);
-      }
+      skipNextAutosaveRef.current = true;
+      setBook(savedBook);
 
       if (showToast) {
         toast.success("Changes saved successfully!");
@@ -933,12 +925,8 @@ function EditBookPage() {
     }
   }, [bookId]);
 
-  const handleSaveChanges = useCallback(async (
-    bookToSave = book,
-    showToast = true,
-    options
-  ) => {
-    const savedBook = await saveBookSnapshot(bookToSave, showToast, options);
+  const handleSaveChanges = useCallback(async (bookToSave = book, showToast = true) => {
+    const savedBook = await saveBookSnapshot(bookToSave, showToast);
 
     return Boolean(savedBook);
   }, [book, saveBookSnapshot]);
@@ -1446,7 +1434,7 @@ function EditBookPage() {
 
     clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => {
-      handleSaveChanges(book, false, { syncLocalState: false });
+      handleSaveChanges(book, false);
     }, 1500);
 
     return () => clearTimeout(autosaveTimerRef.current);
@@ -1454,7 +1442,6 @@ function EditBookPage() {
 
   useEffect(() => {
     return () => {
-      activeGenerationPollRef.current = null;
       clearTimeout(autosaveTimerRef.current);
     };
   }, []);
@@ -1639,7 +1626,8 @@ function EditBookPage() {
       );
 
       setGenerationJob(job);
-      toast.success("Retry job started.");
+      toast.success("Retry job queued.");
+      navigate("/jobs");
     } catch (error) {
       console.error("Error retrying generation:", error);
       toast.error("Failed to retry failed chapters.");
@@ -1889,20 +1877,24 @@ function EditBookPage() {
     setIsCommunityListingOpen(true);
   };
 
+  const handleOpenCommunityBookshelf = () => {
+    window.open("/community", "_blank", "noopener,noreferrer");
+  };
+
   const handleUpdateCommunityListing = async (isListed) => {
-    let url = book?.communityListing?.purchaseUrl || "";
+    const { url, error } = isListed
+      ? normalizeOptionalHttpUrl(communityPurchaseUrl)
+      : {
+          url: book?.communityListing?.purchaseUrl || "",
+          error: "",
+        };
 
-    if (isListed) {
-      const normalized = normalizeOptionalHttpUrl(communityPurchaseUrl);
-
-      if (normalized.error) {
-        setCommunityPurchaseUrlError(normalized.error);
-        return;
-      }
-
-      url = normalized.url;
+    if (error) {
+      setCommunityPurchaseUrlError(error);
+      return;
     }
 
+    setCommunityPurchaseUrlError("");
     setIsCommunityListingSaving(true);
 
     try {
@@ -1928,8 +1920,10 @@ function EditBookPage() {
       setIsCommunityListingOpen(false);
       toast.success(
         isListed
-          ? "Book posted to the community bookshelf."
-          : "Book removed from the community bookshelf."
+          ? communityFreePdfEnabled
+            ? "Book posted with free PDF access."
+            : "Book posted to the community shelf."
+          : "Book removed from the community shelf."
       );
     } catch (error) {
       console.error("Error updating community listing:", error);
@@ -1939,10 +1933,6 @@ function EditBookPage() {
     } finally {
       setIsCommunityListingSaving(false);
     }
-  };
-
-  const handleOpenCommunityBookshelf = () => {
-    window.open("/community", "_blank", "noopener,noreferrer");
   };
 
   const handleAiTool = async (action, tone = "") => {
@@ -2475,21 +2465,26 @@ function EditBookPage() {
 
       <Modal
         isOpen={isCommunityListingOpen}
-        onClose={() =>
-          !isCommunityListingSaving && setIsCommunityListingOpen(false)
-        }
+        onClose={() => {
+          if (!isCommunityListingSaving) {
+            setIsCommunityListingOpen(false);
+          }
+        }}
         title="Community bookshelf"
-        sizeClassName="max-w-lg"
+        sizeClassName="max-w-2xl"
         footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <Button
               type="button"
               variant="outline"
+              icon={ExternalLink}
               onClick={handleOpenCommunityBookshelf}
               disabled={isCommunityListingSaving}
+              className="border-[#d7ccba] text-[#171717] hover:bg-[#eef3ff] hover:border-[#1d4ed8]"
             >
               Open Community
             </Button>
+
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button
                 type="button"
@@ -2503,17 +2498,19 @@ function EditBookPage() {
                 <Button
                   type="button"
                   variant="destructive"
-                  onClick={() => handleUpdateCommunityListing(false)}
                   isLoading={isCommunityListingSaving}
+                  onClick={() => handleUpdateCommunityListing(false)}
                 >
                   Remove
                 </Button>
               )}
               <Button
                 type="button"
+                variant="secondary"
                 icon={Library}
-                onClick={() => handleUpdateCommunityListing(true)}
                 isLoading={isCommunityListingSaving}
+                onClick={() => handleUpdateCommunityListing(true)}
+                className="bg-[#1d4ed8] text-white hover:bg-[#163ea8] focus:ring-[#1d4ed8]"
               >
                 {isCommunityListed ? "Save Listing" : "Post Book"}
               </Button>
@@ -2521,93 +2518,98 @@ function EditBookPage() {
           </div>
         }
       >
-        <div className="space-y-4">
-          <div
-            className={`rounded-xl border px-4 py-3 ${
-              isCommunityListed
-                ? "border-emerald-200 bg-emerald-50 text-emerald-950"
-                : "border-slate-200 bg-slate-50 text-slate-700"
-            }`}
-          >
-            <p className="text-sm font-bold">
+        <div className="space-y-5">
+          <div className="rounded-lg border border-[#d7ccba] bg-[#fffaf0] px-4 py-3">
+            <p className="text-sm font-semibold text-[#171717]">
               {isCommunityListed
-                ? "This book is posted publicly."
-                : "This book is not on the community bookshelf."}
+                ? "This book is posted on the community bookshelf."
+                : "Post this book on the community bookshelf."}
             </p>
-            <p className="mt-1 text-sm">
-              Community posts show the cover, title, author, genre, preview
-              link when active, free full-PDF access when enabled, and purchase
-              link when provided.
+            <p className="mt-1 text-sm leading-6 text-[#56534d]">
+              Community readers can discover it. If you enable FREE full PDF,
+              they can view the whole book in a flipbook and download the PDF.
             </p>
           </div>
 
-          <div>
-            <p className="mb-2 text-sm font-semibold text-slate-900">
+          <section>
+            <p className="text-sm font-semibold text-slate-900">
               Listing type
             </p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() => setCommunityFreePdfEnabled(false)}
-                disabled={isCommunityListingSaving}
                 aria-pressed={!communityFreePdfEnabled}
-                className={`rounded-xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                className={`rounded-lg border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] ${
                   !communityFreePdfEnabled
-                    ? "border-violet-500 bg-violet-50 shadow-sm"
-                    : "border-slate-200 bg-white hover:border-slate-300"
+                    ? "border-[#1d4ed8] bg-[#eef3ff] shadow-sm"
+                    : "border-slate-200 bg-white hover:border-[#d7ccba]"
                 }`}
               >
-                <span className="flex items-center gap-2 text-sm font-black text-slate-950">
-                  <Store className="size-4 text-violet-600" />
+                <span className="flex items-center gap-2 text-sm font-bold text-slate-950">
+                  <Store className="size-4 text-[#1d4ed8]" />
                   Catalog
                 </span>
-                <span className="mt-1 block text-xs leading-5 text-slate-500">
-                  Shows preview and buy links only.
+                <span className="mt-2 block text-sm leading-6 text-slate-500">
+                  Shows the book, preview link, and purchase link when available.
                 </span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setCommunityFreePdfEnabled(true)}
-                disabled={isCommunityListingSaving}
                 aria-pressed={communityFreePdfEnabled}
-                className={`rounded-xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                className={`rounded-lg border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] ${
                   communityFreePdfEnabled
-                    ? "border-emerald-500 bg-emerald-50 shadow-sm"
-                    : "border-slate-200 bg-white hover:border-slate-300"
+                    ? "border-[#1d4ed8] bg-[#eef3ff] shadow-sm"
+                    : "border-slate-200 bg-white hover:border-[#d7ccba]"
                 }`}
               >
-                <span className="flex items-center gap-2 text-sm font-black text-slate-950">
-                  <FileText className="size-4 text-emerald-600" />
+                <span className="flex items-center gap-2 text-sm font-bold text-slate-950">
+                  <FileText className="size-4 text-[#1d4ed8]" />
                   FREE full PDF
                 </span>
-                <span className="mt-1 block text-xs leading-5 text-slate-500">
-                  Adds public view and download buttons.
+                <span className="mt-2 block text-sm leading-6 text-slate-500">
+                  Adds public view and download buttons for the full manuscript.
                 </span>
               </button>
             </div>
-          </div>
+          </section>
 
-          <Input
-            type="text"
-            label="Purchase Link"
-            name="communityPurchaseUrl"
-            value={communityPurchaseUrl}
-            onChange={(event) => {
-              setCommunityPurchaseUrl(event.target.value);
-              setCommunityPurchaseUrlError("");
-            }}
-            icon={Store}
-            inputMode="url"
-            placeholder="https://amazon.com/dp/your-book"
-            error={communityPurchaseUrlError}
-            helperText="Optional. Use a book-specific link for paperback, hardcover, or another physical copy listing."
-          />
+          <label className="grid gap-2">
+            <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <Store className="size-4 text-[#1d4ed8]" />
+              Purchase link
+            </span>
+            <input
+              value={communityPurchaseUrl}
+              onChange={(event) => {
+                setCommunityPurchaseUrl(event.target.value);
+                setCommunityPurchaseUrlError("");
+              }}
+              placeholder="https://your-book-store-link.com"
+              className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-[#1d4ed8] focus:outline-none focus:ring-2 focus:ring-[#1d4ed8]/20"
+            />
+            {communityPurchaseUrlError ? (
+              <span className="text-xs font-semibold text-red-600">
+                {communityPurchaseUrlError}
+              </span>
+            ) : (
+              <span className="text-xs leading-5 text-slate-500">
+                Optional. Use this for paperback, hardcover, or store pages.
+              </span>
+            )}
+          </label>
 
           {!book?.previewShare?.token && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              Create a preview link from the Preview menu if you want readers
-              to open a first-chapter preview from the community page.
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-semibold text-amber-950">
+                No preview link is active.
+              </p>
+              <p className="mt-1 text-sm leading-6 text-amber-800">
+                Catalog listings work best with a preview link. FREE full PDF
+                listings do not require one.
+              </p>
             </div>
           )}
         </div>

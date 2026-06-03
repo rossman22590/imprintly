@@ -1,9 +1,10 @@
 import { resolveImageUrl } from "../utils/api-endpoints";
 import {
-  Activity,
   ChevronDown,
   ChevronUp,
+  Clock3,
   FileText,
+  KeyRound,
   LogOut,
   ShieldCheck,
   User2,
@@ -78,11 +79,11 @@ const ProfileMenu = ({
           )}
 
           <Link
-            to="/runs"
+            to="/jobs"
             className="flex items-center gap-x-2 w-full text-sm text-gray-700 px-3 py-2 transition-colors duration-200 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none"
           >
-            <Activity className="size-4 text-gray-500" />
-            <span>Runs</span>
+            <Clock3 className="size-4 text-gray-500" />
+            <span>Jobs</span>
           </Link>
 
           <Link
@@ -91,6 +92,14 @@ const ProfileMenu = ({
           >
             <FileText className="size-4 text-gray-500" />
             <span>Docs</span>
+          </Link>
+
+          <Link
+            to="/api-docs"
+            className="flex items-center gap-x-2 w-full text-sm text-gray-700 px-3 py-2 transition-colors duration-200 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none"
+          >
+            <KeyRound className="size-4 text-gray-500" />
+            <span>API Docs</span>
           </Link>
 
           <Link

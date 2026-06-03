@@ -1,29 +1,46 @@
-import { createBrowserRouter, Outlet } from "react-router";
-import {
-  AdminPage,
-  BookPage,
-  CommunityBookReaderPage,
-  CommunityBookshelfPage,
-  CreditsPage,
-  DashboardPage,
-  DocsPage,
-  EditBookPage,
-  ErrorPage,
-  ForgotPasswordPage,
-  KDPStudioPage,
-  LandingPage,
-  PricingPage,
-  ProfilePage,
-  PublicBookshelfPage,
-  PublicBookPreviewPage,
-  PublicSharePage,
-  ResetPasswordPage,
-  RunsPage,
-  SignInPage,
-  SignUpPage,
-} from "../pages";
+import { lazy, Suspense } from "react";
+import { createBrowserRouter, Navigate, Outlet } from "react-router";
+import ErrorPage from "../pages/ErrorPage";
 import ProtectedRoute from "./ProtectedRoute";
 import PublicRoute from "./PublicRoute";
+
+const AdminPage = lazy(() => import("../pages/AdminPage"));
+const ApiDocsPage = lazy(() => import("../pages/ApiDocsPage"));
+const BookPage = lazy(() => import("../pages/BookPage"));
+const CommunityBookReaderPage = lazy(() =>
+  import("../pages/CommunityBookReaderPage")
+);
+const CommunityBookshelfPage = lazy(() =>
+  import("../pages/CommunityBookshelfPage")
+);
+const CreditsPage = lazy(() => import("../pages/CreditsPage"));
+const DashboardPage = lazy(() => import("../pages/DashboardPage"));
+const DocsPage = lazy(() => import("../pages/DocsPage"));
+const EditBookPage = lazy(() => import("../pages/EditBookPage"));
+const ForgotPasswordPage = lazy(() => import("../pages/ForgotPasswordPage"));
+const JobsPage = lazy(() => import("../pages/JobsPage"));
+const KDPStudioPage = lazy(() => import("../pages/KDPStudioPage"));
+const LandingPage = lazy(() => import("../pages/LandingPage"));
+const PricingPage = lazy(() => import("../pages/PricingPage"));
+const ProfilePage = lazy(() => import("../pages/ProfilePage"));
+const PublicBookshelfPage = lazy(() => import("../pages/PublicBookshelfPage"));
+const PublicBookPreviewPage = lazy(() =>
+  import("../pages/PublicBookPreviewPage")
+);
+const PublicSharePage = lazy(() => import("../pages/PublicSharePage"));
+const ResetPasswordPage = lazy(() => import("../pages/ResetPasswordPage"));
+const SignInPage = lazy(() => import("../pages/SignInPage"));
+const SignUpPage = lazy(() => import("../pages/SignUpPage"));
+
+const pageFallback = (
+  <div className="min-h-screen bg-gray-50 p-6 text-sm text-gray-500">
+    Loading...
+  </div>
+);
+
+function routeElement(element) {
+  return <Suspense fallback={pageFallback}>{element}</Suspense>;
+}
 
 const router = createBrowserRouter([
   {
@@ -34,23 +51,15 @@ const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <LandingPage />,
+        element: routeElement(<LandingPage />),
       },
       {
         path: "pricing",
-        element: <PricingPage />,
-      },
-      {
-        path: "community",
-        element: <CommunityBookshelfPage />,
-      },
-      {
-        path: "community/books/:bookId",
-        element: <CommunityBookReaderPage />,
+        element: routeElement(<PricingPage />),
       },
       {
         path: "register",
-        element: (
+        element: routeElement(
           <PublicRoute>
             <SignUpPage />
           </PublicRoute>
@@ -58,7 +67,7 @@ const router = createBrowserRouter([
       },
       {
         path: "login",
-        element: (
+        element: routeElement(
           <PublicRoute>
             <SignInPage />
           </PublicRoute>
@@ -66,7 +75,7 @@ const router = createBrowserRouter([
       },
       {
         path: "forgot-password",
-        element: (
+        element: routeElement(
           <PublicRoute>
             <ForgotPasswordPage />
           </PublicRoute>
@@ -74,23 +83,31 @@ const router = createBrowserRouter([
       },
       {
         path: "reset-password/:token",
-        element: <ResetPasswordPage />,
+        element: routeElement(<ResetPasswordPage />),
       },
       {
         path: "shelf/:shareToken",
-        element: <PublicBookshelfPage />,
+        element: routeElement(<PublicBookshelfPage />),
       },
       {
         path: "preview/:shareToken",
-        element: <PublicBookPreviewPage />,
+        element: routeElement(<PublicBookPreviewPage />),
+      },
+      {
+        path: "community",
+        element: routeElement(<CommunityBookshelfPage />),
+      },
+      {
+        path: "community/books/:bookId",
+        element: routeElement(<CommunityBookReaderPage />),
       },
       {
         path: ":profileSlug/:shareToken",
-        element: <PublicSharePage />,
+        element: routeElement(<PublicSharePage />),
       },
       {
         path: "dashboard",
-        element: (
+        element: routeElement(
           <ProtectedRoute>
             <DashboardPage />
           </ProtectedRoute>
@@ -98,23 +115,39 @@ const router = createBrowserRouter([
       },
       {
         path: "docs",
-        element: (
+        element: routeElement(
           <ProtectedRoute>
             <DocsPage />
           </ProtectedRoute>
         ),
       },
       {
-        path: "runs",
-        element: (
+        path: "api-docs",
+        element: routeElement(
           <ProtectedRoute>
-            <RunsPage />
+            <ApiDocsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "jobs",
+        element: routeElement(
+          <ProtectedRoute>
+            <JobsPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "runs",
+        element: routeElement(
+          <ProtectedRoute>
+            <Navigate to="/jobs" replace />
           </ProtectedRoute>
         ),
       },
       {
         path: "books/:bookId",
-        element: (
+        element: routeElement(
           <ProtectedRoute>
             <BookPage />
           </ProtectedRoute>
@@ -122,7 +155,7 @@ const router = createBrowserRouter([
       },
       {
         path: "books/:bookId/edit",
-        element: (
+        element: routeElement(
           <ProtectedRoute>
             <EditBookPage />
           </ProtectedRoute>
@@ -130,7 +163,7 @@ const router = createBrowserRouter([
       },
       {
         path: "books/:bookId/kdp",
-        element: (
+        element: routeElement(
           <ProtectedRoute>
             <KDPStudioPage />
           </ProtectedRoute>
@@ -138,7 +171,7 @@ const router = createBrowserRouter([
       },
       {
         path: "admin",
-        element: (
+        element: routeElement(
           <ProtectedRoute>
             <AdminPage />
           </ProtectedRoute>
@@ -146,7 +179,7 @@ const router = createBrowserRouter([
       },
       {
         path: "credits",
-        element: (
+        element: routeElement(
           <ProtectedRoute>
             <CreditsPage />
           </ProtectedRoute>
@@ -154,7 +187,7 @@ const router = createBrowserRouter([
       },
       {
         path: "profile",
-        element: (
+        element: routeElement(
           <ProtectedRoute>
             <ProfilePage />
           </ProtectedRoute>

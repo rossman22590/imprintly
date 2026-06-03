@@ -1,6 +1,14 @@
 import { createContext, useCallback, useContext, useState, useEffect } from "react";
+import axiosInstance from "../lib/axios";
+import { API_ENDPOINTS } from "../utils/api-endpoints";
 
 const AuthContext = createContext(null);
+
+const clearStoredAuth = () => {
+  localStorage.removeItem("token");
+  localStorage.removeItem("refreshToken");
+  localStorage.removeItem("user");
+};
 
 export function AuthContextProvider({ children }) {
   // starting with isLoading as true since we need to check auth on mount!!
@@ -8,45 +16,51 @@ export function AuthContextProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
 
-  const authenticateUser = useCallback((jwt, userInfo) => {
-    localStorage.setItem("token", jwt);
-    localStorage.setItem("user", JSON.stringify(userInfo));
+  const authenticateUser = useCallback((userInfoOrToken, maybeUserInfo) => {
+    const userInfo = maybeUserInfo || userInfoOrToken;
+
+    clearStoredAuth();
     setIsAuthenticated(true);
     setUser(userInfo);
   }, []);
 
   const unauthenticateUser = useCallback((callback) => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("user");
+    clearStoredAuth();
     setIsAuthenticated(false);
     setUser(null);
+
+    axiosInstance
+      .post(API_ENDPOINTS.AUTH.LOGOUT)
+      .catch((error) => {
+        console.error("Error signing out:", error);
+      });
 
     // consumers can pass this callback to handle navigation
     callback?.();
   }, []);
 
-  const checkAuthStatus = useCallback(() => {
+  const checkAuthStatus = useCallback(async () => {
     setIsLoading(true);
 
     try {
-      const jwt = localStorage.getItem("token");
-      const stringifiedUser = localStorage.getItem("user");
+      const { data } = await axiosInstance.get(API_ENDPOINTS.PROFILE.GET, {
+        suppressAuthErrorLog: true,
+      });
+      const userInfo = data?.user;
 
-      if (jwt && stringifiedUser) {
-        const userInfo = JSON.parse(stringifiedUser);
+      if (userInfo) {
+        clearStoredAuth();
         setIsAuthenticated(true);
         setUser(userInfo);
       } else {
-        // no auth data found
         setIsAuthenticated(false);
         setUser(null);
       }
     } catch (error) {
-      console.error("Error checking auth status:", error);
-      localStorage.removeItem("token");
-      localStorage.removeItem("refreshToken");
-      localStorage.removeItem("user");
+      if (error?.response?.status !== 401) {
+        console.error("Error checking auth status:", error);
+      }
+      clearStoredAuth();
       setIsAuthenticated(false);
       setUser(null);
     } finally {
@@ -57,7 +71,6 @@ export function AuthContextProvider({ children }) {
   const updateUser = useCallback((updatedUserInfo) => {
     setUser((currentUser) => {
       const newUserInfo = { ...(currentUser || {}), ...updatedUserInfo };
-      localStorage.setItem("user", JSON.stringify(newUserInfo));
       return newUserInfo;
     });
   }, []);

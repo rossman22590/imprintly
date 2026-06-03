@@ -6,7 +6,10 @@ const {
 } = require("./groqbook.generator");
 const { runGeminiEditorialTask } = require("./gemini.generator");
 const { normalizeBookBiblePayload, serializeBookBible } = require("./book-bible");
-const { getBookTypeFamily } = require("./book-type-guidance");
+const {
+  getBookTypeChapterGuidance,
+  getBookTypeFamily,
+} = require("./book-type-guidance");
 
 const BIBLE_JSON_SHAPE =
   '{"characters":"","locations":"","worldRules":"","timeline":"","styleGuide":"","canonFacts":"","unresolvedThreads":"","notes":""}';
@@ -58,34 +61,25 @@ function getGraphicsPolicy(includeTextGraphics = false) {
   ].join(" ");
 }
 
-function getEditorialBookTypeRules(genre = "") {
+function getBookTypeReviewFocus(genre = "") {
   const family = getBookTypeFamily(genre);
 
   if (family === "children") {
     return [
-      "Children's picture-book rules:",
-      "Treat each generated section as one illustrated scene, not a long prose chapter.",
-      "Keep only final story prose. Do not output labels such as Left Page, Right Page, Story Text, Illustration Prompt, Art Notes, Image Prompt, or production direction.",
-      "The opening 45-80 words should work as the short paragraph under the image page.",
-      "The remaining story text should be fuller read-aloud prose, roughly twice the image-page text when enough content exists.",
-      "Use clear character continuity, age-appropriate language, sensory action, playful rhythm, and a gentle page-turn hook.",
-    ].join(" ");
+      "- children's book problems: adult essay tone, weak read-aloud rhythm, missing recurring character continuity, vague visual beat, too much text for two pages, or lesson-plan structure",
+    ].join("\n");
   }
 
-  if (family === "workbook") {
+  if (family === "learning") {
     return [
-      "Workbook rules:",
-      "Preserve worksheet structure, fill-in blanks, ruled answer lines, checkboxes, short prompts, examples, practice tasks, answer spaces, and printable formatting.",
-      "Do not rewrite workbook material into passive textbook chapters unless the user explicitly asked for a textbook.",
-    ].join(" ");
+      "- workbook problems: passive textbook prose, missing exercises, missing fill-in blanks or answer lines, unclear directions, too little on-page practice, or answer spaces that will not render cleanly",
+    ].join("\n");
   }
 
   if (family === "textbook") {
     return [
-      "Textbook rules:",
-      "Write like a real textbook chapter with learning objectives, key terms, concept sections, examples or case studies, chapter summary, and review questions.",
-      "Do not add workbook-style blanks or answer lines unless the user explicitly asked for exercises.",
-    ].join(" ");
+      "- textbook problems: missing learning objectives, missing key terms, weak concept sequence, undefined terminology, thin worked examples, absent chapter summary, missing review questions, or casual blog/workbook formatting",
+    ].join("\n");
   }
 
   return "";
@@ -162,6 +156,9 @@ function buildChapterCritiquePrompt({
   draftContent,
   includeTextGraphics,
 }) {
+  const bookTypeGuidance = getBookTypeChapterGuidance(genre);
+  const bookTypeReviewFocus = getBookTypeReviewFocus(genre);
+
   return `You are a senior book editor reviewing one drafted chapter before publication.
 
 Book title: ${bookTitle}
@@ -179,8 +176,8 @@ ${bookBible || "Not provided."}
 Graphics policy:
 ${getGraphicsPolicy(includeTextGraphics)}
 
-Book-type rules:
-${getEditorialBookTypeRules(genre) || "Use the expected structure and reader experience for this book type."}
+Book type guidance:
+${bookTypeGuidance}
 
 Review the draft for:
 - weak or generic writing
@@ -189,8 +186,8 @@ Review the draft for:
 - continuity errors against prior chapters or the Book Bible
 - fiction problems: weak scene goal, low conflict, POV drift, missing emotional consequence, missing hook
 - nonfiction problems: unsupported claims, vague advice, invented citations, thin examples, missing caveats, weak source discipline
-- book-type problems: children scene labels/art notes, missing workbook answer spaces, or missing textbook structure
 - accidental ASCII diagrams or visual blocks that violate the graphics policy
+${bookTypeReviewFocus}
 
 Return concise editorial notes only. Do not rewrite yet.
 
@@ -211,6 +208,8 @@ function buildChapterRewritePrompt({
   critique,
   includeTextGraphics,
 }) {
+  const bookTypeGuidance = getBookTypeChapterGuidance(genre);
+
   return `You are a senior book editor rewriting a drafted chapter into the best publishable version.
 
 Book title: ${bookTitle}
@@ -231,8 +230,8 @@ ${critique || "Improve clarity, specificity, continuity, and publishing polish."
 Graphics policy:
 ${getGraphicsPolicy(includeTextGraphics)}
 
-Book-type rules:
-${getEditorialBookTypeRules(genre) || "Use the expected structure and reader experience for this book type."}
+Book type guidance:
+${bookTypeGuidance}
 
 Rewrite rules:
 1. Return only the revised chapter markdown.
@@ -240,8 +239,10 @@ Rewrite rules:
 3. Strengthen continuity with prior chapters and the Book Bible.
 4. For nonfiction, make the chapter less generic: use a clear thesis, reader promise, concrete scenarios, examples, objections, caveats, consequences, and practical next steps. Do not invent citations. If a claim needs sourcing, phrase it carefully instead of fabricating proof.
 5. For fiction, strengthen scene goals, conflict, choices, subtext, emotional consequence, and the hook into the next chapter.
-6. Follow the graphics policy exactly.
-7. Follow the book-type rules exactly.
+6. For children's books, preserve storybook rhythm, age-appropriate language, recurring character continuity, one clear illustration-page beat, a 45-80 word opening story paragraph for the image page, and a fuller next text page that is roughly twice as long as the image-page paragraph. Remove any leaked "Left Page"/"Right Page" headings, image prompts, or illustration-description sections from the manuscript.
+7. For workbooks, preserve and improve exercises, fill-in blanks, answer lines, checkboxes, reflection prompts, and worksheet sections.
+8. For textbooks, preserve and improve textbook structure: Learning Objectives, Key Terms, scaffolded concept sections, definitions, worked examples or cases, Chapter Summary, and Review Questions.
+9. Follow the graphics policy exactly.
 
 <draft>
 ${draftContent}
@@ -469,6 +470,8 @@ async function runPremiumChapterPipeline({
 }
 
 module.exports = {
+  buildChapterCritiquePrompt,
+  buildChapterRewritePrompt,
   buildEnhancedBookContext,
   getGraphicsPolicy,
   runPremiumChapterPipeline,

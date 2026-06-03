@@ -3,6 +3,7 @@ const ENV = {
   PORT: process.env.PORT ?? 3000,
   DB_URI: process.env.DB_URI ?? "",
   JWT_SECRET_KEY: process.env.JWT_SECRET_KEY ?? "",
+  API_KEY_HASH_SECRET: process.env.API_KEY_HASH_SECRET ?? "",
   GEMINI_API_KEY: process.env.GEMINI_API_KEY ?? "",
   GROQ_API_KEY: process.env.GROQ_API_KEY ?? "",
   DEFAULT_AI_PROVIDER: process.env.DEFAULT_AI_PROVIDER ?? "groq",

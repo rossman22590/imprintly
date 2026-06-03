@@ -104,27 +104,28 @@ test("Gemini section prompt makes novel chapters narrative", () => {
   assert.doesNotMatch(prompt, /reader takeaways/);
 });
 
-test("Gemini section prompt makes children books two individual pages", () => {
+test("Gemini section prompt makes children's books page-based", () => {
   const prompt = buildGeminiSectionPrompt({
-    chapterTitle: "The Door Under the Bed",
-    bookTitle: "Barnaby and the Under-Bed Express",
+    chapterTitle: "The Puddle Parade",
+    bookTitle: "Mira's Rainy Day",
     genre: "Children's Book",
-    chapterLength: "medium",
   });
 
-  assert.match(prompt, /children's picture-book scene/);
-  assert.match(prompt, /two individual children's book pages/);
-  assert.match(prompt, /image on top/);
-  assert.match(prompt, /45-80 words/);
-  assert.match(prompt, /roughly twice as much read-aloud story copy/);
-  assert.match(prompt, /Story page text amount: Medium/);
-  assert.doesNotMatch(prompt, /reader takeaways/);
+  assert.match(prompt, /two-page children's picture-book scene/);
+  assert.match(prompt, /children's-book story text/);
+  assert.match(prompt, /45-80 words work as the image-page paragraph/);
+  assert.match(prompt, /story prose, not a caption/);
+  assert.match(prompt, /roughly twice as long as the image-page paragraph/);
+  assert.match(prompt, /illustration page/);
+  assert.match(prompt, /Story page text amount/);
+  assert.match(prompt, /140-230 words|220-360 words/);
+  assert.doesNotMatch(prompt, /3,500-5,000 words/);
 });
 
-test("Gemini section prompt makes textbook chapters use textbook structure", () => {
+test("Gemini section prompt makes textbooks use textbook formatting", () => {
   const prompt = buildGeminiSectionPrompt({
-    chapterTitle: "Forces and Motion",
-    bookTitle: "Physics Foundations",
+    chapterTitle: "Cellular Respiration",
+    bookTitle: "Biology Foundations",
     genre: "Textbook",
   });
 
@@ -163,14 +164,14 @@ test("novel outlines strip textbook numbering from chapter titles", () => {
   ]);
 });
 
-test("children outlines strip chapter and page labels from scene titles", () => {
+test("children's outlines use spread titles instead of chapter fallbacks", () => {
   const outline = normalizeOutlineJson(
     {
-      title: "Barnaby",
+      title: "Mira's Rainy Day",
       structure: {
-        "Scene 1 - The Glowing Sock": "Barnaby finds a tiny portal.",
-        "Pages 3-4: The Under-Bed Station": "The train whistles softly.",
-        "Chapter 3: Monster Tea": "Everyone shares moonberry tea.",
+        "Spread 1: The First Puddle": "Mira spots a shiny puddle.",
+        "Page 3-4: Umbrella Parade": "The friends march in the rain.",
+        "Chapter 3: Rainbow Boots": "Mira finds courage.",
       },
     },
     { genre: "Children's Book" }
@@ -178,7 +179,7 @@ test("children outlines strip chapter and page labels from scene titles", () => 
 
   assert.deepEqual(
     outline.chapters.map((chapter) => chapter.title),
-    ["The Glowing Sock", "The Under-Bed Station", "Monster Tea"]
+    ["The First Puddle", "Umbrella Parade", "Rainbow Boots"]
   );
-  assert.deepEqual(outline.chapters[0].outlinePath, ["The Glowing Sock"]);
+  assert.deepEqual(outline.chapters[0].outlinePath, ["The First Puddle"]);
 });

@@ -64,21 +64,11 @@ function SignInPage() {
     try {
       // login request
       const {
-        data: { token },
+        data: { user },
       } = await axiosInstance.post(API_ENDPOINTS.AUTH.LOGIN, trimmedData);
 
-      // get profile info
-      const { data: profileInfo } = await axiosInstance.get(
-        API_ENDPOINTS.PROFILE.GET,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
       // update auth context
-      authenticateUser(token, profileInfo.user);
+      authenticateUser(user);
 
       toast.success("Welcome back!");
 
@@ -100,8 +90,9 @@ function SignInPage() {
         password: errorMessage,
       }));
 
-      // clear sensitive data on error
-      localStorage.clear();
+      localStorage.removeItem("token");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
     } finally {
       setIsLoading(false);
     }

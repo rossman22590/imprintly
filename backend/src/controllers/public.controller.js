@@ -209,6 +209,44 @@ async function getPublicBookshelf(req, res) {
   }
 }
 
+async function getCommunityBookshelf(req, res) {
+  try {
+    setPublicShareHeaders(res);
+
+    const books = await Book.find({ "communityListing.isListed": true })
+      .sort({
+        "communityListing.listedAt": -1,
+        updatedAt: -1,
+        createdAt: -1,
+      })
+      .limit(96)
+      .select(
+        "title subtitle author coverImage genre audience language chapters._id previewShare communityListing kdp.assets.description kdp.assets.backCoverBlurb createdAt updatedAt userId"
+      )
+      .populate({
+        path: "userId",
+        select:
+          "name avatar storeUrl shelfPageName shelfPhotoUrl bookshelfShare status",
+        match: activeOwnerQuery(),
+      })
+      .lean();
+
+    const visibleBooks = books.filter(
+      (book) => book.userId && !isBannedOwner(book.userId)
+    );
+
+    return res.status(200).json({
+      message: "Community bookshelf retrieved successfully.",
+      count: visibleBooks.length,
+      books: visibleBooks.map(serializeCommunityBook),
+    });
+  } catch (error) {
+    console.error("Error getting community bookshelf:", error);
+
+    return res.status(500).json({ error: "Internal Server Error!" });
+  }
+}
+
 async function getCommunityBook(req, res) {
   try {
     const { bookId } = req.params;
@@ -244,44 +282,6 @@ async function getCommunityBook(req, res) {
     if (error.name === "CastError") {
       return res.status(400).json({ error: "Invalid book ID format!" });
     }
-
-    return res.status(500).json({ error: "Internal Server Error!" });
-  }
-}
-
-async function getCommunityBookshelf(req, res) {
-  try {
-    setPublicShareHeaders(res);
-
-    const books = await Book.find({ "communityListing.isListed": true })
-      .sort({
-        "communityListing.listedAt": -1,
-        updatedAt: -1,
-        createdAt: -1,
-      })
-      .limit(96)
-      .select(
-        "title subtitle author coverImage genre audience language chapters._id previewShare communityListing kdp.assets.description kdp.assets.backCoverBlurb createdAt updatedAt userId"
-      )
-      .populate({
-        path: "userId",
-        select:
-          "name avatar storeUrl shelfPageName shelfPhotoUrl bookshelfShare status",
-        match: activeOwnerQuery(),
-      })
-      .lean();
-
-    const visibleBooks = books.filter(
-      (book) => book.userId && !isBannedOwner(book.userId)
-    );
-
-    return res.status(200).json({
-      message: "Community bookshelf retrieved successfully.",
-      count: visibleBooks.length,
-      books: visibleBooks.map(serializeCommunityBook),
-    });
-  } catch (error) {
-    console.error("Error getting community bookshelf:", error);
 
     return res.status(500).json({ error: "Internal Server Error!" });
   }

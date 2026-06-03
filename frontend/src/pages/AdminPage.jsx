@@ -108,7 +108,8 @@ function getInitials(name = "", email = "") {
 
 const ADMIN_TABS = [
   { id: "users", label: "Users", icon: Users },
-  { id: "runs", label: "Runs", icon: Activity },
+  { id: "live", label: "Live", icon: RefreshCw },
+  { id: "jobs", label: "Jobs", icon: Activity },
 ];
 
 const RUN_STATUS_OPTIONS = [
@@ -454,7 +455,7 @@ function RunsPanel({
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
         <StatBlock
           icon={Activity}
-          label="Runs"
+          label="Jobs"
           value={runsSummary?.totalRuns || 0}
         />
         <StatBlock
@@ -483,7 +484,7 @@ function RunsPanel({
         <div className="p-4 border-b border-slate-200 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr),12rem,12rem] gap-3">
           <Input
             icon={Search}
-            label="Search runs"
+            label="Search jobs"
             name="admin-run-search"
             value={runSearch}
             onChange={(event) => setRunSearch(event.target.value)}
@@ -536,7 +537,7 @@ function RunsPanel({
                     colSpan="6"
                     className="px-4 py-10 text-center text-slate-500 text-sm"
                   >
-                    Loading runs...
+                    Loading jobs...
                   </td>
                 </tr>
               ) : runsList.length === 0 ? (
@@ -545,7 +546,7 @@ function RunsPanel({
                     colSpan="6"
                     className="px-4 py-10 text-center text-slate-500 text-sm"
                   >
-                    No generation runs found.
+                    No generation jobs found.
                   </td>
                 </tr>
               ) : (
@@ -796,6 +797,118 @@ function RunDetailsModal({ isOpen, onClose, run }) {
         </div>
       )}
     </Modal>
+  );
+}
+
+function getLiveJobCounts(jobs = []) {
+  return jobs.reduce(
+    (counts, job) => ({
+      ...counts,
+      [job.status]: Number(counts[job.status] || 0) + 1,
+    }),
+    {}
+  );
+}
+
+function LiveJobsPanel({ liveJobs, isLoading, onRefresh, onOpenRun }) {
+  const counts = getLiveJobCounts(liveJobs);
+
+  return (
+    <>
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        <StatBlock
+          icon={RefreshCw}
+          label="Generating"
+          value={counts.generating || 0}
+        />
+        <StatBlock icon={Clock3} label="Queued" value={counts.queued || 0} />
+        <StatBlock icon={Ban} label="Cancelling" value={counts.cancelling || 0} />
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-200 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-slate-950 text-base font-semibold">
+              Live Generations
+            </h2>
+            <p className="text-slate-500 text-xs mt-1">
+              Jobs currently queued, generating, or cancelling.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            icon={RefreshCw}
+            onClick={onRefresh}
+            isLoading={isLoading}
+          >
+            Refresh Live
+          </Button>
+        </div>
+
+        <div className="divide-y divide-slate-100">
+          {isLoading ? (
+            <p className="px-4 py-10 text-center text-sm text-slate-500">
+              Loading live generations...
+            </p>
+          ) : liveJobs.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-slate-500">
+              No active generation jobs.
+            </p>
+          ) : (
+            liveJobs.map((run) => (
+              <article
+                key={run.id}
+                className="p-4 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr),14rem,13rem] gap-4 hover:bg-slate-50/70"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={run.status} />
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 uppercase">
+                      {run.provider}
+                    </span>
+                    <span className="font-mono text-xs text-slate-400">
+                      {formatRunId(run.id)}
+                    </span>
+                  </div>
+                  <h3 className="mt-2 truncate text-sm font-semibold text-slate-950">
+                    {run.book?.title || run.payloadTitle || "Untitled job"}
+                  </h3>
+                  <p className="mt-1 truncate text-xs text-slate-500">
+                    {run.user?.email || "No user"}
+                    {run.progress?.currentChapterTitle
+                      ? ` - ${run.progress.currentChapterTitle}`
+                      : ""}
+                  </p>
+                  {run.progress?.message && (
+                    <p className="mt-2 text-xs font-medium text-slate-700">
+                      {run.progress.message}
+                    </p>
+                  )}
+                </div>
+
+                <RunProgressCell progress={run.progress} />
+
+                <div className="flex flex-col items-start lg:items-end gap-2">
+                  <p className="text-xs text-slate-500">
+                    Updated {formatDate(run.updatedAt)}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => onOpenRun(run)}
+                  >
+                    Details
+                  </Button>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -1372,6 +1485,7 @@ function AdminPage() {
   const [activeAdminView, setActiveAdminView] = useState("users");
   const [usersList, setUsersList] = useState([]);
   const [runsList, setRunsList] = useState([]);
+  const [liveJobs, setLiveJobs] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedRun, setSelectedRun] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -1407,6 +1521,7 @@ function AdminPage() {
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRunsLoading, setIsRunsLoading] = useState(true);
+  const [isLiveJobsLoading, setIsLiveJobsLoading] = useState(true);
   const [isPlansLoading, setIsPlansLoading] = useState(true);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [isSavingUser, setIsSavingUser] = useState(false);
@@ -1512,7 +1627,7 @@ function AdminPage() {
     setIsRunsLoading(true);
 
     try {
-      const { data } = await axiosInstance.get(API_ENDPOINTS.ADMIN.RUNS, {
+      const { data } = await axiosInstance.get(API_ENDPOINTS.ADMIN.JOBS, {
         params: {
           search: runSearch,
           status: runStatusFilter,
@@ -1522,22 +1637,47 @@ function AdminPage() {
         },
       });
 
-      setRunsList(data.runs || []);
+      setRunsList(data.jobs || data.runs || []);
       setRunsSummary(data.summary || null);
       setRunsPagination(data.pagination || null);
     } catch (error) {
-      console.error("Error fetching admin runs:", error);
-      toast.error(error.response?.data?.error || "Failed to load admin runs.");
+      console.error("Error fetching admin jobs:", error);
+      toast.error(error.response?.data?.error || "Failed to load admin jobs.");
     } finally {
       setIsRunsLoading(false);
     }
   }, [isAdmin, runProviderFilter, runSearch, runStatusFilter, runsPage]);
 
+  const fetchLiveJobs = useCallback(async () => {
+    if (!isAdmin) return;
+
+    setIsLiveJobsLoading(true);
+
+    try {
+      const { data } = await axiosInstance.get(API_ENDPOINTS.ADMIN.JOBS, {
+        params: {
+          live: true,
+          limit: 50,
+        },
+      });
+
+      setLiveJobs(data.jobs || data.runs || []);
+    } catch (error) {
+      console.error("Error fetching live generation jobs:", error);
+      toast.error(
+        error.response?.data?.error || "Failed to load live generation jobs."
+      );
+    } finally {
+      setIsLiveJobsLoading(false);
+    }
+  }, [isAdmin]);
+
   const handleRefreshAdmin = useCallback(() => {
     fetchPlans();
+    fetchLiveJobs();
     fetchRuns();
     fetchUsers();
-  }, [fetchPlans, fetchRuns, fetchUsers]);
+  }, [fetchLiveJobs, fetchPlans, fetchRuns, fetchUsers]);
 
   useEffect(() => {
     fetchPlans();
@@ -1554,6 +1694,20 @@ function AdminPage() {
 
     return () => window.clearTimeout(timer);
   }, [fetchRuns]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchLiveJobs, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [fetchLiveJobs]);
+
+  useEffect(() => {
+    if (activeAdminView !== "live") return undefined;
+
+    const interval = window.setInterval(fetchLiveJobs, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [activeAdminView, fetchLiveJobs]);
 
   useEffect(() => {
     setPage(1);
@@ -1887,7 +2041,7 @@ function AdminPage() {
               Admin Console
             </p>
             <h1 className="text-slate-950 text-2xl md:text-3xl font-bold mt-1">
-              Users, credits, and runs
+              Users, credits, and jobs
             </h1>
           </div>
 
@@ -1901,7 +2055,12 @@ function AdminPage() {
               variant="secondary"
               icon={RefreshCw}
               onClick={handleRefreshAdmin}
-              isLoading={isLoading || isRunsLoading || isPlansLoading}
+              isLoading={
+                isLoading ||
+                isRunsLoading ||
+                isLiveJobsLoading ||
+                isPlansLoading
+              }
             >
               Refresh
             </Button>
@@ -2110,6 +2269,13 @@ function AdminPage() {
               )}
             </section>
           </>
+        ) : activeAdminView === "live" ? (
+          <LiveJobsPanel
+            liveJobs={liveJobs}
+            isLoading={isLiveJobsLoading}
+            onRefresh={fetchLiveJobs}
+            onOpenRun={handleOpenRunDetails}
+          />
         ) : (
           <RunsPanel
             runsList={runsList}

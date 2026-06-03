@@ -1,12 +1,13 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
+  getDefaultChapterImageCount,
+  getBookTypeStructureCount,
+  getChildrenSpreadCountFromPages,
   getBookTypeChapterGuidance,
   getBookTypeFamily,
   getBookTypeImageGuidance,
   getBookTypeOutlineGuidance,
-  getBookTypeStructureCount,
-  getChildrenSceneCountFromPages,
 } = require("./book-type-guidance");
 
 test("recognizes novel and genre fiction book types", () => {
@@ -42,37 +43,49 @@ test("novel image guidance prevents generic instructional visuals", () => {
   assert.match(imageGuidance, /not instructional graphics/);
 });
 
-test("children book guidance treats page count as paired image and text pages", () => {
-  const outlineGuidance = getBookTypeOutlineGuidance("Children's Book");
-  const chapterGuidance = getBookTypeChapterGuidance("children fantasy book");
-  const imageGuidance = getBookTypeImageGuidance("Picture Book");
-
-  assert.equal(getBookTypeFamily("children fantasy book"), "children");
-  assert.equal(getChildrenSceneCountFromPages(20), 10);
+test("recognizes children's book variants as individual illustrated pages", () => {
+  assert.equal(getBookTypeFamily("Childrens Picture Book"), "children");
+  assert.equal(getBookTypeFamily("kids storybook"), "children");
+  assert.equal(getDefaultChapterImageCount("Children's Book"), 1);
+  assert.equal(getChildrenSpreadCountFromPages(20), 10);
   assert.equal(getBookTypeStructureCount("Children's Book", 20), 10);
+
+  const outlineGuidance = getBookTypeOutlineGuidance("Picture Book");
+  const chapterGuidance = getBookTypeChapterGuidance("Children's Book");
+  const imageGuidance = getBookTypeImageGuidance("kids book");
+
   assert.match(outlineGuidance, /20 pages means 10 image pages and 10 text pages/);
-  assert.match(chapterGuidance, /illustration page with the image on top/);
-  assert.match(chapterGuidance, /Do not make the second page a tiny blurb/);
-  assert.match(imageGuidance, /story paragraph under the image/);
+  assert.match(chapterGuidance, /two individual children's-book pages/);
+  assert.match(imageGuidance, /Preserve recurring character identity/);
+  assert.match(imageGuidance, /image page/);
 });
 
-test("workbook guidance preserves printable answer spaces", () => {
-  const chapterGuidance = getBookTypeChapterGuidance("Workbook");
+test("workbook guidance preserves fill-in and worksheet formatting", () => {
+  assert.equal(getBookTypeFamily("Activity Workbook"), "learning");
+  assert.equal(getBookTypeFamily("worksheet pack"), "learning");
+  assert.equal(getDefaultChapterImageCount("Workbook"), 1);
 
-  assert.equal(getBookTypeFamily("Workbook"), "learning");
-  assert.match(chapterGuidance, /fill-in-the-blank/);
-  assert.match(chapterGuidance, /answer lines/);
-  assert.match(chapterGuidance, /checkboxes/);
+  const outlineGuidance = getBookTypeOutlineGuidance("Workbook");
+  const chapterGuidance = getBookTypeChapterGuidance("Study Guide");
+  const imageGuidance = getBookTypeImageGuidance("Workbook");
+
+  assert.match(outlineGuidance, /fill-in blanks/);
+  assert.match(chapterGuidance, /answer lines made from underscores/);
+  assert.match(imageGuidance, /fill-in prompts should live in the manuscript text/);
 });
 
-test("textbook guidance uses textbook structure without workbook blanks", () => {
-  const outlineGuidance = getBookTypeOutlineGuidance("Textbook");
-  const chapterGuidance = getBookTypeChapterGuidance("Textbook");
-
+test("textbook guidance enforces textbook structure", () => {
   assert.equal(getBookTypeFamily("Textbook"), "textbook");
-  assert.match(outlineGuidance, /formal textbook/);
-  assert.match(chapterGuidance, /Learning Objectives/);
-  assert.match(chapterGuidance, /Key Terms/);
+  assert.equal(getBookTypeFamily("college text book"), "textbook");
+  assert.equal(getBookTypeStructureCount("Textbook", 12), 12);
+
+  const outlineGuidance = getBookTypeOutlineGuidance("Textbook");
+  const chapterGuidance = getBookTypeChapterGuidance("Academic Textbook");
+  const imageGuidance = getBookTypeImageGuidance("Textbook");
+
+  assert.match(outlineGuidance, /complete textbook chapters/);
+  assert.match(outlineGuidance, /learning objectives, key terms/);
+  assert.match(chapterGuidance, /Learning Objectives, Key Terms/);
   assert.match(chapterGuidance, /review questions/);
-  assert.match(chapterGuidance, /Do not use workbook fill-in blanks/);
+  assert.match(imageGuidance, /textbook publishing art/);
 });

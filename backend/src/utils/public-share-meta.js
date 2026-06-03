@@ -4,6 +4,17 @@ const User = require("../models/User");
 const DEFAULT_SHARE_IMAGE = "/images/hero-image.png";
 const DEFAULT_SITE_NAME = "Bookify";
 
+function activeOwnerQuery(query = {}) {
+  return {
+    ...query,
+    $or: [{ status: "active" }, { status: { $exists: false } }],
+  };
+}
+
+function isBannedOwner(user) {
+  return user?.status === "banned";
+}
+
 function compactText(value = "", maxLength = 180) {
   const text = String(value || "")
     .replace(/```[\s\S]*?```/g, " ")
@@ -89,7 +100,9 @@ function buildMeta({
 }
 
 async function getShelfMeta(token, options = {}) {
-  const user = await User.findOne({ "bookshelfShare.token": token }).lean();
+  const user = await User.findOne(
+    activeOwnerQuery({ "bookshelfShare.token": token })
+  ).lean();
 
   if (!user) return null;
 
@@ -131,11 +144,11 @@ async function getPreviewMeta(token, options = {}) {
     .populate({
       path: "userId",
       select:
-        "name avatar shelfPageName shelfPhotoUrl publicShareMetaTitle publicShareMetaDescription publicShareImageUrl",
+        "name avatar shelfPageName shelfPhotoUrl publicShareMetaTitle publicShareMetaDescription publicShareImageUrl status",
     })
     .lean();
 
-  if (!book) return null;
+  if (!book || isBannedOwner(book.userId)) return null;
 
   const owner = book.userId || {};
   const kdpAssets = book.kdp?.assets || {};
@@ -183,9 +196,7 @@ async function getCommunityMeta(options = {}) {
 
   return buildMeta({
     title: "Bookify Community Bookshelf",
-    description: `Browse books shared by Bookify authors${
-      bookCount ? `, including ${bookCount} community-posted titles` : ""
-    }. Read previews and find purchase links for physical copies.`,
+    description: `Browse ${bookCount ? `${bookCount} ` : ""}community books shared by Bookify authors, including free PDFs, previews, and purchase links for physical copies.`,
     image: DEFAULT_SHARE_IMAGE,
     type: "website",
     ...options,
@@ -193,6 +204,10 @@ async function getCommunityMeta(options = {}) {
 }
 
 async function getCommunityBookMeta(bookId, options = {}) {
+  if (!/^[0-9a-fA-F]{24}$/.test(String(bookId || ""))) {
+    return null;
+  }
+
   const book = await Book.findOne({
     _id: bookId,
     "communityListing.isListed": true,
@@ -203,21 +218,23 @@ async function getCommunityBookMeta(bookId, options = {}) {
     })
     .lean();
 
-  if (!book || book.userId?.status === "banned") return null;
+  if (!book || isBannedOwner(book.userId)) return null;
 
+  const owner = book.userId || {};
   const kdpAssets = book.kdp?.assets || {};
-  const isFreePdf = Boolean(book.communityListing?.freeFullPdfEnabled);
   const description =
     kdpAssets.description ||
     kdpAssets.backCoverBlurb ||
     book.subtitle ||
-    `${isFreePdf ? "Read the free full PDF of" : "Browse"} ${book.title}.`;
+    (book.communityListing?.freeFullPdfEnabled
+      ? `Read the free full PDF of ${book.title}.`
+      : `Browse ${book.title} on the Bookify Community Bookshelf.`);
 
   return buildMeta({
-    title: `${book.title} | Bookify Community`,
+    title: book.title ? `${book.title} | Bookify Community` : "Bookify Community",
     description,
-    image: book.coverImage || book.userId?.avatar || DEFAULT_SHARE_IMAGE,
-    author: book.author || book.userId?.name,
+    image: book.coverImage || owner.avatar || DEFAULT_SHARE_IMAGE,
+    author: book.author || owner.name,
     type: "book",
     ...options,
   });
@@ -236,7 +253,7 @@ async function getPublicShareMetaForPath(pathname = "", options = {}) {
     return getCommunityBookMeta(route.bookId, options);
   }
 
-  if (!route.token) return null;
+  if (!route?.token) return null;
 
   if (route.type === "shelf") {
     return getShelfMeta(route.token, options);

@@ -6,8 +6,8 @@ import {
   API_ENDPOINTS,
   resolveImageUrl,
 } from "../utils/api-endpoints";
-import { getPublicSharePath } from "../utils/public-share";
 import { markdownToPlainText } from "../utils/markdown-clipboard";
+import { getPublicSharePath } from "../utils/public-share";
 import { applyShareMeta, compactMetaText } from "../utils/share-meta";
 import PdfFlipbook from "../components/PdfFlipbook";
 import LogoIcon from "../components/LogoIcon";
@@ -70,48 +70,52 @@ function CommunityBookReaderPage() {
     };
   }, [bookId]);
 
+  const pdfUrl = `${API_BASE_URL}${API_ENDPOINTS.PUBLIC.COMMUNITY_BOOKSHELF}/${bookId}/pdf`;
   const coverImageUrl = book?.coverImage
     ? resolveImageUrl(book.coverImage)
     : "/images/default-book-cover.jpg";
-  const description = markdownToPlainText(
-    book?.sales?.description || book?.subtitle || ""
+  const description = useMemo(
+    () =>
+      markdownToPlainText(book?.sales?.description || book?.subtitle || "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    [book]
   );
-  const pdfUrl = `${API_BASE_URL}${API_ENDPOINTS.PUBLIC.COMMUNITY_BOOKSHELF}/${bookId}/pdf`;
-  const purchaseUrl = book?.communityListing?.purchaseUrl || "";
   const previewToken = book?.previewShare?.token || "";
   const previewPath = previewToken
     ? getPublicSharePath(previewToken, book?.owner?.name)
     : "";
-
-  const title = useMemo(() => {
-    if (!book?.title) return "Bookify Community Reader";
-
-    return `${book.title} | Bookify Community`;
-  }, [book?.title]);
+  const authorShelfPath = book?.owner?.bookshelfShare?.token
+    ? getPublicSharePath(book.owner.bookshelfShare.token, book?.owner?.name)
+    : "";
+  const purchaseUrl = book?.communityListing?.purchaseUrl || "";
+  const hasFullPdf = Boolean(book?.fullPdf?.enabled);
 
   useEffect(() => {
     if (!book) return;
 
     applyShareMeta({
-      title,
-      description: compactMetaText(
-        description || `Read ${book.title} from the Bookify community.`,
-        180
-      ),
+      title: book.title ? `${book.title} | Bookify Community` : "Bookify Community",
+      description:
+        compactMetaText(description, 180) ||
+        (hasFullPdf
+          ? `Read the free full PDF of ${book.title}.`
+          : `Browse ${book.title} on the Bookify Community Bookshelf.`),
       image: coverImageUrl,
       author: book.author || book.owner?.name,
       type: "book",
     });
-  }, [book, coverImageUrl, description, title]);
+  }, [book, coverImageUrl, description, hasFullPdf]);
 
   if (isLoading) {
     return (
-      <main className="min-h-screen px-5 py-10" style={readerBackground}>
-        <div className="mx-auto max-w-6xl animate-pulse">
-          <div className="mb-8 h-10 w-48 rounded-xl bg-blue-100" />
-          <div className="grid gap-8 lg:grid-cols-[18rem_1fr]">
-            <div className="h-[28rem] rounded-xl bg-blue-100" />
-            <div className="h-[38rem] rounded-xl bg-blue-100" />
+      <main className="min-h-screen px-4 py-8 text-[#171717]" style={readerBackground}>
+        <div className="mx-auto grid max-w-7xl animate-pulse gap-8 lg:grid-cols-[20rem_minmax(0,1fr)]">
+          <div className="h-[31rem] rounded-lg bg-white/70" />
+          <div className="space-y-4">
+            <div className="h-12 rounded-lg bg-white/70" />
+            <div className="h-28 rounded-lg bg-white/70" />
+            <div className="h-[36rem] rounded-lg bg-white/70" />
           </div>
         </div>
       </main>
@@ -121,22 +125,20 @@ function CommunityBookReaderPage() {
   if (errorMessage || !book) {
     return (
       <main
-        className="flex min-h-screen items-center justify-center px-5"
+        className="flex min-h-screen items-center justify-center px-4 text-[#171717]"
         style={readerBackground}
       >
         <section className="max-w-md text-center">
-          <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-xl bg-[#171717] text-white">
+          <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-lg bg-[#171717] text-white">
             <Library className="size-7" />
           </div>
-          <h1 className="text-2xl font-black text-[#171717]">
-            Book unavailable
-          </h1>
-          <p className="mt-2 text-sm text-[#56534d]">
+          <h1 className="text-2xl font-black">Community book unavailable</h1>
+          <p className="mt-2 text-sm leading-6 text-[#56534d]">
             {errorMessage || "This community book is not active."}
           </p>
           <Link
             to="/community"
-            className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-[#1d4ed8] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#173ea8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
+            className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#1d4ed8] px-4 text-sm font-black text-white transition hover:bg-[#163ea8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8]"
           >
             <ArrowLeft className="size-4" />
             Community
@@ -146,134 +148,148 @@ function CommunityBookReaderPage() {
     );
   }
 
-  const isFreePdfEnabled = Boolean(book?.fullPdf?.enabled);
-
   return (
     <main className="min-h-screen text-[#171717]" style={readerBackground}>
-      <header className="border-b border-[#ded6c6] bg-white/76 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5 lg:px-8">
+      <header className="border-b border-[#ded6c6] bg-[#fffaf0]/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
           <Link
             to="/community"
-            className="inline-flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
-          >
-            <span className="inline-flex size-9 items-center justify-center rounded-xl bg-[#171717] text-white shadow-lg shadow-black/20">
-              <LogoIcon className="size-5" />
-            </span>
-            <span className="font-headline text-xl font-black text-[#171717]">
-              Bookify
-            </span>
-          </Link>
-
-          <Link
-            to="/community"
-            className="inline-flex items-center gap-2 rounded-xl border border-[#d7ccba] bg-white px-4 py-2 text-sm font-bold text-[#3f3b34] transition hover:bg-[#eef3ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
+            className="inline-flex items-center gap-2 rounded-md text-sm font-black text-[#171717] transition hover:text-[#1d4ed8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8]"
           >
             <ArrowLeft className="size-4" />
             Community
           </Link>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 rounded-md text-sm font-bold text-[#56534d] transition hover:text-[#171717] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8]"
+          >
+            <span className="inline-flex size-8 items-center justify-center rounded-lg bg-[#171717] text-white">
+              <LogoIcon className="size-4" />
+            </span>
+            Bookify
+          </Link>
         </div>
       </header>
 
-      <section className="mx-auto grid max-w-7xl gap-8 px-5 py-8 lg:grid-cols-[18rem_1fr] lg:px-8 lg:py-10">
-        <aside className="lg:sticky lg:top-8 lg:self-start">
+      <section className="mx-auto grid max-w-7xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[20rem_minmax(0,1fr)] lg:px-8">
+        <aside className="lg:sticky lg:top-6 lg:self-start">
           <img
             src={coverImageUrl}
             alt={`${book.title} cover`}
             onError={(event) => {
               event.currentTarget.src = "/images/default-book-cover.jpg";
             }}
-            className="mx-auto aspect-[4/5] w-full max-w-72 rounded-xl border border-white/70 object-cover shadow-2xl shadow-[#1d4ed8]/14"
+            className="mx-auto aspect-[16/25] w-full max-w-80 rounded-lg border border-[#ded6c6] bg-[#efe7d7] object-cover shadow-xl"
           />
 
-          <div className="mt-5 grid gap-2">
-            {isFreePdfEnabled && (
-              <>
-                <a
-                  href={pdfUrl}
-                  download
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#1d4ed8] px-4 text-sm font-black text-white transition hover:bg-[#173ea8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
-                >
-                  <Download className="size-4" />
-                  Download PDF
-                </a>
-                <a
-                  href={pdfUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#d7ccba] bg-white px-4 text-sm font-bold text-[#3f3b34] transition hover:bg-[#eef3ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
-                >
-                  <ExternalLink className="size-4" />
-                  Open PDF
-                </a>
-              </>
-            )}
-            {previewPath && (
-              <Link
-                to={previewPath}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#d7ccba] bg-white px-4 text-sm font-bold text-[#3f3b34] transition hover:bg-[#eef3ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
-              >
-                <BookOpen className="size-4" />
-                First Chapter
-              </Link>
-            )}
-            {purchaseUrl && (
-              <a
-                href={purchaseUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[#d7ccba] bg-white px-4 text-sm font-bold text-[#3f3b34] transition hover:bg-[#eef3ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8] focus-visible:ring-offset-2"
-              >
-                <Store className="size-4" />
-                Buy Copy
-              </a>
-            )}
-          </div>
-        </aside>
-
-        <div className="min-w-0">
-          <div className="mb-6">
-            <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#d7ccba] bg-white/74 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[#1d4ed8]">
-              <FileText className="size-3.5" />
-              Free Community PDF
+          <div className="mt-4 rounded-lg border border-[#ded6c6] bg-[#fffdf7] p-4 shadow-sm">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#1d4ed8]">
+              {book.genre || "Book"}
             </p>
-            <h1 className="max-w-4xl font-headline text-4xl font-black leading-[1.02] text-[#171717] md:text-6xl">
-              {book.title}
+            <h1 className="mt-2 text-2xl font-black leading-tight">
+              {book.title || "Untitled book"}
             </h1>
             {book.subtitle && (
-              <p className="mt-4 max-w-3xl text-xl font-semibold leading-8 text-[#56534d]">
+              <p className="mt-2 text-sm leading-6 text-[#56534d]">
                 {book.subtitle}
               </p>
             )}
-            <p className="mt-3 text-sm font-bold text-[#746f66]">
+            <p className="mt-3 text-sm font-semibold text-[#56534d]">
               by {book.author || book.owner?.name || "Bookify author"}
             </p>
+
+            <div className="mt-5 grid gap-2">
+              {hasFullPdf && (
+                <>
+                  <a
+                    href={pdfUrl}
+                    download
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#1d4ed8] px-3 text-sm font-black text-white transition hover:bg-[#163ea8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8]"
+                  >
+                    <Download className="size-4" />
+                    Download PDF
+                  </a>
+                  <a
+                    href={pdfUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[#d7ccba] bg-white px-3 text-sm font-black text-[#171717] transition hover:bg-[#eef3ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8]"
+                  >
+                    <ExternalLink className="size-4" />
+                    Open PDF
+                  </a>
+                </>
+              )}
+
+              {previewPath && (
+                <Link
+                  to={previewPath}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-[#d7ccba] bg-white px-3 text-sm font-black text-[#171717] transition hover:bg-[#eef3ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8]"
+                >
+                  <BookOpen className="size-4" />
+                  Read Preview
+                </Link>
+              )}
+
+              {purchaseUrl && (
+                <a
+                  href={purchaseUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#171717] px-3 text-sm font-black text-white transition hover:bg-[#2f2d2a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d79a00]"
+                >
+                  <Store className="size-4" />
+                  Buy Copy
+                </a>
+              )}
+
+              {authorShelfPath && (
+                <Link
+                  to={authorShelfPath}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-md text-sm font-black text-[#1d4ed8] transition hover:bg-[#eef3ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d4ed8]"
+                >
+                  <Library className="size-4" />
+                  Author Shelf
+                </Link>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        <section className="min-w-0">
+          <div className="mb-5 rounded-lg border border-[#ded6c6] bg-[#fffdf7] p-5 shadow-sm">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#d79a00]">
+              Community Reader
+            </p>
+            <h2 className="mt-2 text-3xl font-black tracking-normal md:text-5xl">
+              {hasFullPdf ? "Free full PDF" : "Full PDF is not enabled."}
+            </h2>
             {description && (
-              <p className="mt-5 max-w-3xl text-base leading-7 text-[#56534d]">
-                {description.slice(0, 520)}
+              <p className="mt-4 max-w-3xl text-base leading-7 text-[#56534d]">
+                {compactMetaText(description, 460)}
               </p>
             )}
           </div>
 
-          {isFreePdfEnabled ? (
+          {hasFullPdf ? (
             <PdfFlipbook
               pdfUrl={pdfUrl}
-              title={book.title}
+              title={book.title || "Community PDF"}
               themeId="minimal-white"
               maxPages={0}
             />
           ) : (
-            <section className="rounded-xl border border-[#ded6c6] bg-white/80 px-6 py-14 text-center shadow-xl shadow-black/8">
-              <FileText className="mx-auto mb-4 size-11 text-[#746f66]" />
-              <h2 className="text-2xl font-black text-[#171717]">
-                Full PDF is not enabled
+            <section className="rounded-lg border border-dashed border-[#d7ccba] bg-white/70 px-6 py-16 text-center">
+              <FileText className="mx-auto mb-4 size-12 text-[#1d4ed8]" />
+              <h2 className="text-2xl font-black">
+                This book is listed, but the full PDF is private.
               </h2>
-              <p className="mx-auto mt-2 max-w-md text-sm text-[#56534d]">
-                The author has listed this book in the community, but has not
-                enabled free full-PDF viewing.
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#56534d]">
+                Use the preview or purchase link if the author provided one.
               </p>
             </section>
           )}
-        </div>
+        </section>
       </section>
     </main>
   );

@@ -144,6 +144,7 @@ export const BOOK_GENRES = [
   "How-to Guide",
   "Business",
   "Technical",
+  "Textbook",
   "Self-help",
   "Academic",
   "Textbook",

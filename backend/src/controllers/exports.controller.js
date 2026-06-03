@@ -1,48 +1,24 @@
-const Book = require("../models/Book");
 const { generateDocx } = require("../utils/docx.generator");
-const { generateEpub } = require("../utils/epub.generator");
 const { generateMarkdown } = require("../utils/markdown.generator");
-const { generatePdf } = require("../utils/pdf.generator");
 const { generateKdpReportPdf } = require("../utils/kdp-report-pdf.generator");
 const { generateKdpTocPdf } = require("../utils/kdp-toc-pdf.generator");
 const {
   generateContinuityReportPdf,
 } = require("../utils/continuity-report-pdf.generator");
-const { migrateBookImagesToStorage } = require("../utils/image-asset-migration");
-
-function setNoStoreHeaders(res) {
-  res.setHeader(
-    "Cache-Control",
-    "no-store, no-cache, must-revalidate, proxy-revalidate"
-  );
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.setHeader("Surrogate-Control", "no-store");
-}
+const {
+  prepareOwnedBookForExport,
+  sendBookEpub,
+  sendBookPdf,
+  setNoStoreHeaders,
+} = require("../utils/book-export.service");
 
 async function getOwnedExportBook(req, res) {
-  const book = await Book.findById(req.params.bookId);
-
-  if (!book) {
-    res.status(404).json({ error: "No such book exists!" });
+  try {
+    return await prepareOwnedBookForExport(req.user.id, req.params.bookId);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
     return null;
   }
-
-  if (book.userId.toString() !== req.user.id.toString()) {
-    res.status(403).json({
-      error:
-        "You are not authorized to perform any operations on the requested book!",
-    });
-    return null;
-  }
-
-  if (await migrateBookImagesToStorage(book)) {
-    book.markModified("coverImage");
-    book.markModified("chapters");
-    await book.save();
-  }
-
-  return book;
 }
 
 async function exportAsDocx(req, res) {
@@ -82,17 +58,7 @@ async function exportAsPdf(req, res) {
 
     if (!book) return;
 
-    // set binary headers before piping PDF
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${book.title.replace(/[^a-zA-Z0-9]/g, "_")}.pdf"`
-    );
-    res.setHeader("Content-Transfer-Encoding", "binary");
-    setNoStoreHeaders(res);
-
-    // generate PDF and pipe directly to response (generatePdf handles piping)
-    await generatePdf(book, res);
+    await sendBookPdf(res, book);
   } catch (error) {
     console.error("Error exporting as PDF:", error);
 
@@ -229,15 +195,7 @@ async function exportAsEpub(req, res) {
 
     if (!book) return;
 
-    const epubBuffer = await generateEpub(book);
-    const filename = `${book.title.replace(/[^a-zA-Z0-9]/g, "_")}.epub`;
-
-    res.setHeader("Content-Type", "application/epub+zip");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.setHeader("Content-Length", epubBuffer.length);
-    setNoStoreHeaders(res);
-
-    return res.send(epubBuffer);
+    return sendBookEpub(res, book);
   } catch (error) {
     console.error("Error exporting as EPUB:", error);
 

@@ -10,26 +10,6 @@ function getBookTypeFamily(bookType = "") {
   const normalized = normalizeBookType(bookType);
   const compact = normalized.replace(/[^a-z0-9]+/g, "");
 
-  if (
-    [
-      "children's book",
-      "children book",
-      "childrens book",
-      "kids book",
-      "kids",
-      "picture book",
-      "storybook",
-      "early reader",
-    ].includes(normalized) ||
-    ["childrensbook", "kidsbook", "picturebook", "storybook"].includes(compact)
-  ) {
-    return "children";
-  }
-
-  if (/\b(children'?s?|kids?|picture|storybook|early reader)\b/.test(normalized)) {
-    return "children";
-  }
-
   const fictionTypes = new Set([
     "novel",
     "noval",
@@ -69,19 +49,78 @@ function getBookTypeFamily(bookType = "") {
   }
 
   if (
-    ["workbook", "course", "study guide", "worksheet", "activity book"].includes(
-      normalized
+    [
+      "textbook",
+      "text book",
+      "school textbook",
+      "college textbook",
+      "academic textbook",
+      "educational textbook",
+      "course textbook",
+    ].includes(normalized) ||
+    ["textbook", "schooltextbook", "collegetextbook", "academictextbook"].includes(
+      compact
     ) ||
-    /\b(workbook|worksheet|course|activity book|study guide)\b/.test(normalized)
+    /\b(text\s*book|textbook)\b/.test(normalized)
   ) {
-    return "learning";
+    return "textbook";
   }
 
   if (
-    ["textbook", "text book", "academic textbook"].includes(normalized) ||
-    /\b(textbook|text book)\b/.test(normalized)
+    [
+      "children's book",
+      "children book",
+      "childrens book",
+      "kids book",
+      "kids",
+      "kid's book",
+      "picture book",
+      "storybook",
+      "story book",
+      "early reader",
+    ].includes(normalized) ||
+    [
+      "childrensbook",
+      "kidsbook",
+      "kidsstorybook",
+      "picturebook",
+      "storybook",
+      "earlyreader",
+    ].includes(compact) ||
+    /\b(children'?s?|kids?|picture|storybook|early reader)\b/.test(normalized)
   ) {
-    return "textbook";
+    return "children";
+  }
+
+  if (
+    [
+      "workbook",
+      "work book",
+      "worksheet",
+      "worksheets",
+      "activity book",
+      "course",
+      "study guide",
+      "lesson book",
+      "curriculum",
+      "training manual",
+      "journal",
+      "planner",
+    ].includes(normalized) ||
+    [
+      "workbook",
+      "worksheet",
+      "worksheets",
+      "activitybook",
+      "studyguide",
+      "lessonbook",
+      "trainingmanual",
+    ].includes(compact) ||
+    /\b(work\s*book|worksheet|activity book|study guide|lesson book|curriculum|course)\b/.test(
+      normalized
+    )
+  ) {
+    return "learning";
   }
 
   if (["technical"].includes(normalized)) {
@@ -231,7 +270,7 @@ function getBookTypeChapterGuidance(bookType = "") {
       "- Explain concepts from prerequisite knowledge toward more complex ideas, with transitions that show how each concept builds on the previous one.",
       "- Include examples, mini-cases, tables, or comparison lists where they improve comprehension, but do not invent citations or unsupported facts.",
       "- End with a concise chapter summary and review questions that test comprehension, application, and analysis.",
-      "- Do not use workbook fill-in blanks or worksheet answer lines unless the user explicitly asked for a workbook.",
+      "- Do not add fill-in blanks, ruled answer lines, or printable worksheet space unless the user explicitly requested a workbook.",
     ].join("\n");
   }
 
@@ -283,8 +322,9 @@ function getBookTypeImageGuidance(bookType = "") {
       "Book type image guidance:",
       "- Treat visuals as warm children's book illustration with clear characters, expressive emotion, readable action, and age-appropriate charm.",
       "- Keep shapes, faces, and story moments easy to understand at a glance.",
-      "- Preserve recurring character identity, outfits, relative sizes, colors, and personality cues across the book.",
+      "- Preserve recurring character identity, wardrobe, proportions, colors, and personality cues across all illustrations.",
       "- For each image page, create the illustration that pairs with the story paragraph under the image and the following text page.",
+      "- Make each image a single clear story moment rather than a generic chapter poster.",
       "- Avoid adult editorial, corporate, or textbook styling.",
     ].join("\n");
   }
@@ -294,16 +334,17 @@ function getBookTypeImageGuidance(bookType = "") {
       "Book type image guidance:",
       "- Treat visuals as friendly learning material: clear examples, exercises, tools, worksheets, or classroom/workshop context.",
       "- Make the image support practice and comprehension rather than decorative mood.",
-      "- Workbook fill-in prompts should live in the manuscript text, not inside the image.",
+      "- Avoid fake readable text inside generated images; worksheet labels, answer lines, and fill-in prompts should live in the manuscript text where export can render them cleanly.",
     ].join("\n");
   }
 
   if (family === "textbook") {
     return [
       "Book type image guidance:",
-      "- Treat visuals as polished textbook publishing art: clear figures, concept illustrations, diagrams, examples, maps, timelines, or process visuals.",
-      "- Keep the composition educational, precise, and readable without fake tiny text.",
-      "- Use restrained academic styling rather than decorative stock imagery.",
+      "- Treat visuals as textbook publishing art: clean instructional figures, concept illustrations, process views, maps, timelines, lab/classroom scenes, or chapter-opening educational images.",
+      "- Make visuals clarify the chapter concept rather than act as decorative mood art.",
+      "- Avoid fake readable labels or dense text inside generated images; labels, captions, tables, and figure explanations should live in the manuscript text where export can render them cleanly.",
+      "- Keep the tone credible, organized, and suitable for formal educational publishing.",
     ].join("\n");
   }
 
@@ -339,34 +380,36 @@ function getBookTypeImageGuidance(bookType = "") {
 }
 
 function getDefaultChapterImageCount(bookType = "") {
-  return getBookTypeFamily(bookType) === "children" ? 1 : 1;
+  return 1;
 }
 
-function getChildrenSceneCountFromPages(pageCount = 20) {
-  const pages = Math.min(
-    52,
-    Math.max(2, Number.parseInt(pageCount, 10) || 20)
-  );
+function getChildrenSpreadCountFromPages(pageCount = 20) {
+  const parsed = Number.parseInt(pageCount, 10);
+  const safePageCount = Number.isFinite(parsed)
+    ? Math.min(Math.max(parsed, 2), 52)
+    : 20;
 
-  return Math.max(1, Math.ceil(pages / 2));
+  return Math.min(Math.max(Math.ceil(safePageCount / 2), 1), 26);
 }
 
 function getBookTypeStructureCount(bookType = "", requestedCount = 8) {
   const family = getBookTypeFamily(bookType);
 
   if (family === "children") {
-    return getChildrenSceneCountFromPages(requestedCount);
+    return getChildrenSpreadCountFromPages(requestedCount);
   }
 
-  return Math.min(Math.max(Number.parseInt(requestedCount, 10) || 8, 1), 26);
+  const parsed = Number.parseInt(requestedCount, 10);
+
+  return Math.min(Math.max(parsed || 8, 1), 26);
 }
 
 module.exports = {
+  getDefaultChapterImageCount,
+  getBookTypeStructureCount,
+  getChildrenSpreadCountFromPages,
   getBookTypeChapterGuidance,
   getBookTypeFamily,
   getBookTypeImageGuidance,
   getBookTypeOutlineGuidance,
-  getBookTypeStructureCount,
-  getChildrenSceneCountFromPages,
-  getDefaultChapterImageCount,
 };

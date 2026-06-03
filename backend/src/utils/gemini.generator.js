@@ -8,8 +8,8 @@ const {
 const {
   getBookTypeChapterGuidance,
   getBookTypeFamily,
-  getBookTypeOutlineGuidance,
   getBookTypeStructureCount,
+  getBookTypeOutlineGuidance,
 } = require("./book-type-guidance");
 
 const DEFAULT_STRUCTURE_MODEL = "gemini-3.5-flash";
@@ -420,10 +420,9 @@ function cleanFictionChapterTitle(title = "", fallback = "Untitled Chapter") {
   return cleaned || fallback;
 }
 
-function cleanChildrenSceneTitle(title = "", fallback = "Untitled Scene") {
-  const cleaned = String(title || "")
-    .replace(/^\s*(?:scene|spread|page|pages)\s*\d+(?:\s*[-]\s*\d+)?\s*[\).:-]?\s*/i, "")
-    .replace(/^\s*chapter\s+\d+\s*[\).:-]?\s*/i, "")
+function cleanChildrenSpreadTitle(title = "", fallback = "Untitled Scene") {
+  const cleaned = cleanFictionChapterTitle(title, fallback)
+    .replace(/^\s*(?:spread|page|pages)\s+\d+(?:\s*[-\u2013]\s*\d+)?\s*[\).:-]?\s*/i, "")
     .trim();
 
   return cleaned || fallback;
@@ -431,8 +430,7 @@ function cleanChildrenSceneTitle(title = "", fallback = "Untitled Scene") {
 
 function normalizeOutlineJson(outlineJson, options = {}) {
   const family = getBookTypeFamily(options.genre);
-  const isFiction = family === "fiction";
-  const isChildren = family === "children";
+  const isNarrative = family === "fiction" || family === "children";
   const structure =
     outlineJson.structure ||
     outlineJson.outline ||
@@ -444,18 +442,19 @@ function normalizeOutlineJson(outlineJson, options = {}) {
     const fallbackTitle =
       family === "children" ? `Scene ${index + 1}` : `Chapter ${index + 1}`;
     const rawTitle = chapter.title || fallbackTitle;
-    const title = isFiction
-      ? cleanFictionChapterTitle(rawTitle, fallbackTitle)
-      : isChildren
-      ? cleanChildrenSceneTitle(rawTitle, fallbackTitle)
-      : rawTitle;
+    const title =
+      family === "children"
+        ? cleanChildrenSpreadTitle(rawTitle, fallbackTitle)
+        : isNarrative
+          ? cleanFictionChapterTitle(rawTitle, fallbackTitle)
+          : rawTitle;
 
     return {
       title,
       description: chapter.description || "",
       content: chapter.content || "",
       generationStatus: chapter.generationStatus || "empty",
-      outlinePath: isFiction || isChildren
+      outlinePath: isNarrative
         ? [title]
         : chapter.outlinePath || [chapter.title || fallbackTitle],
     };
@@ -526,13 +525,13 @@ async function generateGeminiBookStructure({
   useGoogleSearch = false,
 }) {
   const { structureModel } = getGeminiModels();
+  const bookSubject = topic || title;
+  const bookTypeGuidance = getBookTypeOutlineGuidance(genre);
   const family = getBookTypeFamily(genre);
   const isFiction = family === "fiction";
   const isChildren = family === "children";
   const isTextbook = family === "textbook";
   const safeChapterCount = getBookTypeStructureCount(genre, chapterCount);
-  const bookSubject = topic || title;
-  const bookTypeGuidance = getBookTypeOutlineGuidance(genre);
   const targetCountLabel = isChildren
     ? `${safeChapterCount} illustrated scenes for ${Math.min(
         Math.max(Number.parseInt(chapterCount, 10) || 20, 2),

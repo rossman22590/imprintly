@@ -15,6 +15,7 @@ const booksRouter = require("./routes/books.route");
 const aiRouter = require("./routes/ai.route");
 const exportsRouter = require("./routes/exports.route");
 const publicRouter = require("./routes/public.route");
+const developerApiRouter = require("./routes/developer-api.route");
 const {
   recoverInterruptedGenerationJobs,
 } = require("./utils/book-generation.jobs");
@@ -72,8 +73,9 @@ const corsOptions = {
 
     callback(null, false);
   },
+  credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
   optionsSuccessStatus: 204,
 };
 const apiLimiter = rateLimit({
@@ -115,6 +117,7 @@ app.use("/api/books", booksRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/exports", exportsRouter);
 app.use("/api/public", publicRouter);
+app.use("/api/v1", developerApiRouter);
 
 // Static folder for user uploads - serve from backend/uploads
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
@@ -208,10 +211,13 @@ app.use((err, _, res, next) => {
 // Start server
 async function startServer() {
   await connectToDB();
-  await recoverInterruptedGenerationJobs();
   app.listen(ENV.PORT, () => {
     console.log(`Server running on port ${ENV.PORT}`);
     console.log(`Environment: ${ENV.NODE_ENV}`);
+  });
+
+  recoverInterruptedGenerationJobs().catch((error) => {
+    console.error("Generation job recovery failed:", error);
   });
 }
 

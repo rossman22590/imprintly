@@ -16,10 +16,6 @@ function CreditBalancePill({ compact = false }) {
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchCredits = useCallback(async () => {
-    const token = localStorage.getItem("token");
-
-    if (!token) return;
-
     setIsLoading(true);
 
     try {
