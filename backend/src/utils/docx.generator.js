@@ -17,7 +17,7 @@ const {
   prepareExportImages,
   resolveExportImagePath,
 } = require("./export-markdown");
-const { __private: diagramTools } = require("./pdf.generator");
+const { parseExportDiagram } = require("./export-diagram");
 
 const md = new MarkdownIt();
 
@@ -194,68 +194,6 @@ function createImageParagraph(src, alt = "", options = {}) {
   }
 }
 
-function parseExportDiagram(content = "", language = "") {
-  const normalizedLanguage = String(language || "").trim().toLowerCase();
-  const lines = String(content || "").replace(/\n$/, "").split("\n");
-
-  if (
-    normalizedLanguage &&
-    !["text", "txt", "plain", "diagram", "flow", "reader-diagram"].includes(
-      normalizedLanguage
-    ) &&
-    !diagramTools.isDiagramCodeBlock(lines)
-  ) {
-    return null;
-  }
-
-  const table = diagramTools.parseAsciiTableDiagram(lines);
-
-  if (table) return { type: "table", ...table };
-
-  const nestedArchitecture = diagramTools.parseNestedArchitectureDiagram(lines);
-
-  if (nestedArchitecture) {
-    return {
-      type: "flow",
-      title: nestedArchitecture.title || "Architecture",
-      nodes: nestedArchitecture.layers,
-    };
-  }
-
-  const boxedList = diagramTools.parseBoxedListDiagram(lines);
-
-  if (boxedList) return { type: "boxed-list", ...boxedList };
-
-  const process = diagramTools.parseProcessDiagram(lines);
-
-  if (process) return { type: "flow", ...process };
-
-  const stack = diagramTools.parseStackDiagram(lines);
-
-  if (stack) {
-    return {
-      type: "flow",
-      title: stack.title || "Diagram",
-      nodes: stack.layers,
-    };
-  }
-
-  const flow =
-    diagramTools.parseFlowDiagram(lines) ||
-    diagramTools.parseBranchDiagram(lines) ||
-    diagramTools.parseComparisonDiagram(lines) ||
-    diagramTools.parseLinearFlowDiagram(lines);
-
-  if (flow) return { type: "flow", ...flow };
-
-  return diagramTools.isDiagramCodeBlock(lines)
-    ? {
-        type: "pre",
-        lines: lines.map(diagramTools.normalizeCodeTextForPdf),
-      }
-    : null;
-}
-
 function createDiagramTitleParagraph(title = "Diagram") {
   return new Paragraph({
     children: [
@@ -310,14 +248,16 @@ function createDiagramParagraphs(diagram) {
 
   if (diagram.type === "table") {
     return [
-      createDiagramTitleParagraph("Structured Table"),
+      createDiagramTitleParagraph(diagram.label || "Structured Table"),
       createDiagramNodeParagraph(diagram.header.join(" | ")),
       ...diagram.rows.map((row) => createDiagramNodeParagraph(row.join(" | "))),
     ];
   }
 
   if (diagram.type === "flow") {
-    const paragraphs = [createDiagramTitleParagraph(diagram.title || "Diagram")];
+    const paragraphs = [
+      createDiagramTitleParagraph(diagram.label || diagram.title || "Diagram"),
+    ];
 
     (diagram.nodes || []).forEach((node, index) => {
       paragraphs.push(createDiagramNodeParagraph(node.label, node.detail));
@@ -346,14 +286,14 @@ function createDiagramParagraphs(diagram) {
 
   if (diagram.type === "boxed-list") {
     return [
-      createDiagramTitleParagraph(diagram.title || "Key Points"),
+      createDiagramTitleParagraph(diagram.label || diagram.title || "Key Points"),
       ...(diagram.items || []).map((item) => createDiagramNodeParagraph(item)),
     ];
   }
 
   if (diagram.type === "pre") {
     return [
-      createDiagramTitleParagraph("Diagram"),
+      createDiagramTitleParagraph(diagram.label || diagram.title || "Diagram"),
       new Paragraph({
         children: diagram.lines.flatMap((line, index) => [
           ...(index > 0 ? [new TextRun({ text: "", break: 1 })] : []),

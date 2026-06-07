@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  estimateDiagramBlockLines,
+  isDedicatedDiagramFence,
   parseKdpMarkdownBlocks,
   splitKdpMarkdownIntoPages,
 } = require("./kdp-markdown-blocks");
@@ -86,4 +88,274 @@ test("splitKdpMarkdownIntoPages preserves diagram blocks across pagination", () 
     diagramPages[0].blocks.find((block) => block.type === "diagram").content,
     ["Node A", "  ↓", "Node B"].join("\n")
   );
+});
+
+test("splitKdpMarkdownIntoPages fills text before a diagram instead of leaving a short page", () => {
+  const diagramLines = Array.from(
+    { length: 10 },
+    (_, index) => `[ Node ${index + 1} ] -> [ Node ${index + 2} ]`
+  );
+
+  const markdown = [
+    "Alpha paragraph one.",
+    "",
+    "Diagram Label",
+    "",
+    "```text",
+    ...diagramLines,
+    "```",
+    "",
+    "Beta paragraph two with enough extra words to continue filling the page after the diagram break.",
+  ].join("\n");
+
+  const textMetrics = {
+    charsPerLine: 54,
+    linesPerPage: 8,
+    wordsPerPage: 72,
+    lineWidthPoints: 300,
+    fontSize: 11,
+    paragraphIndentPoints: 14,
+  };
+  const estimateTextLines = (text) =>
+    Math.max(1, Math.ceil(String(text || "").length / 18));
+
+  const pages = splitKdpMarkdownIntoPages(
+    markdown,
+    textMetrics,
+    { firstPageReserveLines: 0 },
+    estimateTextLines
+  );
+
+  const diagramPageIndex = pages.findIndex((page) =>
+    page.blocks.some((block) => block.type === "diagram")
+  );
+  const pageBeforeDiagram = pages[diagramPageIndex - 1];
+
+  assert.ok(diagramPageIndex > 0);
+  assert.ok(pageBeforeDiagram?.blocks?.length > 1);
+  assert.match(
+    pageBeforeDiagram.blocks.map((block) => block.text).join(" "),
+    /Beta paragraph two/
+  );
+});
+
+test("isDedicatedDiagramFence treats code fences as inline content", () => {
+  assert.equal(isDedicatedDiagramFence("javascript", "function test() {}"), false);
+  assert.equal(isDedicatedDiagramFence("bash", "node -v"), false);
+  assert.equal(
+    isDedicatedDiagramFence(
+      "text",
+      "System: You are an expert assistant.\nPlease write a PRD."
+    ),
+    false
+  );
+  assert.equal(
+    isDedicatedDiagramFence("text", ["Node A", "  v", "Node B"].join("\n")),
+    true
+  );
+});
+
+test("splitKdpMarkdownIntoPages keeps code fences inline on text pages", () => {
+  const markdown = [
+    "Intro paragraph.",
+    "",
+    "```javascript",
+    "function greet() {",
+    '  return "hello";',
+    "}",
+    "```",
+    "",
+    "Closing paragraph.",
+  ].join("\n");
+
+  const textMetrics = {
+    charsPerLine: 54,
+    linesPerPage: 12,
+    wordsPerPage: 110,
+    lineWidthPoints: 300,
+    fontSize: 11,
+    paragraphIndentPoints: 14,
+  };
+  const estimateTextLines = (text) =>
+    Math.max(1, Math.ceil(String(text || "").length / 54));
+
+  const pages = splitKdpMarkdownIntoPages(
+    markdown,
+    textMetrics,
+    { firstPageReserveLines: 0 },
+    estimateTextLines
+  );
+
+  const diagramPages = pages.filter((page) =>
+    page.blocks.some((block) => block.type === "diagram")
+  );
+  const codePages = pages.filter((page) =>
+    page.blocks.some((block) => block.type === "code")
+  );
+
+  assert.equal(diagramPages.length, 0);
+  assert.ok(codePages.length >= 1);
+});
+
+test("splitKdpMarkdownIntoPages places large diagrams on dedicated pages", () => {
+  const diagramLines = Array.from(
+    { length: 12 },
+    (_, index) => `[ Step ${index + 1} ] -> [ Step ${index + 2} ]`
+  );
+
+  const markdown = [
+    "Intro paragraph.",
+    "",
+    "Bakery Process",
+    "",
+    "```text",
+    ...diagramLines,
+    "```",
+    "",
+    "Closing paragraph.",
+  ].join("\n");
+
+  const textMetrics = {
+    charsPerLine: 54,
+    linesPerPage: 12,
+    wordsPerPage: 110,
+    lineWidthPoints: 300,
+    fontSize: 11,
+    paragraphIndentPoints: 14,
+  };
+  const estimateTextLines = (text) =>
+    Math.max(1, Math.ceil(String(text || "").length / 54));
+
+  const pages = splitKdpMarkdownIntoPages(
+    markdown,
+    textMetrics,
+    { firstPageReserveLines: 0 },
+    estimateTextLines
+  );
+
+  const diagramPage = pages.find((page) =>
+    page.blocks.some((block) => block.type === "diagram")
+  );
+
+  assert.ok(diagramPage);
+  const diagramBlock = diagramPage.blocks.find(
+    (block) => block.type === "diagram"
+  );
+  assert.ok(diagramBlock);
+  assert.equal(diagramBlock.label, "Bakery Process");
+});
+
+test("estimateDiagramBlockLines accounts for wrapped inline code", () => {
+  const content = ["x".repeat(120), "y".repeat(120), "z".repeat(80)].join("\n");
+  const textMetrics = { charsPerLine: 54 };
+  const withoutWrap = estimateDiagramBlockLines(content, "javascript");
+  const withWrap = estimateDiagramBlockLines(content, "javascript", textMetrics);
+
+  assert.ok(withWrap > withoutWrap);
+});
+
+test("parseKdpMarkdownBlocks drops horizontal rule paragraphs", () => {
+  const markdown = [
+    "Intro paragraph.",
+    "",
+    "---",
+    "",
+    "Next paragraph.",
+  ].join("\n");
+
+  const blocks = parseKdpMarkdownBlocks(markdown);
+
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[0].text, "Intro paragraph.");
+  assert.equal(blocks[1].text, "Next paragraph.");
+});
+
+test("splitKdpMarkdownIntoPages packs prose under large diagrams", () => {
+  const diagramLines = Array.from(
+    { length: 10 },
+    (_, index) => `[ Node ${index + 1} ] -> [ Node ${index + 2} ]`
+  );
+
+  const markdown = [
+    "A".repeat(1200),
+    "",
+    "```text",
+    ...diagramLines,
+    "```",
+    "",
+    "Short leftover paragraph.",
+    "",
+    "Another paragraph with enough words to absorb the sparse page merge instead of leaving a nearly blank page behind.",
+  ].join("\n");
+
+  const textMetrics = {
+    charsPerLine: 54,
+    linesPerPage: 14,
+    wordsPerPage: 110,
+    lineWidthPoints: 300,
+    fontSize: 11,
+    paragraphIndentPoints: 14,
+  };
+  const estimateTextLines = (text) =>
+    Math.max(1, Math.ceil(String(text || "").length / 54));
+
+  const pages = splitKdpMarkdownIntoPages(
+    markdown,
+    textMetrics,
+    { firstPageReserveLines: 0 },
+    estimateTextLines
+  );
+  const diagramPage = pages.find((page) =>
+    page.blocks.some((block) => block.type === "diagram")
+  );
+
+  assert.ok(diagramPage);
+  assert.ok(
+    diagramPage.blocks.some((block) =>
+      /Short leftover paragraph/.test(block.text || "")
+    ) ||
+      pages.some((page) =>
+        page.blocks.some((block) =>
+          /Short leftover paragraph/.test(block.text || "")
+        )
+      )
+  );
+});
+
+test("splitKdpMarkdownIntoPages moves oversized inline code to the next page", () => {
+  const markdown = [
+    "A".repeat(900),
+    "",
+    "```javascript",
+    "const payload = " + '"x".repeat(140);',
+    "console.log(payload);",
+    "```",
+  ].join("\n");
+
+  const textMetrics = {
+    charsPerLine: 54,
+    linesPerPage: 14,
+    wordsPerPage: 110,
+    lineWidthPoints: 300,
+    fontSize: 11,
+    paragraphIndentPoints: 14,
+  };
+  const estimateTextLines = (text) =>
+    Math.max(1, Math.ceil(String(text || "").length / 54));
+
+  const pages = splitKdpMarkdownIntoPages(
+    markdown,
+    textMetrics,
+    { firstPageReserveLines: 0 },
+    estimateTextLines
+  );
+
+  const codePage = pages.find((page) =>
+    page.blocks.some((block) => block.type === "code")
+  );
+  const codeOnlyPage =
+    codePage?.blocks.length === 1 && codePage.blocks[0].type === "code";
+
+  assert.ok(codePage);
+  assert.ok(codeOnlyPage);
 });

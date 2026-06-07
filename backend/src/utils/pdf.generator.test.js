@@ -89,10 +89,14 @@ test("KDP generated PDF uses trim size on every page", async () => {
   assert.ok(mediaBoxes.length > 2);
   assert.deepEqual([...new Set(mediaBoxes)], ["432x648"]);
   assert.match(pdf, /\/PageLayout\s*\/TwoPageRight/);
-  assert.equal(
-    Number(pageCountMatch?.[1]),
-    getKdpPdfConfig(book).pageCount + 2
+  const exportedPageCount = Number(pageCountMatch?.[1]);
+  const configuredPageCount = getKdpPdfConfig(book).pageCount + 2;
+
+  assert.ok(
+    exportedPageCount >= configuredPageCount,
+    `expected at least ${configuredPageCount} pages, received ${exportedPageCount}`
   );
+  assert.ok(exportedPageCount <= configuredPageCount + 1);
 });
 
 test("KDP children PDF uses the same trim size as full preview", async () => {
@@ -182,7 +186,10 @@ test("KDP short PDFs are not padded with blank pages up to 24", async () => {
 
   assert.ok(exportedPageCount > 2);
   assert.ok(exportedPageCount < 24);
-  assert.equal(exportedPageCount, getKdpPdfConfig(book).pageCount + 2);
+  const configuredPageCount = getKdpPdfConfig(book).pageCount + 2;
+
+  assert.ok(exportedPageCount >= configuredPageCount);
+  assert.ok(exportedPageCount <= configuredPageCount + 1);
 });
 
 test("KDP PDF body font follows saved font size", () => {
@@ -192,6 +199,44 @@ test("KDP PDF body font follows saved font size", () => {
 
   assert.equal(config.sizes.body, 14);
   assert.equal(config.sizes.chapterTitle, 18);
+});
+
+test("KDP chapter pagination gives large diagrams dedicated pages", () => {
+  const pageSize = getKdpPageSize({ kdp: { settings: { trimSize: "6x9" } } });
+  const margins = {
+    top: 0.78,
+    bottom: 0.88,
+    inside: 0.9,
+    outside: 0.68,
+  };
+  const metrics = getKdpTextPageMetrics(pageSize, 12, margins, 1.42, 1.35);
+  const diagramLines = Array.from(
+    { length: 12 },
+    (_, index) => `[ Step ${index + 1} ] -> [ Step ${index + 2} ]`
+  );
+  const markdown = [
+    "Intro paragraph.",
+    "",
+    "Bakery Process",
+    "",
+    "```text",
+    ...diagramLines,
+    "```",
+    "",
+    "Closing paragraph.",
+  ].join("\n");
+  const pages = __private.splitKdpTextIntoPrintPages(markdown, metrics, {
+    firstPageReserveLines: 0,
+  });
+  const diagramPage = pages.find((page) =>
+    page.blocks?.some((block) => block.type === "diagram")
+  );
+
+  assert.ok(diagramPage);
+  const diagramBlock = diagramPage.blocks.find(
+    (block) => block.type === "diagram"
+  );
+  assert.equal(diagramBlock.label, "Bakery Process");
 });
 
 test("KDP chapter page estimate includes markdown image pages", () => {

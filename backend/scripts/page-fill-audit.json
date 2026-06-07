@@ -1,0 +1,626 @@
+{
+  "bookTitle": "Building with AI for Beginners",
+  "textMetrics": {
+    "charsPerLine": 72,
+    "linesPerPage": 33,
+    "paragraphIndentRatio": 1.35,
+    "fontSize": 12,
+    "lineWidthPoints": 390.24,
+    "paragraphIndentPoints": 16.200000000000003,
+    "renderLineBuffer": 3
+  },
+  "totalPages": 189,
+  "diagramOnlyPages": 31,
+  "sparseCount": 28,
+  "verySparseCount": 12,
+  "sparse": [
+    {
+      "pageNum": 31,
+      "chapterIndex": 2,
+      "chapterTitle": "Understanding Your AI Development Toolkit",
+      "pageIndex": 18,
+      "isDiagramOnly": false,
+      "fillPercent": 33,
+      "lineEstimate": 11,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph",
+        "code",
+        "paragraph"
+      ],
+      "snippet": "Example: Creating a User Card Component Imagine you are inside an empty React component file. Open your inline prompt ba"
+    },
+    {
+      "pageNum": 36,
+      "chapterIndex": 2,
+      "chapterTitle": "Understanding Your AI Development Toolkit",
+      "pageIndex": 23,
+      "isDiagramOnly": false,
+      "fillPercent": 36,
+      "lineEstimate": 12,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph",
+        "paragraph"
+      ],
+      "snippet": "You have successfully laid the foundation for your development workspace. By understanding the core mechanics of tokens "
+    },
+    {
+      "pageNum": 40,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 3,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "The TPM Discovery Prompt | Copy, paste, and run the following prompt in your preferred LLM chat interface (such as Claud"
+    },
+    {
+      "pageNum": 44,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 7,
+      "isDiagramOnly": false,
+      "fillPercent": 15,
+      "lineEstimate": 5,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph",
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "components. | The User Story Generator Prompt | Use this prompt to instruct your AI to generate Gherkin-compliant user s"
+    },
+    {
+      "pageNum": 45,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 8,
+      "isDiagramOnly": false,
+      "fillPercent": 42,
+      "lineEstimate": 14,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "code"
+      ],
+      "snippet": "code"
+    },
+    {
+      "pageNum": 46,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 9,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "Generated Backlog for TaskFlow AI | Based on the prompt above, the AI will generate several target user stories. Here ar"
+    },
+    {
+      "pageNum": 50,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 13,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "The Output: schema.prisma for TaskFlow AI | This schema file provides your AI assistants with a strict contract for all "
+    },
+    {
+      "pageNum": 55,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 18,
+      "isDiagramOnly": false,
+      "fillPercent": 21,
+      "lineEstimate": 7,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph",
+        "paragraph",
+        "heading"
+      ],
+      "snippet": "Instead of coding all backend routes first and then all frontend layouts, build one feature completely from database to "
+    },
+    {
+      "pageNum": 56,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 19,
+      "isDiagramOnly": false,
+      "fillPercent": 42,
+      "lineEstimate": 14,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "code"
+      ],
+      "snippet": "code"
+    },
+    {
+      "pageNum": 57,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 20,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "The Output: Master Roadmap for TaskFlow AI | Here is the operationalized roadmap generated for our MVP, showing you exac"
+    },
+    {
+      "pageNum": 59,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 22,
+      "isDiagramOnly": false,
+      "fillPercent": 33,
+      "lineEstimate": 11,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph",
+        "paragraph",
+        "list"
+      ],
+      "snippet": "Your Action Plan: Generating Your Own Specification | Now it is your turn to transform your unique project idea into a t"
+    },
+    {
+      "pageNum": 61,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 24,
+      "isDiagramOnly": false,
+      "fillPercent": 18,
+      "lineEstimate": 6,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph",
+        "paragraph"
+      ],
+      "snippet": "By completing this master specification, you construct a blueprint for your project. This blueprint serves as the contex"
+    },
+    {
+      "pageNum": 74,
+      "chapterIndex": 4,
+      "chapterTitle": "Designing User Interfaces with AI Guidance",
+      "pageIndex": 12,
+      "isDiagramOnly": false,
+      "fillPercent": 24,
+      "lineEstimate": 8,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph",
+        "paragraph"
+      ],
+      "snippet": "Next.js, React, and Tailwind CSS. During that process, we will take the exact UI components you generated in this chapte"
+    },
+    {
+      "pageNum": 85,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "pageIndex": 10,
+      "isDiagramOnly": false,
+      "fillPercent": 21,
+      "lineEstimate": 7,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "code",
+        "paragraph"
+      ],
+      "snippet": "Initialize git in your repository (if it isn't already): | Next, inspect your .gitignore file in your root folder. This "
+    },
+    {
+      "pageNum": 87,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "pageIndex": 12,
+      "isDiagramOnly": false,
+      "fillPercent": 39,
+      "lineEstimate": 13,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "code",
+        "heading",
+        "paragraph",
+        "paragraph"
+      ],
+      "snippet": "Commit your clean, baseline configuration code: | Step 6: Priming the Workspace for AI (.cursorrules / System Prompts) |"
+    },
+    {
+      "pageNum": 95,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "pageIndex": 4,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "Analyzing the AI's Output | The LLM processes this prompt and generates highly tailored code. Let's look at the generate"
+    },
+    {
+      "pageNum": 99,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "pageIndex": 8,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "The Generated Backend Route | The AI outputs a precise, structurally sound endpoint configured for safe integration:"
+    },
+    {
+      "pageNum": 107,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "pageIndex": 16,
+      "isDiagramOnly": false,
+      "fillPercent": 42,
+      "lineEstimate": 14,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "code",
+        "paragraph"
+      ],
+      "snippet": "code | By practicing this iterative process of structured prompting, defensive auditing, and version control, you will d"
+    },
+    {
+      "pageNum": 113,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "pageIndex": 5,
+      "isDiagramOnly": false,
+      "fillPercent": 30,
+      "lineEstimate": 10,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "code",
+        "heading"
+      ],
+      "snippet": "code | Generated Code Example:"
+    },
+    {
+      "pageNum": 119,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "pageIndex": 11,
+      "isDiagramOnly": false,
+      "fillPercent": 42,
+      "lineEstimate": 14,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph",
+        "heading",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "heading"
+      ],
+      "snippet": "architecture that accomplishes your goals. | State Strategies: Client vs. Server State | Understanding where state shoul"
+    },
+    {
+      "pageNum": 120,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "pageIndex": 12,
+      "isDiagramOnly": false,
+      "fillPercent": 36,
+      "lineEstimate": 12,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "code",
+        "heading"
+      ],
+      "snippet": "code | Generated Code Example:"
+    },
+    {
+      "pageNum": 124,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "pageIndex": 16,
+      "isDiagramOnly": false,
+      "fillPercent": 18,
+      "lineEstimate": 6,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph"
+      ],
+      "snippet": "By wrapping your integration code in secure backend paths, structuring your local state updates, and knowing how to debu"
+    },
+    {
+      "pageNum": 143,
+      "chapterIndex": 9,
+      "chapterTitle": "Iterative Design and Gathering Feedback",
+      "pageIndex": 4,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "Case Study: Processing Raw Ingest Logs | Suppose you output your raw feedback from your database as a simple JSON array:"
+    },
+    {
+      "pageNum": 146,
+      "chapterIndex": 9,
+      "chapterTitle": "Iterative Design and Gathering Feedback",
+      "pageIndex": 7,
+      "isDiagramOnly": false,
+      "fillPercent": 3,
+      "lineEstimate": 1,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph"
+      ],
+      "snippet": "is a highly effective structural prompt for writing targeted fixes:"
+    },
+    {
+      "pageNum": 167,
+      "chapterIndex": 11,
+      "chapterTitle": "Scaling, Maintenance, and the Future of Your AI-Assisted Application",
+      "pageIndex": 2,
+      "isDiagramOnly": false,
+      "fillPercent": 42,
+      "lineEstimate": 14,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "diagram",
+        "paragraph"
+      ],
+      "snippet": "Here is a structured prompt template you can use: | Here is the initial, unrefined code that might have been generated d"
+    },
+    {
+      "pageNum": 172,
+      "chapterIndex": 11,
+      "chapterTitle": "Scaling, Maintenance, and the Future of Your AI-Assisted Application",
+      "pageIndex": 7,
+      "isDiagramOnly": false,
+      "fillPercent": 21,
+      "lineEstimate": 7,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph",
+        "paragraph"
+      ],
+      "snippet": "Automated tests act as your safety net. With AI, you can generate comprehensive test suites in seconds, covering unit te"
+    },
+    {
+      "pageNum": 178,
+      "chapterIndex": 11,
+      "chapterTitle": "Scaling, Maintenance, and the Future of Your AI-Assisted Application",
+      "pageIndex": 13,
+      "isDiagramOnly": false,
+      "fillPercent": 3,
+      "lineEstimate": 1,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph"
+      ],
+      "snippet": "future of software development—it is time to build."
+    },
+    {
+      "pageNum": 184,
+      "chapterIndex": 12,
+      "chapterTitle": "Continue learning with AI Tutor",
+      "pageIndex": 5,
+      "isDiagramOnly": false,
+      "fillPercent": 36,
+      "lineEstimate": 12,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph",
+        "paragraph",
+        "paragraph",
+        "paragraph"
+      ],
+      "snippet": "weaknesses: it lacks error handling, type safety (any), and clean-up mechanisms to prevent memory leaks if the component"
+    }
+  ],
+  "verySparse": [
+    {
+      "pageNum": 40,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 3,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "The TPM Discovery Prompt | Copy, paste, and run the following prompt in your preferred LLM chat interface (such as Claud"
+    },
+    {
+      "pageNum": 44,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 7,
+      "isDiagramOnly": false,
+      "fillPercent": 15,
+      "lineEstimate": 5,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph",
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "components. | The User Story Generator Prompt | Use this prompt to instruct your AI to generate Gherkin-compliant user s"
+    },
+    {
+      "pageNum": 46,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 9,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "Generated Backlog for TaskFlow AI | Based on the prompt above, the AI will generate several target user stories. Here ar"
+    },
+    {
+      "pageNum": 50,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 13,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "The Output: schema.prisma for TaskFlow AI | This schema file provides your AI assistants with a strict contract for all "
+    },
+    {
+      "pageNum": 57,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 20,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "The Output: Master Roadmap for TaskFlow AI | Here is the operationalized roadmap generated for our MVP, showing you exac"
+    },
+    {
+      "pageNum": 61,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "pageIndex": 24,
+      "isDiagramOnly": false,
+      "fillPercent": 18,
+      "lineEstimate": 6,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph",
+        "paragraph"
+      ],
+      "snippet": "By completing this master specification, you construct a blueprint for your project. This blueprint serves as the contex"
+    },
+    {
+      "pageNum": 95,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "pageIndex": 4,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "Analyzing the AI's Output | The LLM processes this prompt and generates highly tailored code. Let's look at the generate"
+    },
+    {
+      "pageNum": 99,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "pageIndex": 8,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "The Generated Backend Route | The AI outputs a precise, structurally sound endpoint configured for safe integration:"
+    },
+    {
+      "pageNum": 124,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "pageIndex": 16,
+      "isDiagramOnly": false,
+      "fillPercent": 18,
+      "lineEstimate": 6,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph"
+      ],
+      "snippet": "By wrapping your integration code in secure backend paths, structuring your local state updates, and knowing how to debu"
+    },
+    {
+      "pageNum": 143,
+      "chapterIndex": 9,
+      "chapterTitle": "Iterative Design and Gathering Feedback",
+      "pageIndex": 4,
+      "isDiagramOnly": false,
+      "fillPercent": 12,
+      "lineEstimate": 4,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "heading",
+        "paragraph"
+      ],
+      "snippet": "Case Study: Processing Raw Ingest Logs | Suppose you output your raw feedback from your database as a simple JSON array:"
+    },
+    {
+      "pageNum": 146,
+      "chapterIndex": 9,
+      "chapterTitle": "Iterative Design and Gathering Feedback",
+      "pageIndex": 7,
+      "isDiagramOnly": false,
+      "fillPercent": 3,
+      "lineEstimate": 1,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph"
+      ],
+      "snippet": "is a highly effective structural prompt for writing targeted fixes:"
+    },
+    {
+      "pageNum": 178,
+      "chapterIndex": 11,
+      "chapterTitle": "Scaling, Maintenance, and the Future of Your AI-Assisted Application",
+      "pageIndex": 13,
+      "isDiagramOnly": false,
+      "fillPercent": 3,
+      "lineEstimate": 1,
+      "linesPerPage": 33,
+      "blockTypes": [
+        "paragraph"
+      ],
+      "snippet": "future of software development—it is time to build."
+    }
+  ]
+}

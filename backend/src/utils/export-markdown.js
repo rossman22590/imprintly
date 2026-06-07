@@ -5,6 +5,7 @@ const {
   buildImageMarkdown,
   getMarkdownImageUrl,
 } = require("./chapter-image-markdown");
+const { isDiagramLabelParagraph } = require("./kdp-markdown-blocks");
 const { resolveUploadFilePath } = require("./upload-paths");
 const { normalizeTrustedImageUrl } = require("./image-storage");
 
@@ -372,6 +373,22 @@ function insertImageMarkdownAtChapterTop(content = "", imageMarkdown = "") {
   return `${imageMarkdown}\n\n${trimmedContent}`;
 }
 
+function injectDiagramLabelsIntoMarkdown(markdown = "") {
+  const source = String(markdown || "").replace(/\r\n/g, "\n");
+
+  return source.replace(
+    /(^|\n\n)([^\n]+)\n\n```([^\n`]*)\n/g,
+    (match, prefix, maybeLabel, language) => {
+      const label = String(maybeLabel || "").trim();
+
+      if (!isDiagramLabelParagraph(label)) return match;
+      if (/^@label\s+/i.test(label)) return match;
+
+      return `${prefix}\`\`\`${language}\n@label ${label}\n`;
+    }
+  );
+}
+
 function getChapterMarkdownForExport(
   chapter = {},
   { absoluteImageUrls = false, req = null } = {}
@@ -394,6 +411,7 @@ function getChapterMarkdownForExport(
   }
 
   content = wrapAsciiDiagramBlocks(content);
+  content = injectDiagramLabelsIntoMarkdown(content);
 
   return absoluteImageUrls ? rewriteMarkdownImageUrls(content, { req }) : content;
 }

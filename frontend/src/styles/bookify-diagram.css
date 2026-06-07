@@ -82,8 +82,10 @@
   font-size: 0.86em;
   line-height: 1.45;
   margin: 0;
-  overflow-x: auto;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   padding: 0;
   text-align: left;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-word;
 }

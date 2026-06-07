@@ -8,126 +8,10 @@ const {
   prepareExportImages,
   resolveExportImagePath,
 } = require("./export-markdown");
-const { __private: diagramTools } = require("./pdf.generator");
-
-function parseExportDiagram(content = "", language = "") {
-  const normalizedLanguage = String(language || "").trim().toLowerCase();
-  const lines = String(content || "").replace(/\n$/, "").split("\n");
-
-  if (
-    normalizedLanguage &&
-    !["text", "txt", "plain", "diagram", "flow", "reader-diagram"].includes(
-      normalizedLanguage
-    ) &&
-    !diagramTools.isDiagramCodeBlock(lines)
-  ) {
-    return null;
-  }
-
-  const table = diagramTools.parseAsciiTableDiagram(lines);
-
-  if (table) return { type: "table", ...table };
-
-  const systemComparison = diagramTools.parseSystemComparisonDiagram(lines);
-
-  if (systemComparison) {
-    return { type: "flow", ...systemComparison };
-  }
-
-  const nestedArchitecture = diagramTools.parseNestedArchitectureDiagram(lines);
-
-  if (nestedArchitecture) {
-    return {
-      type: "flow",
-      title: nestedArchitecture.title || "Architecture",
-      nodes: nestedArchitecture.layers,
-    };
-  }
-
-  const boxedList = diagramTools.parseBoxedListDiagram(lines);
-
-  if (boxedList) return { type: "boxed-list", ...boxedList };
-
-  const process = diagramTools.parseProcessDiagram(lines);
-
-  if (process) return { type: "flow", ...process };
-
-  const stack = diagramTools.parseStackDiagram(lines);
-
-  if (stack) {
-    return {
-      type: "flow",
-      title: stack.title || "Diagram",
-      nodes: stack.layers,
-    };
-  }
-
-  const flow =
-    diagramTools.parseFlowDiagram(lines) ||
-    diagramTools.parseBranchDiagram(lines) ||
-    diagramTools.parseComparisonDiagram(lines) ||
-    diagramTools.parseLinearFlowDiagram(lines);
-
-  if (flow) return { type: "flow", ...flow };
-
-  return diagramTools.isDiagramCodeBlock(lines)
-    ? {
-        type: "pre",
-        lines: lines.map(diagramTools.normalizeCodeTextForPdf),
-      }
-    : null;
-}
-
-function renderDiagramHtml(diagram) {
-  if (!diagram) return "";
-
-  if (diagram.type === "table") {
-    return `<figure class="bookify-diagram"><figcaption>Structured Table</figcaption><table class="bookify-table"><thead><tr>${diagram.header
-      .map((cell) => `<th>${escapeXml(cell)}</th>`)
-      .join("")}</tr></thead><tbody>${diagram.rows
-      .map(
-        (row) =>
-          `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).join("")}</tr>`
-      )
-      .join("")}</tbody></table></figure>`;
-  }
-
-  if (diagram.type === "flow") {
-    return `<figure class="bookify-diagram"><figcaption>${escapeXml(
-      diagram.title || "Diagram"
-    )}</figcaption><div class="bookify-flow">${(diagram.nodes || [])
-      .map(
-        (node, index) =>
-          `<div class="bookify-node"><strong>${escapeXml(
-            node.label
-          )}</strong>${node.detail ? `<p>${escapeXml(node.detail)}</p>` : ""}</div>${
-            index < diagram.nodes.length - 1
-              ? '<div class="bookify-arrow">↓</div>'
-              : ""
-          }`
-      )
-      .join("")}</div></figure>`;
-  }
-
-  if (diagram.type === "boxed-list") {
-    return `<figure class="bookify-diagram bookify-callout"><figcaption>${escapeXml(
-      diagram.title || "Key Points"
-    )}</figcaption><ol class="bookify-list">${(diagram.items || [])
-      .map((item) => {
-        const match = String(item).match(/^\d+[).]\s*(.*)$/);
-        return `<li>${escapeXml(match ? match[1] : item)}</li>`;
-      })
-      .join("")}</ol></figure>`;
-  }
-
-  if (diagram.type === "pre") {
-    return `<figure class="bookify-diagram"><figcaption>Diagram</figcaption><pre>${escapeXml(
-      diagram.lines.join("\n")
-    )}</pre></figure>`;
-  }
-
-  return "";
-}
+const {
+  parseExportDiagram,
+  renderDiagramHtml,
+} = require("./export-diagram");
 
 function createMarkdownRenderer(imageRegistry) {
   const renderer = new MarkdownIt({
@@ -253,7 +137,7 @@ async function generateEpub(book) {
 body.cover-body { margin: 0; padding: 0; }
 h1, h2, h3 { font-family: Georgia, serif; color: #111827; }
 pre, code { font-family: "Courier New", monospace; }
-pre { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; color: #0f172a; font-size: 0.86em; line-height: 1.45; overflow-x: auto; padding: 1em; white-space: pre; }
+pre { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; color: #0f172a; font-size: 0.86em; line-height: 1.45; max-width: 100%; overflow-wrap: anywhere; padding: 1em; white-space: pre-wrap; word-break: break-word; }
 blockquote { border-left: 4px solid #d1d5db; padding-left: 1em; color: #4b5563; }
 img { display: block; max-width: 100%; height: auto; margin: 1.25em auto; }
 .cover-page { align-items: center; display: flex; justify-content: center; margin: 0; min-height: 100vh; padding: 0; page-break-after: always; text-align: center; }
@@ -276,7 +160,9 @@ img { display: block; max-width: 100%; height: auto; margin: 1.25em auto; }
 .bookify-list li { background: #fff; border: 1px solid #dbeafe; border-radius: 8px; margin: 0.55em 0; padding: 0.65em 0.8em; }
 .bookify-table { border-collapse: collapse; width: 100%; }
 .bookify-table th, .bookify-table td { border: 1px solid #cbd5e1; padding: 0.5em; text-align: left; }
-.bookify-table th { background: #111827; color: #fff; }`
+.bookify-table th { background: #111827; color: #fff; }
+.bookify-diagram pre { background: transparent; border: 0; margin: 0; max-width: 100%; overflow-wrap: anywhere; padding: 0; white-space: pre-wrap; word-break: break-word; }
+.bookify-table { table-layout: fixed; word-break: break-word; }`
   );
 
   const coverMarkup = coverImage

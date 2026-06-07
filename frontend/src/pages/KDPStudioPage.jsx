@@ -28,6 +28,7 @@ import { API_ENDPOINTS, resolveImageUrl } from "../utils/api-endpoints";
 import { normalizeBook } from "../utils/api-shapes";
 import { markdownToPlainText } from "../utils/markdown-clipboard";
 import { splitKdpMarkdownIntoPreviewPages } from "../utils/kdp-markdown-blocks";
+import KdpPreviewBlock from "../components/kdp/KdpPreviewBlock";
 import KdpPreviewDiagram from "../components/kdp/KdpPreviewDiagram";
 
 const TRIM_SIZES = [
@@ -97,7 +98,7 @@ const KDP_GUTTER_RULES = [
 const PREVIEW_SERIF_FONT_FAMILY =
   '"Times New Roman", Times, serif';
 const PRINT_AVERAGE_CHAR_WIDTH_RATIO = 0.45;
-const PRINT_PAGE_LINE_SAFETY = 0;
+const PRINT_PAGE_LINE_SAFETY = 2;
 const MAX_PRINT_FONT_SIZE = 32;
 
 const TOC_DESIGNS = [
@@ -316,6 +317,7 @@ function getTextPageMetrics(
     linesPerPage,
     paragraphIndentPoints: fontSize * paragraphIndentRatio,
     paragraphIndentRatio,
+    renderLineBuffer: 2,
     wordsPerPage: Math.max(
       70,
       Math.round(textArea * densityAt12pt * fontScale * lineScale)
@@ -389,7 +391,111 @@ function normalizeTextPageMetrics(metricsOrWordsPerPage = 220) {
 }
 
 function getChapterOpeningReserveLines(textMetrics) {
-  return Math.max(3, Math.floor(textMetrics.linesPerPage * 0.1));
+  return Math.max(7, Math.floor(textMetrics.linesPerPage * 0.2));
+}
+
+function shouldCompactKdpDiagramBlock(block) {
+  if (!block || (block.type !== "diagram" && block.type !== "code")) {
+    return false;
+  }
+
+  const sourceLines = String(block.content || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean).length;
+  const bracketNodes = (String(block.content || "").match(/\[[^\]]{2,}\]/g) || [])
+    .length;
+
+  return sourceLines <= 6 && bracketNodes <= 3;
+}
+
+function escapeRegExp(value = "") {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripChapterOpenerFromMarkdown(
+  markdown = "",
+  chapterIndex,
+  chapterTitle = ""
+) {
+  const chapterNum = chapterIndex + 1;
+  const titlePart = escapeRegExp(String(chapterTitle || "").trim());
+  const exactOpenerPattern = new RegExp(
+    `^#{0,6}\\s*Chapter\\s+${chapterNum}\\s*[:\\-–]?\\s*${titlePart}\\s*\\n+`,
+    "im"
+  );
+  const fallbackOpenerPattern = new RegExp(
+    `^#{0,6}\\s*Chapter\\s+${chapterNum}\\s*[:\\-–]?\\s*[^\\n]+\\n+`,
+    "im"
+  );
+  const source = String(markdown || "");
+
+  if (exactOpenerPattern.test(source)) {
+    return source.replace(exactOpenerPattern, "");
+  }
+
+  return source.replace(fallbackOpenerPattern, "");
+}
+
+function stripDuplicateChapterHeaderBlocks(
+  blocks = [],
+  chapterIndex,
+  chapterTitle = ""
+) {
+  const cleaned = [...blocks];
+  const chapterNum = chapterIndex + 1;
+  const normalizedTitle = String(chapterTitle || "").trim().toLowerCase();
+  const chapterPrefix = new RegExp(
+    `^chapter\\s+${chapterNum}\\s*[:\\-–]?\\s*`,
+    "i"
+  );
+
+  while (cleaned.length) {
+    const first = cleaned[0];
+    const text = String(first.text || "").trim();
+
+    const fullChapterHeading = normalizedTitle
+      ? new RegExp(
+          `^chapter\\s+${chapterNum}\\s*[:\\-–]?\\s*${escapeRegExp(
+            String(chapterTitle || "").trim()
+          )}$`,
+          "i"
+        )
+      : null;
+
+    if (
+      first.type === "heading" &&
+      (chapterPrefix.test(text) ||
+        (fullChapterHeading && fullChapterHeading.test(text)))
+    ) {
+      cleaned.shift();
+      continue;
+    }
+
+    if (
+      first.type === "heading" &&
+      normalizedTitle &&
+      text.toLowerCase() === normalizedTitle
+    ) {
+      cleaned.shift();
+      continue;
+    }
+
+    if (first.type === "paragraph" && chapterPrefix.test(text)) {
+      const remainder = text.replace(chapterPrefix, "").trim();
+
+      if (!remainder || remainder.toLowerCase() === normalizedTitle) {
+        cleaned.shift();
+        continue;
+      }
+
+      cleaned[0] = { ...first, text: remainder };
+    }
+
+    break;
+  }
+
+  return cleaned;
 }
 
 let previewMeasureContext;
@@ -625,6 +731,25 @@ function estimateBookLayout({ chapters, metadata, trim, fontSize, settings }) {
     });
   }
 
+  const finalChapterPages = chapters.reduce(
+    (sum, chapter) =>
+      sum +
+      splitTextIntoPreviewPages(chapter.content, textMetrics, {
+        firstPageReserveLines: getChapterOpeningReserveLines(textMetrics),
+      }).length,
+    0
+  );
+  const finalFrontMatterPages =
+    1 +
+    (String(metadata.copyrightPage || "").trim() ? 1 : 0) +
+    tocPageCount +
+    (chapters.length && (1 + (String(metadata.copyrightPage || "").trim() ? 1 : 0) + tocPageCount + 1) % 2 === 0
+      ? 1
+      : 0);
+  textPageCount = roundToEvenPageCount(
+    Math.max(textPageCount, finalFrontMatterPages + finalChapterPages)
+  );
+
   return {
     margins,
     pageCount: roundToEvenPageCount(textPageCount),
@@ -750,22 +875,52 @@ function buildPreviewPages({
       addTocEntryOnce(previewPage);
     });
 
-    splitTextIntoPreviewPages(chapter.content, textMetrics, {
+    let hasRenderedChapterHeader = imageBlocks.length > 0;
+
+    const chapterMarkdown =
+      imageBlocks.length > 0
+        ? chapter.content
+        : stripChapterOpenerFromMarkdown(
+            chapter.content,
+            chapterIndex,
+            chapter.title
+          );
+
+    splitTextIntoPreviewPages(chapterMarkdown, textMetrics, {
       firstPageReserveLines: imageBlocks.length ? 0 : firstPageReserveLines,
     }).forEach((pageContent, pageIndex) => {
+        const isDiagramOnlyPage =
+          pageContent.blocks?.length === 1 &&
+          pageContent.blocks[0]?.type === "diagram";
+        const showChapterHeader = !hasRenderedChapterHeader && !isDiagramOnlyPage;
+        let pageBlocks = pageContent.blocks || [];
+
+        if (showChapterHeader) {
+          pageBlocks = stripDuplicateChapterHeaderBlocks(
+            pageBlocks,
+            chapterIndex,
+            chapter.title
+          );
+        }
+
         const previewPage = {
           id: `chapter-${chapterIndex}-${pageIndex}`,
           kind: "chapter",
-          label: `${chapter.title || `Chapter ${chapterIndex + 1}`}${
-            pageIndex > 0 ? `, p. ${pageIndex + 1}` : ""
-          }`,
-          chapterLabel: `Chapter ${chapterIndex + 1}`,
-          title:
-            pageIndex === 0 && !imageBlocks.length
-              ? chapter.title || `Chapter ${chapterIndex + 1}`
-              : "",
-          blocks: pageContent.blocks,
+          label: isDiagramOnlyPage
+            ? pageContent.blocks[0]?.label || "Diagram"
+            : `${chapter.title || `Chapter ${chapterIndex + 1}`}${
+                pageIndex > 0 ? `, p. ${pageIndex + 1}` : ""
+              }`,
+          chapterLabel: showChapterHeader ? `Chapter ${chapterIndex + 1}` : "",
+          title: showChapterHeader
+            ? chapter.title || `Chapter ${chapterIndex + 1}`
+            : "",
+          blocks: pageBlocks,
         };
+
+        if (showChapterHeader) {
+          hasRenderedChapterHeader = true;
+        }
 
         const addedPreviewPage = addInteriorPage(previewPage);
 
@@ -2754,8 +2909,14 @@ function KDPStudioPage() {
                                   ) : previewPage.kind === "blank" ? (
                                     <div className="h-full" style={pagePadding} />
                                   ) : (
+                                    (() => {
+                                      const isDiagramOnlyRenderPage =
+                                        previewPage.blocks?.length === 1 &&
+                                        previewPage.blocks[0]?.type === "diagram";
+
+                                      return (
                                     <div
-                                      className="relative h-full font-serif"
+                                      className="relative flex h-full min-h-0 flex-col font-serif"
                                       style={{
                                         ...pagePadding,
                                         fontFamily: PREVIEW_SERIF_FONT_FAMILY,
@@ -2763,7 +2924,7 @@ function KDPStudioPage() {
                                       }}
                                     >
                                       {previewPage.chapterLabel && previewPage.title && (
-                                        <div className="mb-[1.25em] text-center">
+                                        <div className="mb-[1.25em] shrink-0 text-center">
                                           <p className="mb-[0.55em] text-[0.78em] font-semibold uppercase tracking-[0.16em] opacity-55">
                                             {previewPage.chapterLabel}
                                           </p>
@@ -2773,7 +2934,11 @@ function KDPStudioPage() {
                                         </div>
                                       )}
                                       <div
-                                        className="text-[1em]"
+                                        className={`min-h-0 flex-1 overflow-hidden pb-[7cqw] text-[1em]${
+                                          isDiagramOnlyRenderPage
+                                            ? " flex flex-col justify-center"
+                                            : ""
+                                        }`}
                                         style={{ lineHeight: bodyLineSpacing }}
                                       >
                                         {(previewPage.blocks?.length
@@ -2795,35 +2960,28 @@ function KDPStudioPage() {
                                                 )
                                               : [{ type: "paragraph", text: " " }]
                                             )
-                                        ).map((block, blockIndex) => {
-                                          if (block.type === "diagram") {
-                                            return (
-                                              <KdpPreviewDiagram
-                                                key={`${previewPage.id}-diagram-${blockIndex}`}
-                                                content={block.content}
-                                                language={block.language}
-                                                label={block.label}
-                                              />
-                                            );
-                                          }
-
-                                          return (
-                                            <p
-                                              key={`${previewPage.id}-${blockIndex}`}
-                                              className="m-0 text-justify"
-                                              style={{
-                                                textIndent:
-                                                  previewPage.kind ===
-                                                    "chapter" &&
-                                                  !block.continuation
-                                                    ? `${paragraphIndent}em`
-                                                    : "0",
-                                              }}
-                                            >
-                                              {block.text}
-                                            </p>
-                                          );
-                                        })}
+                                        ).map((block, blockIndex) => (
+                                          <KdpPreviewBlock
+                                            key={`${previewPage.id}-${blockIndex}`}
+                                            block={block}
+                                            paragraphIndent={paragraphIndent}
+                                            showParagraphIndent={
+                                              previewPage.kind === "chapter"
+                                            }
+                                            diagramCompact={
+                                              (previewPage.blocks?.length || 0) >
+                                                1 &&
+                                              !(previewPage.blocks || []).some(
+                                                (pageBlock) =>
+                                                  (pageBlock.type === "diagram" ||
+                                                    pageBlock.type === "code") &&
+                                                  !shouldCompactKdpDiagramBlock(
+                                                    pageBlock
+                                                  )
+                                              )
+                                            }
+                                          />
+                                        ))}
                                       </div>
                                       {previewPage.interiorPageNumber && (
                                         <span className="absolute bottom-[3.5%] left-1/2 -translate-x-1/2 font-mono text-[0.95em] font-medium opacity-80">
@@ -2831,6 +2989,8 @@ function KDPStudioPage() {
                                         </span>
                                       )}
                                     </div>
+                                      );
+                                    })()
                                   )}
                                   </article>
                                 );
