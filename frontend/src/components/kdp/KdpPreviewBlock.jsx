@@ -1,14 +1,6 @@
 import KdpPreviewDiagram from "./KdpPreviewDiagram";
 import "../../styles/bookify-diagram.css";
 
-const HEADING_SIZES = {
-  1: "1.22em",
-  2: "1.12em",
-  3: "1.05em",
-  4: "1em",
-  5: "0.95em",
-  6: "0.9em",
-};
 
 export default function KdpPreviewBlock({
   block,
@@ -16,6 +8,7 @@ export default function KdpPreviewBlock({
   showParagraphIndent = false,
   diagramCompact = false,
   diagramFullPage = false,
+  baseFontSize = 12,
 }) {
   if (!block) return null;
 
@@ -31,7 +24,12 @@ export default function KdpPreviewBlock({
     );
   }
 
+  const bodySize = Number(baseFontSize) || 12;
+
   if (block.type === "code") {
+    const codeSizePoints = Math.max(7.5, bodySize - 2);
+    const codeEmSize = `${(codeSizePoints / bodySize).toFixed(4)}em`;
+
     return (
       <div className="not-prose my-[0.45em] w-full">
         {block.label ? (
@@ -39,7 +37,7 @@ export default function KdpPreviewBlock({
             {block.label}
           </p>
         ) : null}
-        <pre className="m-0 max-w-full whitespace-pre-wrap break-words rounded-md border border-slate-200 bg-slate-50 p-[0.65em] font-mono text-[0.64em] leading-[1.22] text-slate-900">
+        <pre className="m-0 max-w-full whitespace-pre-wrap break-words rounded-md border border-slate-200 bg-slate-50 p-[0.65em] font-mono leading-[1.22] text-slate-900" style={{ fontSize: codeEmSize }}>
           <code>{String(block.content || "").replace(/\n$/, "")}</code>
         </pre>
       </div>
@@ -47,9 +45,13 @@ export default function KdpPreviewBlock({
   }
 
   if (block.type === "table") {
+    const compactTable = (block.rows || []).length > 6 || (block.header || []).length > 3;
+    const tableSizePoints = Math.max(8.2, bodySize * (compactTable ? 0.76 : 0.82));
+    const tableEmSize = `${(tableSizePoints / bodySize).toFixed(4)}em`;
+
     return (
       <figure className="bookify-diagram-host not-prose my-[0.45em] w-full overflow-hidden">
-        <table className="bookify-table w-full text-[0.74em]">
+        <table className="bookify-table w-full" style={{ fontSize: tableEmSize }}>
           {(block.header || []).length > 0 && (
             <thead>
               <tr>
@@ -74,10 +76,21 @@ export default function KdpPreviewBlock({
   }
 
   if (block.type === "heading") {
+    const headingSizes = {
+      1: Math.max(16, Math.round(bodySize * 1.55)),
+      2: Math.max(14, Math.round(bodySize * 1.35)),
+      3: Math.max(13, Math.round(bodySize * 1.18)),
+      4: bodySize + 1,
+      5: bodySize,
+      6: bodySize - 0.5,
+    };
+    const fontSizePoints = headingSizes[block.level] || Math.max(13, Math.round(bodySize * 1.18));
+    const headingEmSize = `${(fontSizePoints / bodySize).toFixed(4)}em`;
+
     return (
       <p
         className="m-0 mb-[0.55em] text-center font-bold leading-tight"
-        style={{ fontSize: HEADING_SIZES[block.level] || "1.05em" }}
+        style={{ fontSize: headingEmSize }}
       >
         {block.text}
       </p>

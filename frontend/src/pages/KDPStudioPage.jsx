@@ -1444,11 +1444,9 @@ function KDPStudioPage() {
     gridTemplateColumns: `${trim.width}fr ${Math.max(spineWidth, 0.015)}fr ${trim.width}fr`,
   };
   const previewPageWidth = Math.min(460, Math.round(pageCanvas.width * 72));
-  const previewTextFontSize = `clamp(${Math.max(7.5, fontSize * 0.66).toFixed(
-    2
-  )}px, ${((fontSize / Math.max(1, pageCanvas.width * 72)) * 100).toFixed(
+  const previewTextFontSize = `${((fontSize / Math.max(1, pageCanvas.width * 72)) * 100).toFixed(
     4
-  )}cqw, ${Math.max(18, fontSize).toFixed(2)}px)`;
+  )}cqw`;
   const pagePreviewStyle = {
     maxWidth: `${previewPageWidth}px`,
     width: "100%",
@@ -3021,6 +3019,7 @@ function KDPStudioPage() {
                                             diagramFullPage={
                                               isDiagramOnlyRenderPage
                                             }
+                                            baseFontSize={fontSize}
                                           />
                                         ))}
                                       </div>
