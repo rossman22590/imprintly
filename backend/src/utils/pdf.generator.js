@@ -1511,14 +1511,35 @@ function renderKdpTableOfContents(doc, entries, pageIndex = 0) {
   doc.moveDown(1);
 
   const contentWidth = getContentWidth(doc);
-  const labelWidth = Math.min(72, contentWidth * 0.26);
-  const pageWidth = 34;
-  const titleWidth = contentWidth - labelWidth - pageWidth - 16;
+  const entryBaseSize = PDF_CONFIG.sizes.body * 0.86;
+  const labelFontSize = entryBaseSize * 0.78;
+  const titleFontSize = entryBaseSize;
+  const pageNumberFontSize = entryBaseSize * 0.9;
+
+  let maxLabelWidth = 0;
+  let maxPageWidth = 0;
+
+  doc.font(PDF_CONFIG.fonts.bodyBold).fontSize(labelFontSize);
+  entries.forEach((entry) => {
+    const w = doc.widthOfString(entry.chapterLabel);
+    if (w > maxLabelWidth) maxLabelWidth = w;
+  });
+
+  doc.font(PDF_CONFIG.fonts.body).fontSize(pageNumberFontSize);
+  entries.forEach((entry) => {
+    const w = doc.widthOfString(String(entry.pageNumber));
+    if (w > maxPageWidth) maxPageWidth = w;
+  });
+
+  maxLabelWidth = Math.max(30, maxLabelWidth);
+  maxPageWidth = Math.max(16, maxPageWidth);
+
+  const titleWidth = contentWidth - maxLabelWidth - maxPageWidth - 16;
   const start = pageIndex * 1000;
-  const rowHeight = Math.max(PDF_CONFIG.sizes.body * 1.35, 14);
+  const rowHeight = Math.max(entryBaseSize * 1.35, 14);
 
   entries.forEach((entry, index) => {
-    doc.font(PDF_CONFIG.fonts.body).fontSize(PDF_CONFIG.sizes.body);
+    doc.font(PDF_CONFIG.fonts.body).fontSize(titleFontSize);
     const titleHeight = doc.heightOfString(entry.title, { width: titleWidth });
     const currentRowHeight = Math.max(rowHeight, titleHeight);
 
@@ -1527,32 +1548,32 @@ function renderKdpTableOfContents(doc, entries, pageIndex = 0) {
     const y = doc.y;
     doc
       .font(PDF_CONFIG.fonts.bodyBold)
-      .fontSize(Math.max(8.5, PDF_CONFIG.sizes.body - 2))
+      .fontSize(labelFontSize)
       .fillColor(PDF_CONFIG.colors.pageNumber)
       .text(entry.chapterLabel, PDF_CONFIG.margins.left, y, {
-        width: labelWidth,
+        width: maxLabelWidth,
         lineBreak: false,
       });
 
     doc
       .font(PDF_CONFIG.fonts.body)
-      .fontSize(PDF_CONFIG.sizes.body)
+      .fontSize(titleFontSize)
       .fillColor(PDF_CONFIG.colors.body)
-      .text(entry.title, PDF_CONFIG.margins.left + labelWidth + 8, y, {
+      .text(entry.title, PDF_CONFIG.margins.left + maxLabelWidth + 8, y, {
         width: titleWidth,
       });
 
     doc
       .font(PDF_CONFIG.fonts.body)
-      .fontSize(PDF_CONFIG.sizes.body)
+      .fontSize(pageNumberFontSize)
       .fillColor(PDF_CONFIG.colors.body)
       .text(
         String(entry.pageNumber),
-        PDF_CONFIG.margins.left + labelWidth + titleWidth + 16,
+        PDF_CONFIG.margins.left + maxLabelWidth + titleWidth + 16,
         y,
         {
           align: "right",
-          width: pageWidth,
+          width: maxPageWidth,
           lineBreak: false,
         }
       );
@@ -1561,8 +1582,8 @@ function renderKdpTableOfContents(doc, entries, pageIndex = 0) {
 
     if (start + index < entries.length - 1) {
       doc
-        .moveTo(PDF_CONFIG.margins.left + labelWidth + 8, doc.y - 4)
-        .lineTo(PDF_CONFIG.margins.left + labelWidth + titleWidth + 10, doc.y - 4)
+        .moveTo(PDF_CONFIG.margins.left + maxLabelWidth + 8, doc.y - 4)
+        .lineTo(PDF_CONFIG.margins.left + maxLabelWidth + titleWidth + 10, doc.y - 4)
         .dash(1, { space: 3 })
         .stroke("#cbd5e1")
         .undash();
