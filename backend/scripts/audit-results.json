@@ -1,0 +1,960 @@
+{
+  "bookTitle": "Building with AI for Beginners",
+  "bookId": "6a1515e8744abaa018a74109",
+  "chapterCount": 12,
+  "textMetrics": {
+    "charsPerLine": 62,
+    "linesPerPage": 33,
+    "wordsPerPage": 383,
+    "paragraphIndentRatio": 1.35,
+    "fontSize": 12
+  },
+  "diagramPages": [
+    {
+      "pageNum": 5,
+      "chapterIndex": 1,
+      "chapterTitle": "Adopting the AI Builder Mindset",
+      "label": "",
+      "language": "",
+      "previewSnippet": "[ Natural Language / AI Prompts ]  <-- You are here |                │ |                ▼",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "generic-flow"
+    },
+    {
+      "pageNum": 9,
+      "chapterIndex": 1,
+      "chapterTitle": "Adopting the AI Builder Mindset",
+      "label": "",
+      "language": "",
+      "previewSnippet": "┌─────────────────────────────────────────────────────────┐ | │                    THE BUILDING LOOP                    │ | ├────────────────────────────┬────────────────────────────┤",
+      "renderMode": "boxed-list",
+      "quality": "good",
+      "reason": "Styled boxed-list",
+      "readerType": "boxed-list"
+    },
+    {
+      "pageNum": 12,
+      "chapterIndex": 1,
+      "chapterTitle": "Adopting the AI Builder Mindset",
+      "label": "",
+      "language": "",
+      "previewSnippet": "                  [ FITNESS TRACKER PLATFORM ] |                                │ |        ┌───────────────────────┼───────────────────────┐",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "generic-flow"
+    },
+    {
+      "pageNum": 19,
+      "chapterIndex": 2,
+      "chapterTitle": "Understanding Your AI Development Toolkit",
+      "label": "",
+      "language": "",
+      "previewSnippet": "                         ┌───────────────────────────┐ |                          │   LLM Developer Engines   │ |                          └─────────────┬─────────────┘",
+      "renderMode": "boxed-list",
+      "quality": "good",
+      "reason": "Styled boxed-list",
+      "readerType": "boxed-list"
+    },
+    {
+      "pageNum": 23,
+      "chapterIndex": 2,
+      "chapterTitle": "Understanding Your AI Development Toolkit",
+      "label": "",
+      "language": "",
+      "previewSnippet": "TRADITIONAL IDE + PLUGINS                       AI-NATIVE IDE | ┌───────────────────────────┐                   ┌───────────────────────────┐ | │       VS Code / JetBrains │                   │          Cursor           │",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "process"
+    },
+    {
+      "pageNum": 26,
+      "chapterIndex": 2,
+      "chapterTitle": "Understanding Your AI Development Toolkit",
+      "label": "",
+      "language": "",
+      "previewSnippet": "┌──────────────────────────────────────────────────────────┐ | │                   CURSON EXTENSIONS                       │ | ├──────────────────────────────────────────────────────────┤",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "stack"
+    },
+    {
+      "pageNum": 30,
+      "chapterIndex": 2,
+      "chapterTitle": "Understanding Your AI Development Toolkit",
+      "label": "",
+      "language": "",
+      "previewSnippet": "                           ┌───────────────────────────┐ |                            │      AI Billing Types     │ |                            └─────────────┬─────────────┘",
+      "renderMode": "boxed-list",
+      "quality": "good",
+      "reason": "Styled boxed-list",
+      "readerType": "boxed-list"
+    },
+    {
+      "pageNum": 37,
+      "chapterIndex": 2,
+      "chapterTitle": "Understanding Your AI Development Toolkit",
+      "label": "",
+      "language": "",
+      "previewSnippet": "COMPOSER AGENT EXECUTION FLOW: | ┌────────────────────────────────────────────────────────┐ | │  [Step 1] Writes logic for /hooks/useTheme.ts          │",
+      "renderMode": "boxed-list",
+      "quality": "good",
+      "reason": "Styled boxed-list",
+      "readerType": "boxed-list"
+    },
+    {
+      "pageNum": 41,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "label": "",
+      "language": "",
+      "previewSnippet": "                [ Vague App Idea ] |                         │ |              ( No Technical Specs )",
+      "renderMode": "boxed-list",
+      "quality": "good",
+      "reason": "Styled boxed-list",
+      "readerType": "boxed-list"
+    },
+    {
+      "pageNum": 53,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "label": "",
+      "language": "",
+      "previewSnippet": "               HORIZONTAL BUILD (Fragile) |           ┌──────────────────────────────────┐ | Frontend  │ Write ALL pages and UI mockups   │ ◄── AI hallucinates routes",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "architecture"
+    },
+    {
+      "pageNum": 70,
+      "chapterIndex": 4,
+      "chapterTitle": "Designing User Interfaces with AI Guidance",
+      "label": "The workflow of UI refinement follows a predictable loop:",
+      "language": "",
+      "previewSnippet": "[Analyze Generated UI] |    └─> Identify Visual Flaws / UX Friction |          └─> Format Direct corrective prompt",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "process"
+    },
+    {
+      "pageNum": 74,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "label": "",
+      "language": "",
+      "previewSnippet": "┌────────────────────────────────────────────────────────┐ | │               THE AI-BUILDER TOOLSTACK                 │ | ├───────────────┬────────────────────────────────────────┤",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "stack"
+    },
+    {
+      "pageNum": 78,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "✔ Would you like to use TypeScript? … Yes | ✔ Would you like to use ESLint? … Yes | ✔ Would you like to use Tailwind CSS? … Yes",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "process"
+    },
+    {
+      "pageNum": 80,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "my-ai-app/ | ├── src/ | │   ├── app/                 # Routing, page layouts, and API routes",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "process"
+    },
+    {
+      "pageNum": 84,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "# dependencies | /node_modules | /.pnp",
+      "renderMode": "pre",
+      "quality": "fallback",
+      "reason": "Unparsed ASCII pre block",
+      "readerType": null
+    },
+    {
+      "pageNum": 88,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "label": "",
+      "language": "",
+      "previewSnippet": "┌────────────────────────────────────────────────────────┐ | │               SUCCESSFULLY INITIALIZED!                │ | ├────────────────────────────────────────────────────────┤",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "stack"
+    },
+    {
+      "pageNum": 91,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "[ROLE & EXPERTISE] | [PROJECT CONTEXT & CURRENT STACK] | [SPECIFIC TASK DESCRIPTION]",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "process"
+    },
+    {
+      "pageNum": 98,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "label": "This optimization workflow is called the Iterative Refinement Cycle:",
+      "language": "text",
+      "previewSnippet": "  ┌──────────────────────────────────────────┐ |   ▼                                          │ | [ 1. Write Initial Prompt ]                  │",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "generic-flow"
+    },
+    {
+      "pageNum": 105,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "label": "",
+      "language": "",
+      "previewSnippet": "[ Client Browser ] <---> [ Next.js Server / API Routes ] <---> [ External APIs / Databases ]",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "linear"
+    },
+    {
+      "pageNum": 112,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "label": "",
+      "language": "",
+      "previewSnippet": "                    ┌─── Authentication (e.g., Supabase Auth, NextAuth) |                     │ | Your Application ───┼─── Database (e.g., Supabase DB, Neon PostgreSQL)",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "process"
+    },
+    {
+      "pageNum": 120,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "My Next.js API route is throwing an error. Here is the code for my handler: | [Insert code snippet] | ",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "system-comparison"
+    },
+    {
+      "pageNum": 127,
+      "chapterIndex": 8,
+      "chapterTitle": "Free Deployment and Hosting with Vercel",
+      "label": "",
+      "language": "",
+      "previewSnippet": "+-------------------------------------------------------------+ | | Vercel Import Project Screen                                | | +-------------------------------------------------------------+",
+      "renderMode": "boxed-list",
+      "quality": "good",
+      "reason": "Styled boxed-list",
+      "readerType": "boxed-list"
+    },
+    {
+      "pageNum": 129,
+      "chapterIndex": 8,
+      "chapterTitle": "Free Deployment and Hosting with Vercel",
+      "label": "",
+      "language": "",
+      "previewSnippet": "+-------------------------------------------------------------+ | | Environment Variables Configuration                         | | +-------------------------------------------------------------+",
+      "renderMode": "boxed-list",
+      "quality": "good",
+      "reason": "Styled boxed-list",
+      "readerType": "boxed-list"
+    },
+    {
+      "pageNum": 135,
+      "chapterIndex": 8,
+      "chapterTitle": "Free Deployment and Hosting with Vercel",
+      "label": "",
+      "language": "",
+      "previewSnippet": "+-------------------------------------------------------------+ | | DNS Configuration Guide                                     | | +-------------------------------------------------------------+",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "stack"
+    },
+    {
+      "pageNum": 137,
+      "chapterIndex": 9,
+      "chapterTitle": "Iterative Design and Gathering Feedback",
+      "label": "",
+      "language": "",
+      "previewSnippet": "    [ 1. Collect ]  --> Capture structured & unstructured user experiences. |           | |           v",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "generic-flow"
+    },
+    {
+      "pageNum": 146,
+      "chapterIndex": 9,
+      "chapterTitle": "Iterative Design and Gathering Feedback",
+      "label": "",
+      "language": "",
+      "previewSnippet": "                  [ fix/mobile-nav-toggle ] (Local branch) |                               | |                               v",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "process"
+    },
+    {
+      "pageNum": 152,
+      "chapterIndex": 10,
+      "chapterTitle": "Building in Public and Shipping Your Product",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "SYSTEM: You are an expert developer-advocate and technical writer. | USER: | Review the following git diff for our Next.js application and generate:",
+      "renderMode": "pre",
+      "quality": "fallback",
+      "reason": "Unparsed ASCII pre block",
+      "readerType": null
+    },
+    {
+      "pageNum": 157,
+      "chapterIndex": 10,
+      "chapterTitle": "Building in Public and Shipping Your Product",
+      "label": "",
+      "language": "",
+      "previewSnippet": "       [Pre-Launch Phase (7-10 Days Out)] |          - Collect waitlist signups |          - Draft assets (video, screenshots, copy)",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "process"
+    },
+    {
+      "pageNum": 159,
+      "chapterIndex": 10,
+      "chapterTitle": "Building in Public and Shipping Your Product",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "SYSTEM: You are a Lead Product Manager and Data Analyst. | USER: | Analyze the following community messages and group them into:",
+      "renderMode": "pre",
+      "quality": "fallback",
+      "reason": "Unparsed ASCII pre block",
+      "readerType": null
+    },
+    {
+      "pageNum": 163,
+      "chapterIndex": 11,
+      "chapterTitle": "Scaling, Maintenance, and the Future of Your AI-Assisted Application",
+      "label": "Here is a structured prompt template you can use:",
+      "language": "text",
+      "previewSnippet": "Act as a Senior Frontend Architect. Analyze the following Next.js/React component for technical debt, anti-patterns, and performance bottlenecks. |  | Provide a structured review covering:",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "system-comparison"
+    },
+    {
+      "pageNum": 167,
+      "chapterIndex": 11,
+      "chapterTitle": "Scaling, Maintenance, and the Future of Your AI-Assisted Application",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "Here is my current Prisma schema: | [Insert Schema] | ",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "system-comparison"
+    },
+    {
+      "pageNum": 169,
+      "chapterIndex": 11,
+      "chapterTitle": "Scaling, Maintenance, and the Future of Your AI-Assisted Application",
+      "label": "The Prompt:",
+      "language": "text",
+      "previewSnippet": "Write a unit test suite using Vitest and React Testing Library for the following TaskInput component. | Ensure you test: | 1. Rendering without crashing.",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "system-comparison"
+    },
+    {
+      "pageNum": 172,
+      "chapterIndex": 11,
+      "chapterTitle": "Scaling, Maintenance, and the Future of Your AI-Assisted Application",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "Write a Playwright E2E test file that tests the main user journey on my Next.js site: | 1. Navigate to /login. | 2. Fill in credentials and submit.",
+      "renderMode": "pre",
+      "quality": "fallback",
+      "reason": "Unparsed ASCII pre block",
+      "readerType": null
+    },
+    {
+      "pageNum": 173,
+      "chapterIndex": 11,
+      "chapterTitle": "Scaling, Maintenance, and the Future of Your AI-Assisted Application",
+      "label": "",
+      "language": "",
+      "previewSnippet": "       [ Local/Open-Source Models ] ----> Good for offline, privacy-centric, or highly custom codebases. |                   | |                   v",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "generic-flow"
+    },
+    {
+      "pageNum": 177,
+      "chapterIndex": 12,
+      "chapterTitle": "Continue learning with AI Tutor",
+      "label": "",
+      "language": "",
+      "previewSnippet": "┌────────────────────────────────────────┐ | │             Your Codebase              │ | │  (Next.js, React, APIs, Tailwind CSS)  │",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "stack"
+    },
+    {
+      "pageNum": 184,
+      "chapterIndex": 12,
+      "chapterTitle": "Continue learning with AI Tutor",
+      "label": "",
+      "language": "",
+      "previewSnippet": "You ────────► Ask for authentication conceptual overview | AI Tutor ───► Explains JWTs vs. Sessions with architecture diagrams | You ────────► Request Next.js Middleware implementation details",
+      "renderMode": "flow",
+      "quality": "good",
+      "reason": "Styled flow",
+      "readerType": "process"
+    }
+  ],
+  "poorDiagrams": [],
+  "fallbackDiagrams": [
+    {
+      "pageNum": 84,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "# dependencies | /node_modules | /.pnp",
+      "renderMode": "pre",
+      "quality": "fallback",
+      "reason": "Unparsed ASCII pre block",
+      "readerType": null
+    },
+    {
+      "pageNum": 152,
+      "chapterIndex": 10,
+      "chapterTitle": "Building in Public and Shipping Your Product",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "SYSTEM: You are an expert developer-advocate and technical writer. | USER: | Review the following git diff for our Next.js application and generate:",
+      "renderMode": "pre",
+      "quality": "fallback",
+      "reason": "Unparsed ASCII pre block",
+      "readerType": null
+    },
+    {
+      "pageNum": 159,
+      "chapterIndex": 10,
+      "chapterTitle": "Building in Public and Shipping Your Product",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "SYSTEM: You are a Lead Product Manager and Data Analyst. | USER: | Analyze the following community messages and group them into:",
+      "renderMode": "pre",
+      "quality": "fallback",
+      "reason": "Unparsed ASCII pre block",
+      "readerType": null
+    },
+    {
+      "pageNum": 172,
+      "chapterIndex": 11,
+      "chapterTitle": "Scaling, Maintenance, and the Future of Your AI-Assisted Application",
+      "label": "",
+      "language": "text",
+      "previewSnippet": "Write a Playwright E2E test file that tests the main user journey on my Next.js site: | 1. Navigate to /login. | 2. Fill in credentials and submit.",
+      "renderMode": "pre",
+      "quality": "fallback",
+      "reason": "Unparsed ASCII pre block",
+      "readerType": null
+    }
+  ],
+  "shortTextPages": [
+    {
+      "pageNum": 24,
+      "chapterIndex": 2,
+      "chapterTitle": "Understanding Your AI Development Toolkit",
+      "wordCount": 108,
+      "lineEstimate": 13,
+      "usableLines": 33,
+      "fillPercent": 39
+    },
+    {
+      "pageNum": 27,
+      "chapterIndex": 2,
+      "chapterTitle": "Understanding Your AI Development Toolkit",
+      "wordCount": 113,
+      "lineEstimate": 12,
+      "usableLines": 33,
+      "fillPercent": 36
+    },
+    {
+      "pageNum": 32,
+      "chapterIndex": 2,
+      "chapterTitle": "Understanding Your AI Development Toolkit",
+      "wordCount": 76,
+      "lineEstimate": 8,
+      "usableLines": 33,
+      "fillPercent": 24
+    },
+    {
+      "pageNum": 33,
+      "chapterIndex": 2,
+      "chapterTitle": "Understanding Your AI Development Toolkit",
+      "wordCount": 98,
+      "lineEstimate": 10,
+      "usableLines": 33,
+      "fillPercent": 30
+    },
+    {
+      "pageNum": 45,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "wordCount": 26,
+      "lineEstimate": 3,
+      "usableLines": 33,
+      "fillPercent": 9
+    },
+    {
+      "pageNum": 46,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "wordCount": 12,
+      "lineEstimate": 2,
+      "usableLines": 33,
+      "fillPercent": 6
+    },
+    {
+      "pageNum": 48,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "wordCount": 10,
+      "lineEstimate": 1,
+      "usableLines": 33,
+      "fillPercent": 3
+    },
+    {
+      "pageNum": 49,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "wordCount": 7,
+      "lineEstimate": 1,
+      "usableLines": 33,
+      "fillPercent": 3
+    },
+    {
+      "pageNum": 51,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "wordCount": 12,
+      "lineEstimate": 2,
+      "usableLines": 33,
+      "fillPercent": 6
+    },
+    {
+      "pageNum": 52,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "wordCount": 91,
+      "lineEstimate": 11,
+      "usableLines": 33,
+      "fillPercent": 33
+    },
+    {
+      "pageNum": 54,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "wordCount": 18,
+      "lineEstimate": 2,
+      "usableLines": 33,
+      "fillPercent": 6
+    },
+    {
+      "pageNum": 56,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "wordCount": 43,
+      "lineEstimate": 5,
+      "usableLines": 33,
+      "fillPercent": 15
+    },
+    {
+      "pageNum": 58,
+      "chapterIndex": 3,
+      "chapterTitle": "Transforming Ideas into Technical Specifications",
+      "wordCount": 65,
+      "lineEstimate": 8,
+      "usableLines": 33,
+      "fillPercent": 24
+    },
+    {
+      "pageNum": 64,
+      "chapterIndex": 4,
+      "chapterTitle": "Designing User Interfaces with AI Guidance",
+      "wordCount": 106,
+      "lineEstimate": 14,
+      "usableLines": 33,
+      "fillPercent": 42
+    },
+    {
+      "pageNum": 71,
+      "chapterIndex": 4,
+      "chapterTitle": "Designing User Interfaces with AI Guidance",
+      "wordCount": 46,
+      "lineEstimate": 6,
+      "usableLines": 33,
+      "fillPercent": 18
+    },
+    {
+      "pageNum": 72,
+      "chapterIndex": 4,
+      "chapterTitle": "Designing User Interfaces with AI Guidance",
+      "wordCount": 90,
+      "lineEstimate": 12,
+      "usableLines": 33,
+      "fillPercent": 36
+    },
+    {
+      "pageNum": 79,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "wordCount": 95,
+      "lineEstimate": 11,
+      "usableLines": 33,
+      "fillPercent": 33
+    },
+    {
+      "pageNum": 82,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "wordCount": 67,
+      "lineEstimate": 9,
+      "usableLines": 33,
+      "fillPercent": 27
+    },
+    {
+      "pageNum": 83,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "wordCount": 126,
+      "lineEstimate": 14,
+      "usableLines": 33,
+      "fillPercent": 42
+    },
+    {
+      "pageNum": 85,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "wordCount": 63,
+      "lineEstimate": 8,
+      "usableLines": 33,
+      "fillPercent": 24
+    },
+    {
+      "pageNum": 87,
+      "chapterIndex": 5,
+      "chapterTitle": "Setting Up Your Development Environment",
+      "wordCount": 102,
+      "lineEstimate": 13,
+      "usableLines": 33,
+      "fillPercent": 39
+    },
+    {
+      "pageNum": 93,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "wordCount": 16,
+      "lineEstimate": 2,
+      "usableLines": 33,
+      "fillPercent": 6
+    },
+    {
+      "pageNum": 96,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "wordCount": 12,
+      "lineEstimate": 2,
+      "usableLines": 33,
+      "fillPercent": 6
+    },
+    {
+      "pageNum": 99,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "wordCount": 70,
+      "lineEstimate": 8,
+      "usableLines": 33,
+      "fillPercent": 24
+    },
+    {
+      "pageNum": 100,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "wordCount": 39,
+      "lineEstimate": 4,
+      "usableLines": 33,
+      "fillPercent": 12
+    },
+    {
+      "pageNum": 101,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "wordCount": 49,
+      "lineEstimate": 6,
+      "usableLines": 33,
+      "fillPercent": 18
+    },
+    {
+      "pageNum": 102,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "wordCount": 42,
+      "lineEstimate": 6,
+      "usableLines": 33,
+      "fillPercent": 18
+    },
+    {
+      "pageNum": 103,
+      "chapterIndex": 6,
+      "chapterTitle": "Generating and Refining Code with LLMs",
+      "wordCount": 36,
+      "lineEstimate": 5,
+      "usableLines": 33,
+      "fillPercent": 15
+    },
+    {
+      "pageNum": 106,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "wordCount": 58,
+      "lineEstimate": 8,
+      "usableLines": 33,
+      "fillPercent": 24
+    },
+    {
+      "pageNum": 108,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "wordCount": 93,
+      "lineEstimate": 12,
+      "usableLines": 33,
+      "fillPercent": 36
+    },
+    {
+      "pageNum": 111,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "wordCount": 66,
+      "lineEstimate": 10,
+      "usableLines": 33,
+      "fillPercent": 30
+    },
+    {
+      "pageNum": 113,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "wordCount": 43,
+      "lineEstimate": 6,
+      "usableLines": 33,
+      "fillPercent": 18
+    },
+    {
+      "pageNum": 114,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "wordCount": 48,
+      "lineEstimate": 7,
+      "usableLines": 33,
+      "fillPercent": 21
+    },
+    {
+      "pageNum": 115,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "wordCount": 63,
+      "lineEstimate": 8,
+      "usableLines": 33,
+      "fillPercent": 24
+    },
+    {
+      "pageNum": 121,
+      "chapterIndex": 7,
+      "chapterTitle": "Integrating APIs and Managing State",
+      "wordCount": 59,
+      "lineEstimate": 7,
+      "usableLines": 33,
+      "fillPercent": 21
+    },
+    {
+      "pageNum": 124,
+      "chapterIndex": 8,
+      "chapterTitle": "Free Deployment and Hosting with Vercel",
+      "wordCount": 116,
+      "lineEstimate": 13,
+      "usableLines": 33,
+      "fillPercent": 39
+    },
+    {
+      "pageNum": 125,
+      "chapterIndex": 8,
+      "chapterTitle": "Free Deployment and Hosting with Vercel",
+      "wordCount": 44,
+      "lineEstimate": 7,
+      "usableLines": 33,
+      "fillPercent": 21
+    },
+    {
+      "pageNum": 130,
+      "chapterIndex": 8,
+      "chapterTitle": "Free Deployment and Hosting with Vercel",
+      "wordCount": 25,
+      "lineEstimate": 3,
+      "usableLines": 33,
+      "fillPercent": 9
+    },
+    {
+      "pageNum": 133,
+      "chapterIndex": 8,
+      "chapterTitle": "Free Deployment and Hosting with Vercel",
+      "wordCount": 116,
+      "lineEstimate": 13,
+      "usableLines": 33,
+      "fillPercent": 39
+    },
+    {
+      "pageNum": 139,
+      "chapterIndex": 9,
+      "chapterTitle": "Iterative Design and Gathering Feedback",
+      "wordCount": 48,
+      "lineEstimate": 6,
+      "usableLines": 33,
+      "fillPercent": 18
+    },
+    {
+      "pageNum": 141,
+      "chapterIndex": 9,
+      "chapterTitle": "Iterative Design and Gathering Feedback",
+      "wordCount": 14,
+      "lineEstimate": 2,
+      "usableLines": 33,
+      "fillPercent": 6
+    },
+    {
+      "pageNum": 143,
+      "chapterIndex": 9,
+      "chapterTitle": "Iterative Design and Gathering Feedback",
+      "wordCount": 59,
+      "lineEstimate": 8,
+      "usableLines": 33,
+      "fillPercent": 24
+    },
+    {
+      "pageNum": 145,
+      "chapterIndex": 9,
+      "chapterTitle": "Iterative Design and Gathering Feedback",
+      "wordCount": 117,
+      "lineEstimate": 13,
+      "usableLines": 33,
+      "fillPercent": 39
+    },
+    {
+      "pageNum": 148,
+      "chapterIndex": 9,
+      "chapterTitle": "Iterative Design and Gathering Feedback",
+      "wordCount": 110,
+      "lineEstimate": 14,
+      "usableLines": 33,
+      "fillPercent": 42
+    },
+    {
+      "pageNum": 153,
+      "chapterIndex": 10,
+      "chapterTitle": "Building in Public and Shipping Your Product",
+      "wordCount": 82,
+      "lineEstimate": 10,
+      "usableLines": 33,
+      "fillPercent": 30
+    },
+    {
+      "pageNum": 154,
+      "chapterIndex": 10,
+      "chapterTitle": "Building in Public and Shipping Your Product",
+      "wordCount": 2,
+      "lineEstimate": 1,
+      "usableLines": 33,
+      "fillPercent": 3
+    },
+    {
+      "pageNum": 160,
+      "chapterIndex": 10,
+      "chapterTitle": "Building in Public and Shipping Your Product",
+      "wordCount": 56,
+      "lineEstimate": 7,
+      "usableLines": 33,
+      "fillPercent": 21
+    },
+    {
+      "pageNum": 164,
+      "chapterIndex": 11,
+      "chapterTitle": "Scaling, Maintenance, and the Future of Your AI-Assisted Application",
+      "wordCount": 16,
+      "lineEstimate": 2,
+      "usableLines": 33,
+      "fillPercent": 6
+    },
+    {
+      "pageNum": 168,
+      "chapterIndex": 11,
+      "chapterTitle": "Scaling, Maintenance, and the Future of Your AI-Assisted Application",
+      "wordCount": 94,
+      "lineEstimate": 11,
+      "usableLines": 33,
+      "fillPercent": 33
+    },
+    {
+      "pageNum": 179,
+      "chapterIndex": 12,
+      "chapterTitle": "Continue learning with AI Tutor",
+      "wordCount": 106,
+      "lineEstimate": 13,
+      "usableLines": 33,
+      "fillPercent": 39
+    },
+    {
+      "pageNum": 180,
+      "chapterIndex": 12,
+      "chapterTitle": "Continue learning with AI Tutor",
+      "wordCount": 49,
+      "lineEstimate": 7,
+      "usableLines": 33,
+      "fillPercent": 21
+    }
+  ],
+  "unfencedDiagramCandidates": [],
+  "totalInteriorPages": 186
+}

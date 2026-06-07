@@ -95,7 +95,7 @@ const KDP_GUTTER_RULES = [
 ];
 
 const PRINT_AVERAGE_CHAR_WIDTH_RATIO = 0.45;
-const PRINT_PAGE_LINE_SAFETY = 0;
+const PRINT_PAGE_LINE_SAFETY = 2;
 const MAX_KDP_FONT_SIZE = 32;
 
 function normalizeKdpFontSize(value) {
@@ -236,6 +236,7 @@ function getKdpTextPageMetrics(
     linesPerPage,
     paragraphIndentPoints: fontSize * paragraphIndentRatio,
     paragraphIndentRatio,
+    renderLineBuffer: 2,
     wordsPerPage: Math.max(
       70,
       Math.round(textArea * densityAt12pt * fontScale * lineScale)
@@ -313,7 +314,7 @@ function normalizeKdpTextPageMetrics(metricsOrWordsPerPage = 220) {
 }
 
 function getKdpChapterOpeningReserveLines(textMetrics) {
-  return Math.max(3, Math.floor(textMetrics.linesPerPage * 0.1));
+  return Math.max(5, Math.floor(textMetrics.linesPerPage * 0.14));
 }
 
 let kdpMeasureDoc;
@@ -573,7 +574,6 @@ function getKdpPdfConfig(book = {}) {
     bodySize,
     marginSpec
   );
-
   return {
     bookTypeFamily: getBookTypeFamily(book.genre),
     hasBleed: usesKdpInteriorBleed(settings),
@@ -781,10 +781,12 @@ function wrapKdpFixedLines(text = "", textMetrics, options = {}) {
   const font = textMetrics.font || PDF_CONFIG.fonts.body;
   const fontSize = Number(textMetrics.fontSize) || PDF_CONFIG.sizes.body;
   const lineWidth = Number(textMetrics.lineWidthPoints) || 300;
+  const blockquoteIndent = options.blockquote ? fontSize * 1.1 : 0;
   const indentWidth = options.continuation
-    ? 0
-    : Number(textMetrics.paragraphIndentPoints) ||
-      fontSize * PDF_CONFIG.typography.firstLineIndentRatio;
+    ? blockquoteIndent
+    : blockquoteIndent +
+      (Number(textMetrics.paragraphIndentPoints) ||
+        fontSize * PDF_CONFIG.typography.firstLineIndentRatio);
   const spaceWidth = getKdpMeasuredTokenWidth(" ", font, fontSize);
   const words = normalized.split(/\s+/).filter(Boolean);
   const lines = [];
@@ -804,8 +806,8 @@ function wrapKdpFixedLines(text = "", textMetrics, options = {}) {
     });
     currentWords = [];
     currentWidth = 0;
-    lineIndent = 0;
-    lineLimit = lineWidth;
+    lineIndent = blockquoteIndent;
+    lineLimit = Math.max(fontSize * 2, lineWidth - lineIndent);
   };
 
   words.forEach((word) => {
@@ -889,6 +891,35 @@ function renderKdpFixedBodyParagraph(doc, text = "", textMetrics, options = {}) 
   });
 
   doc.y = y;
+}
+
+function renderKdpDedicatedDiagramPage(doc, block) {
+  const caption = String(block.label || "").trim();
+  const originalLines = String(block.content || "")
+    .replace(/\n$/, "")
+    .split("\n");
+  const language = String(block.language || "").trim();
+  const contentWidth = getContentWidth(doc);
+  const pageTop = PDF_CONFIG.margins.top + 20;
+
+  doc.y = pageTop;
+
+  if (caption) {
+    doc
+      .font(PDF_CONFIG.fonts.bodyItalic)
+      .fontSize(Math.max(10, PDF_CONFIG.sizes.body - 1))
+      .fillColor(PDF_CONFIG.colors.subtitle)
+      .text(caption, PDF_CONFIG.margins.left, doc.y, {
+        width: contentWidth,
+        align: "center",
+      });
+
+    doc.y += 30;
+  }
+
+  if (!renderSemanticDiagram(doc, originalLines, language)) {
+    renderPreformattedDiagram(doc, originalLines);
+  }
 }
 
 function renderKdpChapterImagePage(
@@ -982,10 +1013,35 @@ function renderKdpChapterPrintPages(doc, chapter, chapterIndex, runtimeConfig) {
     );
   });
 
-  pages.forEach((pageContent, pageIndex) => {
+  let hasRenderedChapterHeader = imageBlocks.length > 0;
+
+  pages.forEach((pageContent) => {
     doc.addPage();
 
-    if (pageIndex === 0 && !imageBlocks.length) {
+    const pageBlocks = Array.isArray(pageContent.blocks)
+      ? pageContent.blocks
+      : (pageContent.paragraphs || []).map((paragraph) => {
+          const paragraphText =
+            typeof paragraph === "object" ? paragraph.text : paragraph;
+          const isContinuation =
+            typeof paragraph === "object" && paragraph.continuation;
+
+          return {
+            type: "paragraph",
+            text: paragraphText,
+            continuation: isContinuation,
+          };
+        });
+
+    const isDiagramOnlyPage =
+      pageBlocks.length === 1 && pageBlocks[0].type === "diagram";
+
+    if (isDiagramOnlyPage) {
+      renderKdpDedicatedDiagramPage(doc, pageBlocks[0]);
+      return;
+    }
+
+    if (!hasRenderedChapterHeader) {
       doc
         .font(PDF_CONFIG.fonts.heading)
         .fontSize(Math.max(10, PDF_CONFIG.sizes.body - 1))
@@ -1008,37 +1064,101 @@ function renderKdpChapterPrintPages(doc, chapter, chapterIndex, runtimeConfig) {
         doc.y + PDF_CONFIG.sizes.body * 0.55,
         PDF_CONFIG.margins.top + firstPageReserveLines * textMetrics.lineHeightPoints
       );
+      hasRenderedChapterHeader = true;
     }
-
-    const pageBlocks = Array.isArray(pageContent.blocks)
-      ? pageContent.blocks
-      : (pageContent.paragraphs || []).map((paragraph) => {
-          const paragraphText =
-            typeof paragraph === "object" ? paragraph.text : paragraph;
-          const isContinuation =
-            typeof paragraph === "object" && paragraph.continuation;
-
-          return {
-            type: "paragraph",
-            text: paragraphText,
-            continuation: isContinuation,
-          };
-        });
 
     pageBlocks.forEach((block) => {
       if (block.type === "diagram") {
-        const originalLines = String(block.content || "")
-          .replace(/\n$/, "")
-          .split("\n");
-        const language = String(block.language || "").trim();
+        renderKdpDiagramBlock(doc, block, {
+          inline: Boolean(block.inline) || pageBlocks.length > 1,
+        });
+        return;
+      }
 
-        doc.moveDown(0.25);
+      if (block.type === "code") {
+        renderCodeBlock(doc, {
+          content: block.content,
+          info: block.language || "",
+        });
+        return;
+      }
 
-        if (!renderSemanticDiagram(doc, originalLines, language)) {
-          renderPreformattedDiagram(doc, originalLines);
+      if (block.type === "heading") {
+        const headingSizes = {
+          1: PDF_CONFIG.sizes.h1,
+          2: PDF_CONFIG.sizes.h2,
+          3: PDF_CONFIG.sizes.h3,
+          4: PDF_CONFIG.sizes.body + 1,
+          5: PDF_CONFIG.sizes.body,
+          6: PDF_CONFIG.sizes.body - 0.5,
+        };
+
+        doc
+          .font(PDF_CONFIG.fonts.heading)
+          .fontSize(headingSizes[block.level] || PDF_CONFIG.sizes.h3)
+          .fillColor(PDF_CONFIG.colors.heading)
+          .text(block.text || "", {
+            align: "center",
+            width: getContentWidth(doc),
+          });
+        doc.moveDown(0.45);
+        return;
+      }
+
+      if (block.type === "blockquote") {
+        renderKdpFixedBodyParagraph(doc, block.text || "", textMetrics, {
+          continuation: Boolean(block.continuation),
+          blockquote: true,
+        });
+        doc.moveDown(0.2);
+        return;
+      }
+
+      if (block.type === "list") {
+        (block.items || []).forEach((item, itemIndex) => {
+          const marker = block.ordered ? `${itemIndex + 1}.` : "•";
+          renderListItem(doc, marker, item);
+        });
+        doc.moveDown(0.2);
+        return;
+      }
+
+      if (block.type === "table") {
+        const header = block.header || [];
+        const rows = block.rows || [];
+        const columnCount = Math.max(
+          header.length,
+          ...rows.map((row) => row.length),
+          1
+        );
+        const columnWidth = getContentWidth(doc) / columnCount;
+
+        if (header.length) {
+          header.forEach((cell, columnIndex) => {
+            doc
+              .font(PDF_CONFIG.fonts.heading)
+              .fontSize(Math.max(9, PDF_CONFIG.sizes.body - 1))
+              .fillColor(PDF_CONFIG.colors.heading)
+              .text(cell || "", PDF_CONFIG.margins.left + columnIndex * columnWidth, doc.y, {
+                width: columnWidth,
+              });
+          });
+          doc.moveDown(0.55);
         }
 
-        doc.moveDown(0.25);
+        rows.forEach((row) => {
+          row.forEach((cell, columnIndex) => {
+            doc
+              .font(PDF_CONFIG.fonts.body)
+              .fontSize(PDF_CONFIG.sizes.body)
+              .fillColor(PDF_CONFIG.colors.body)
+              .text(cell || "", PDF_CONFIG.margins.left + columnIndex * columnWidth, doc.y, {
+                width: columnWidth,
+              });
+          });
+          doc.moveDown(0.35);
+        });
+        doc.moveDown(0.2);
         return;
       }
 
@@ -2761,30 +2881,20 @@ function isLooseDiagramBlock(lines = []) {
 }
 
 function looksLikeSourceCodeBlock(lines = [], language = "") {
-  const normalizedLanguage = String(language || "").trim().toLowerCase();
+  const { isDedicatedDiagramFence } = require("./kdp-markdown-blocks");
 
-  if (
-    normalizedLanguage &&
-    !["text", "txt", "diagram", "flow", "plain"].includes(normalizedLanguage)
-  ) {
-    return true;
-  }
-
-  const nonEmptyLines = lines.filter((line) => line.trim());
-
-  if (nonEmptyLines.length === 0) return false;
-
-  const codeMarkers = nonEmptyLines.filter((line) =>
-    /^\s*(import|export|const|let|var|function|class|interface|type|return|if|for|while|switch|case|async|await|def|from|\/\/|#include|<\w|[{}])\b/.test(
-      line
-    ) || /[{};]\s*$/.test(line)
-  ).length;
-
-  return codeMarkers >= 3 && codeMarkers / nonEmptyLines.length >= 0.22;
+  return !isDedicatedDiagramFence(
+    language,
+    Array.isArray(lines) ? lines.join("\n") : String(lines || "")
+  );
 }
 
 function textHeight(doc, text, options = {}) {
   return doc.heightOfString(text || " ", options);
+}
+
+function shouldUseVerticalFlowLayout(nodeCount = 0, nodeWidth = 0) {
+  return nodeCount > 2 || nodeWidth < 96;
 }
 
 function renderFlowDiagram(doc, diagram) {
@@ -2796,6 +2906,10 @@ function renderFlowDiagram(doc, diagram) {
   const gap = 12;
   const nodeCount = diagram.nodes.length;
   const nodeW = (cardW - padding * 2 - gap * (nodeCount - 1)) / nodeCount;
+
+  if (shouldUseVerticalFlowLayout(nodeCount, nodeW)) {
+    return renderVerticalFlowDiagram(doc, diagram);
+  }
   const titleText = diagram.title || "Diagram";
   const titleW = Math.min(cardW - padding * 2, Math.max(220, cardW * 0.55));
   const titleH = 36;
@@ -3332,70 +3446,79 @@ function renderSemanticDiagram(doc, originalLines = [], language = "") {
     return false;
   }
 
-  const systemComparison = parseSystemComparisonDiagram(originalLines);
+  const {
+    extractDiagramLabelDirective,
+    parseTreeHubDiagram,
+  } = require("./diagram-tree");
+  const { lines } = extractDiagramLabelDirective(originalLines);
+  const treeDiagram = parseTreeHubDiagram(lines);
+
+  if (treeDiagram) {
+    return renderVerticalFlowDiagram(doc, treeDiagram);
+  }
+
+  const systemComparison = parseSystemComparisonDiagram(lines);
 
   if (systemComparison) {
     return renderFlowDiagram(doc, systemComparison);
   }
 
-  const nestedArchitecture = parseNestedArchitectureDiagram(originalLines);
+  const nestedArchitecture = parseNestedArchitectureDiagram(lines);
 
   if (nestedArchitecture) {
     return renderStackDiagram(doc, nestedArchitecture);
   }
 
-  const boxedList = parseBoxedListDiagram(originalLines);
+  const boxedList = parseBoxedListDiagram(lines);
 
   if (boxedList) {
     return renderBoxedListDiagram(doc, boxedList);
   }
 
-  const tableDiagram = parseAsciiTableDiagram(originalLines);
+  const tableDiagram = parseAsciiTableDiagram(lines);
 
   if (tableDiagram) {
     return renderTableDiagram(doc, tableDiagram);
   }
 
-  const processDiagram = parseProcessDiagram(originalLines);
+  const processDiagram = parseProcessDiagram(lines);
 
   if (processDiagram) {
     return renderVerticalFlowDiagram(doc, processDiagram);
   }
 
-  const flowDiagram = parseFlowDiagram(originalLines);
+  const flowDiagram = parseFlowDiagram(lines);
 
   if (flowDiagram) {
     return renderFlowDiagram(doc, flowDiagram);
   }
 
-  const stackDiagram = parseStackDiagram(originalLines);
+  const stackDiagram = parseStackDiagram(lines);
 
   if (stackDiagram) {
     return renderStackDiagram(doc, stackDiagram);
   }
 
-  const branchDiagram = parseBranchDiagram(originalLines);
+  const branchDiagram = parseBranchDiagram(lines);
 
   if (branchDiagram) {
     return renderFlowDiagram(doc, branchDiagram);
   }
 
-  const comparisonDiagram = parseComparisonDiagram(originalLines);
+  const comparisonDiagram = parseComparisonDiagram(lines);
 
   if (comparisonDiagram) {
     return renderFlowDiagram(doc, comparisonDiagram);
   }
 
-  const linearDiagram = parseLinearFlowDiagram(originalLines);
+  const linearDiagram = parseLinearFlowDiagram(lines);
 
   if (linearDiagram) {
-    return linearDiagram.nodes.length > 4
-      ? renderVerticalFlowDiagram(doc, linearDiagram)
-      : renderFlowDiagram(doc, linearDiagram);
+    return renderFlowDiagram(doc, linearDiagram);
   }
 
-  return isLooseDiagramBlock(originalLines)
-    ? renderPreformattedDiagram(doc, originalLines)
+  return isLooseDiagramBlock(lines)
+    ? renderPreformattedDiagram(doc, lines)
     : false;
 }
 
@@ -3404,13 +3527,11 @@ function renderPreformattedDiagram(doc, originalLines = []) {
   const padding = 12;
   const availableWidth = getContentWidth(doc);
   const innerWidth = availableWidth - padding * 2;
-  const maxLineLength = Math.max(...lines.map((line) => line.length), 1);
-  const fontSize = Math.max(
-    5.5,
-    Math.min(8.2, innerWidth / (maxLineLength * 0.58))
-  );
+  const fontSize = 7.5;
   const lineHeight = fontSize * 1.35;
-  const blockHeight = lines.length * lineHeight + padding * 2;
+  const maxChars = Math.max(24, Math.floor(innerWidth / (fontSize * 0.58)));
+  const renderLines = lines.flatMap((line) => wrapCodeLine(line, maxChars));
+  const blockHeight = renderLines.length * lineHeight + padding * 2;
   const x = PDF_CONFIG.margins.left;
 
   ensureSpace(doc, blockHeight + 18);
@@ -3422,7 +3543,7 @@ function renderPreformattedDiagram(doc, originalLines = []) {
     .roundedRect(x, top, availableWidth, blockHeight, 12)
     .fillAndStroke("#f8fafc", "#cbd5e1");
 
-  lines.forEach((line, index) => {
+  renderLines.forEach((line, index) => {
     doc
       .font(PDF_CONFIG.fonts.code)
       .fontSize(fontSize)
@@ -3505,16 +3626,7 @@ function renderCodeBlock(doc, token) {
 
   const charWidth = Math.max(doc.widthOfString("M"), 1);
   const maxChars = Math.max(16, Math.floor(innerWidth / charWidth));
-  const renderLines = isDiagram
-    ? lines
-    : lines.flatMap((line) => wrapCodeLine(line, maxChars));
-  const widestLineWidth = Math.max(
-    ...renderLines.map((line) => doc.widthOfString(line || " "))
-  );
-  const horizontalScale =
-    isDiagram && widestLineWidth > innerWidth
-      ? innerWidth / widestLineWidth
-      : 1;
+  const renderLines = lines.flatMap((line) => wrapCodeLine(line, maxChars));
 
   let index = 0;
   doc.moveDown(0.35);
@@ -3543,18 +3655,14 @@ function renderCodeBlock(doc, token) {
     let lineY = blockTop + padding;
 
     chunk.forEach((line) => {
-      doc.save();
-      doc.rect(x + padding, lineY - 1, innerWidth, lineHeight + 2).clip();
-      doc.translate(x + padding, lineY);
-      doc.scale(horizontalScale, 1);
       doc
         .font(PDF_CONFIG.fonts.code)
         .fontSize(codeFontSize)
         .fillColor(PDF_CONFIG.colors.codeBlock)
-        .text(line || " ", 0, 0, {
+        .text(line || " ", x + padding, lineY, {
+          width: innerWidth,
           lineBreak: false,
         });
-      doc.restore();
 
       lineY += lineHeight;
     });
