@@ -41,11 +41,45 @@ const KDP_EXTENDED_CODE_LANGUAGES = new Set([
 const KDP_DIAGRAM_LANGUAGES = new Set(["reader-diagram", "diagram", "flow"]);
 const MIN_PARAGRAPH_ORPHAN_LINES = 3;
 const MIN_PARAGRAPH_ORPHAN_WORDS = 4;
-const PAGINATION_RENDER_BUFFER_LINES = 2;
+const PAGINATION_RENDER_BUFFER_LINES = 0;
+const DIAGRAM_PROSE_PACKING_BUFFER_LINES = 2;
+const INLINE_DIAGRAM_FOLLOWING_PROSE_BUFFER_LINES = 3;
+
+function isVisualPaginationBlock(block) {
+  return ["diagram", "code"].includes(block?.type);
+}
+
+function shouldIsolateVisualPaginationBlock(
+  block,
+  textMetrics,
+  estimateTextLines
+) {
+  if (!isVisualPaginationBlock(block) || block.inline) return false;
+
+  const pageBudget = getPaginationLineBudget(textMetrics);
+  const lineCost = estimatePaginatedBlockLines(
+    block,
+    textMetrics,
+    estimateTextLines || (() => 0)
+  );
+  const threshold = block.type === "diagram" ? 0.34 : 0.85;
+
+  return lineCost >= Math.floor(pageBudget * threshold);
+}
+
+function hasIsolatedVisualPaginationBlock(
+  blocks = [],
+  textMetrics,
+  estimateTextLines
+) {
+  return blocks.some((block) =>
+    shouldIsolateVisualPaginationBlock(block, textMetrics, estimateTextLines)
+  );
+}
 
 function getPaginationLineBudget(textMetrics = {}) {
   const buffer = Math.max(
-    2,
+    0,
     Number(textMetrics.renderLineBuffer) || PAGINATION_RENDER_BUFFER_LINES
   );
 
@@ -54,6 +88,10 @@ function getPaginationLineBudget(textMetrics = {}) {
 
 function looksLikeAsciiDiagramFence(content = "") {
   const text = String(content || "");
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
   if (/[┌┐└┘├┤│═]{2,}/.test(text)) return true;
   if (
@@ -63,7 +101,30 @@ function looksLikeAsciiDiagramFence(content = "") {
     return true;
   }
 
-  return /^\s*\|[^\n]+\|/m.test(text) && /\+[-+]+\+/.test(text);
+  if (/[\u2500-\u257f]{2,}/u.test(text)) return true;
+  if (
+    /\[[^\]]{2,}\]/.test(text) &&
+    /[\u2190-\u21ff\u25b2-\u25bc\u2500-\u257f|<>^v+\-\\]{2,}/u.test(text)
+  ) {
+    return true;
+  }
+
+  if (/^\s*\|[^\n]+\|/m.test(text) && /\+[-+]+\+/.test(text)) {
+    return true;
+  }
+
+  const connectorRows = lines.filter((line) => {
+    const compact = line.replace(/\s+/g, "");
+    return (
+      compact.length > 0 &&
+      ((/^[|+\-\\/<>=^vV]+$/.test(compact) &&
+        /[|+\-\\/<>=^vV]/.test(compact)) ||
+        (!/[A-Za-z0-9]/.test(compact) && /[^\s]/.test(compact)))
+    );
+  }).length;
+  const labelRows = lines.length - connectorRows;
+
+  return connectorRows > 0 && labelRows >= 2 && connectorRows >= labelRows - 2;
 }
 
 function looksLikePlainTextFence(content = "") {
@@ -98,10 +159,7 @@ function isDedicatedDiagramFence(language = "", content = "") {
   if (["text", "txt", "plain", ""].includes(lang)) {
     if (looksLikePlainTextFence(content)) return false;
 
-    return (
-      looksLikeAsciiDiagramFence(content) ||
-      estimateDiagramBlockLines(content, lang) >= 5
-    );
+    return looksLikeAsciiDiagramFence(content);
   }
 
   return false;
@@ -120,14 +178,14 @@ function shouldUseDedicatedDiagramPage(
     .map((line) => line.trim())
     .filter(Boolean).length;
 
-  if (looksLikeAsciiDiagramFence(content)) {
-    return rowCount >= 6 || lineCost >= 9;
-  }
-
   const pageThreshold = Math.max(
-    7,
-    Math.floor((textMetrics?.linesPerPage || 30) * 0.28)
+    18,
+    Math.floor((textMetrics?.linesPerPage || 30) * 0.55)
   );
+
+  if (looksLikeAsciiDiagramFence(content)) {
+    return rowCount >= 18 || lineCost >= pageThreshold;
+  }
 
   return lineCost >= pageThreshold;
 }
@@ -335,12 +393,13 @@ function estimateProseBlockLines(
   }
 
   if (block.type === "list") {
-    const itemLines = (block.items || []).reduce(
+    const items = block.items || [];
+    const itemLines = items.reduce(
       (sum, item) => sum + estimateTextLines(item, textMetrics),
       0
     );
 
-    return Math.max(1, itemLines * 0.92 + 0.5);
+    return Math.max(1, itemLines + items.length * 0.2 + 1.45);
   }
 
   if (block.type === "diagram") {
@@ -365,16 +424,20 @@ function estimatePaginatedBlockLines(
   if (!block) return 0;
 
   if (block.type === "code") {
-    return (
-      estimateDiagramBlockLines(block.content, block.language, textMetrics) + 1.4
-    );
+    if (looksLikeAsciiDiagramFence(block.content)) {
+      return (
+        estimateDiagramBlockLines(block.content, block.language, textMetrics) + 1.2
+      );
+    }
+
+    return estimateCodeBlockLines(block.content, textMetrics) + 1.2;
   }
 
   if (block.type === "diagram") {
     return (
       estimateDiagramBlockLines(block.content, block.language, textMetrics) *
-        1.12 +
-      1.8
+        1.08 +
+      1.4
     );
   }
 
@@ -481,7 +544,7 @@ function mergeLabelParagraphsIntoDiagrams(blocks = []) {
 
 function estimateMonospaceCharsPerLine(textMetrics = {}) {
   const charsPerLine = Number(textMetrics.charsPerLine) || 54;
-  return Math.max(16, Math.floor((charsPerLine * 0.68) / 1.12));
+  return Math.max(24, Math.floor(charsPerLine * 1.02));
 }
 
 function countWrappedSourceLines(lines = [], charsPerLine = 54) {
@@ -489,6 +552,102 @@ function countWrappedSourceLines(lines = [], charsPerLine = 54) {
     const length = Math.max(1, String(line || "").length);
     return sum + Math.ceil(length / charsPerLine);
   }, 0);
+}
+
+function expandCodeLinesForPagination(content = "", textMetrics = null) {
+  const maxChars = Math.max(
+    24,
+    textMetrics ? estimateMonospaceCharsPerLine(textMetrics) : 54
+  );
+
+  return String(content || "")
+    .replace(/\n$/, "")
+    .split("\n")
+    .flatMap((line) => {
+      const text = String(line || "");
+
+      if (text.length <= maxChars * 1.4) return [text];
+
+      const chunks = [];
+      for (let index = 0; index < text.length; index += maxChars) {
+        chunks.push(text.slice(index, index + maxChars));
+      }
+      return chunks;
+    });
+}
+
+function splitCodeBlockContentForPages(block, textMetrics, pageBudget) {
+  const language = block.language || "";
+  const lines = expandCodeLinesForPagination(block.content, textMetrics);
+  const chunks = [];
+  let currentLines = [];
+
+  const estimateChunk = (chunkLines) =>
+    estimatePaginatedBlockLines(
+      {
+        type: "code",
+        content: chunkLines.join("\n"),
+        language,
+      },
+      textMetrics,
+      () => 0
+    );
+
+  lines.forEach((line) => {
+    const nextLines = [...currentLines, line];
+
+    if (
+      currentLines.length > 0 &&
+      estimateChunk(nextLines) > pageBudget
+    ) {
+      chunks.push(currentLines.join("\n"));
+      currentLines = [line];
+      return;
+    }
+
+    currentLines = nextLines;
+  });
+
+  if (currentLines.length) chunks.push(currentLines.join("\n"));
+
+  if (chunks.length > 1) {
+    const lastChunk = chunks[chunks.length - 1];
+    const lastCost = estimateChunk(lastChunk.split("\n"));
+
+    if (lastCost <= Math.max(8, pageBudget * 0.35)) {
+      chunks[chunks.length - 2] = `${chunks[chunks.length - 2]}\n${lastChunk}`;
+      chunks.pop();
+    }
+  }
+
+  return chunks.filter((chunk) => chunk.trim());
+}
+
+function splitCodeBlockForLineBudget(block, textMetrics, lineBudget) {
+  if (lineBudget < 4) {
+    return { head: null, tail: block };
+  }
+
+  const chunks = splitCodeBlockContentForPages(block, textMetrics, lineBudget);
+
+  if (chunks.length <= 1) {
+    return { head: null, tail: block };
+  }
+
+  return {
+    head: {
+      type: "code",
+      content: chunks[0],
+      language: block.language || "",
+      label: block.label || "",
+    },
+    tail: {
+      type: "code",
+      content: chunks.slice(1).join("\n"),
+      language: block.language || "",
+      label: block.label || "",
+    },
+  };
 }
 
 function estimateDiagramBlockLines(content = "", language = "", textMetrics = null) {
@@ -507,7 +666,7 @@ function estimateDiagramBlockLines(content = "", language = "", textMetrics = nu
 
   if (
     normalizedLanguage &&
-    CODE_LANGUAGES.has(normalizedLanguage) &&
+    KDP_EXTENDED_CODE_LANGUAGES.has(normalizedLanguage) &&
     !["text", "txt", "plain", "diagram", "flow", "reader-diagram"].includes(
       normalizedLanguage
     )
@@ -516,7 +675,21 @@ function estimateDiagramBlockLines(content = "", language = "", textMetrics = nu
       ? countWrappedSourceLines(nonEmptyLines, monoCharsPerLine)
       : nonEmptyLines.length;
 
-    return Math.max(4, sourceLines * 0.68 + blockOverhead + 1);
+    return Math.max(4, sourceLines * 0.54 + blockOverhead + 0.3);
+  }
+
+  if (
+    /[\u2500-\u257f]/u.test(String(content || "")) ||
+    /â[”•][^\s]{1,3}/.test(String(content || ""))
+  ) {
+    return Math.max(5, nonEmptyLines.length * 0.65 + blockOverhead);
+  }
+
+  if (
+    looksLikeAsciiDiagramFence(content) &&
+    nonEmptyLines.some((line) => line.includes("|"))
+  ) {
+    return Math.max(6, nonEmptyLines.length * 1.08 + blockOverhead + 1);
   }
 
   if (nonEmptyLines.some((line) => line.includes("|"))) {
@@ -551,6 +724,39 @@ function estimateDiagramBlockLines(content = "", language = "", textMetrics = nu
     : nonEmptyLines.length;
 
   return Math.max(5, sourceLines * 0.84 + blockOverhead);
+}
+
+// Estimates how many body-text lines a fenced CODE block occupies once
+// rendered. Code is drawn in a compact monospace box (font ~= bodySize - 2 at
+// 1.35 leading), so a code line is roughly 0.74 body lines tall regardless of
+// the fence language. The previous path reused estimateDiagramBlockLines, which
+// treated plain-text fences (command output, prompts) as tall vertical-stack
+// diagrams (~2.35 lines/row) and left pages mostly blank below the block.
+function estimateCodeBlockLines(content = "", textMetrics = null) {
+  const rawLines = String(content || "")
+    .replace(/\n$/, "")
+    .split("\n");
+
+  if (!rawLines.some((line) => line.trim())) return 0;
+
+  const monoCharsPerLine = textMetrics
+    ? estimateMonospaceCharsPerLine(textMetrics)
+    : 54;
+  const wrapped = countWrappedSourceLines(
+    rawLines.map((line) => (line.length ? line : " ")),
+    monoCharsPerLine
+  );
+
+  const fontSize = Number(textMetrics?.fontSize) || 11;
+  const bodyLineHeight =
+    Number(textMetrics?.lineHeightPoints) || fontSize * 1.44;
+  const codeFontSize = Math.max(7.5, fontSize - 2);
+  const lineRatio = (codeFontSize * 1.35) / bodyLineHeight;
+  // Box padding (10pt top + 10pt bottom) plus the moveDown(0.35) before the box
+  // and a little trailing breathing room, expressed in body-line units.
+  const overhead = 20 / bodyLineHeight + 0.95;
+
+  return Math.max(3, wrapped * lineRatio + overhead);
 }
 
 function splitParagraphBlockIntoPageChunks(
@@ -839,9 +1045,11 @@ function appendInlineDiagramToPages(block, state, textMetrics) {
     textMetrics,
     () => 0
   );
+  const reservedLineCost =
+    lineCost + INLINE_DIAGRAM_FOLLOWING_PROSE_BUFFER_LINES;
 
   if (
-    lineCost > pageBudget - state.currentLines &&
+    reservedLineCost > pageBudget - state.currentLines &&
     state.currentBlocks.length
   ) {
     state.flushPage();
@@ -854,7 +1062,7 @@ function appendInlineDiagramToPages(block, state, textMetrics) {
     label: block.label || "",
     inline: true,
   });
-  state.currentLines += lineCost;
+  state.currentLines += reservedLineCost;
 
   if (state.currentLines >= pageBudget) {
     state.flushPage();
@@ -872,6 +1080,57 @@ function appendCodeBlockToPages(block, state, textMetrics) {
     textMetrics,
     () => 0
   );
+  const remainingLines = pageBudget - state.currentLines;
+
+  if (state.currentBlocks.length && lineCost > remainingLines) {
+    if (remainingLines < Math.max(8, pageBudget * 0.28)) {
+      state.flushPage();
+      appendCodeBlockToPages(block, state, textMetrics);
+      return;
+    }
+
+    const { head, tail } = splitCodeBlockForLineBudget(
+      block,
+      textMetrics,
+      remainingLines
+    );
+
+    if (head) {
+      state.currentBlocks.push(head);
+      state.currentLines += estimatePaginatedBlockLines(
+        head,
+        textMetrics,
+        () => 0
+      );
+      state.flushPage();
+      if (tail) appendCodeBlockToPages(tail, state, textMetrics);
+      return;
+    }
+  }
+
+  if (lineCost > pageBudget) {
+    if (state.currentBlocks.length) state.flushPage();
+
+    splitCodeBlockContentForPages(block, textMetrics, pageBudget).forEach(
+      (chunk) => {
+        const chunkBlock = {
+          type: "code",
+          content: chunk,
+          language: block.language || "",
+          label: block.label || "",
+        };
+
+        state.currentBlocks.push(chunkBlock);
+        state.currentLines = estimatePaginatedBlockLines(
+          chunkBlock,
+          textMetrics,
+          () => 0
+        );
+        state.flushPage();
+      }
+    );
+    return;
+  }
 
   if (
     lineCost > pageBudget - state.currentLines &&
@@ -901,6 +1160,17 @@ function appendAtomicProseBlockToPages(
   options = {}
 ) {
   const pageBudget = getPaginationLineBudget(textMetrics);
+
+  if (
+    hasIsolatedVisualPaginationBlock(
+      state.currentBlocks,
+      textMetrics,
+      estimateTextLines
+    )
+  ) {
+    state.flushPage();
+  }
+
   const lineCost = estimatePaginatedBlockLines(
     block,
     textMetrics,
@@ -930,6 +1200,17 @@ function appendParagraphBlockToPages(
   estimateTextLines
 ) {
   const pageBudget = getPaginationLineBudget(textMetrics);
+
+  if (
+    hasIsolatedVisualPaginationBlock(
+      state.currentBlocks,
+      textMetrics,
+      estimateTextLines
+    )
+  ) {
+    state.flushPage();
+  }
+
   const { chunks } = splitParagraphBlockIntoPageChunks(
     block,
     textMetrics,
@@ -1036,7 +1317,15 @@ function estimatePreviewPageLineCount(page, textMetrics, estimateTextLines) {
 
 function isDiagramOnlyPreviewPage(page) {
   const blocks = page?.blocks || [];
-  return blocks.length === 1 && blocks[0]?.type === "diagram";
+  return blocks.length === 1 && isVisualPaginationBlock(blocks[0]);
+}
+
+function pageContainsPackBlockingVisual(page, textMetrics, estimateTextLines) {
+  return (page?.blocks || []).some(
+    (block) =>
+      block?.type === "diagram" ||
+      shouldIsolateVisualPaginationBlock(block, textMetrics, estimateTextLines)
+  );
 }
 
 function countPreviewPageWords(page) {
@@ -1048,6 +1337,12 @@ function countPreviewPageWords(page) {
 
 function canPackPagesTogether(firstPage, secondPage, textMetrics, estimateTextLines) {
   if (!firstPage || !secondPage) return false;
+  if (
+    pageContainsPackBlockingVisual(firstPage, textMetrics, estimateTextLines) ||
+    pageContainsPackBlockingVisual(secondPage, textMetrics, estimateTextLines)
+  ) {
+    return false;
+  }
 
   const firstLines = estimatePreviewPageLineCount(
     firstPage,
@@ -1059,9 +1354,7 @@ function canPackPagesTogether(firstPage, secondPage, textMetrics, estimateTextLi
     textMetrics,
     estimateTextLines
   );
-  return (
-    firstLines + secondLines <= getPaginationLineBudget(textMetrics)
-  );
+  return firstLines + secondLines <= getPaginationLineBudget(textMetrics);
 }
 
 function isLeadingOrphanParagraphBlock(block) {
@@ -1077,11 +1370,9 @@ function isLeadingOrphanParagraphBlock(block) {
 
 function shouldPackProseBelowDiagram(diagramLineCost, textMetrics) {
   const pageBudget = getPaginationLineBudget(textMetrics);
-  const room = pageBudget - diagramLineCost;
+  const room = pageBudget - diagramLineCost - DIAGRAM_PROSE_PACKING_BUFFER_LINES;
 
-  return (
-    diagramLineCost <= Math.floor(pageBudget * 0.36) && room >= 7
-  );
+  return diagramLineCost <= Math.floor(pageBudget * 0.36) && room >= 7;
 }
 
 function packUnderfilledPagesOnce(pages = [], textMetrics, estimateTextLines) {
@@ -1133,11 +1424,20 @@ function packUnderfilledPagesOnce(pages = [], textMetrics, estimateTextLines) {
         textMetrics,
         estimateTextLines
       );
-      const room = getPaginationLineBudget(textMetrics) - diagramLines;
+      const room =
+        getPaginationLineBudget(textMetrics) -
+        diagramLines -
+        DIAGRAM_PROSE_PACKING_BUFFER_LINES;
 
       if (
         room >= 2 &&
-        canPackPagesTogether(page, nextPage, textMetrics, estimateTextLines)
+        !pageContainsPackBlockingVisual(
+          nextPage,
+          textMetrics,
+          estimateTextLines
+        ) &&
+        estimatePreviewPageLineCount(nextPage, textMetrics, estimateTextLines) <=
+          room
       ) {
         packed.push({
           blocks: [...(page.blocks || []), ...(nextPage.blocks || [])],
@@ -1213,6 +1513,7 @@ function splitKdpMarkdownIntoPages(
     0,
     Number(options.firstPageReserveLines) || 0
   );
+  const renderDiagrams = options.renderDiagrams !== false;
   const state = {
     currentBlocks: [],
     currentLines: firstPageReserveLines,
@@ -1250,7 +1551,44 @@ function splitKdpMarkdownIntoPages(
     const block = blocks[index];
 
     if (block.type === "fence") {
-      if (!isDedicatedDiagramFence(block.language, block.content)) {
+      const lang = String(block.language || "").trim().toLowerCase();
+      const isTextOrDiagram =
+        lang === "" ||
+        lang === "text" ||
+        lang === "txt" ||
+        lang === "plain" ||
+        lang === "diagram" ||
+        lang === "flow" ||
+        lang === "reader-diagram";
+
+      if (!renderDiagrams && isTextOrDiagram) {
+        const lines = String(block.content || "")
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
+
+        const tempBlocks = lines.map((line) => ({
+          type: "paragraph",
+          text: line,
+        }));
+
+        tempBlocks.forEach((tempBlock, tempIndex) => {
+          appendProseBlockToPages(
+            tempBlock,
+            state,
+            textMetrics,
+            estimateTextLines,
+            tempBlocks,
+            tempIndex
+          );
+        });
+        continue;
+      }
+
+      if (
+        !renderDiagrams ||
+        !isDedicatedDiagramFence(block.language, block.content)
+      ) {
         appendCodeBlockToPages(block, state, textMetrics);
         continue;
       }
@@ -1298,7 +1636,9 @@ function splitKdpMarkdownIntoPages(
         shouldPackProseBelowDiagram(diagramLineCost, textMetrics)
           ? packProseBlocksIntoRoom(
               remainingParagraphs,
-              getPaginationLineBudget(textMetrics) - diagramLineCost,
+              getPaginationLineBudget(textMetrics) -
+                diagramLineCost -
+                DIAGRAM_PROSE_PACKING_BUFFER_LINES,
               textMetrics,
               estimateTextLines
             )

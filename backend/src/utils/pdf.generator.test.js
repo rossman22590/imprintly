@@ -92,11 +92,7 @@ test("KDP generated PDF uses trim size on every page", async () => {
   const exportedPageCount = Number(pageCountMatch?.[1]);
   const configuredPageCount = getKdpPdfConfig(book).pageCount + 2;
 
-  assert.ok(
-    exportedPageCount >= configuredPageCount,
-    `expected at least ${configuredPageCount} pages, received ${exportedPageCount}`
-  );
-  assert.ok(exportedPageCount <= configuredPageCount + 1);
+  assert.equal(exportedPageCount, configuredPageCount);
 });
 
 test("KDP children PDF uses the same trim size as full preview", async () => {
@@ -188,8 +184,7 @@ test("KDP short PDFs are not padded with blank pages up to 24", async () => {
   assert.ok(exportedPageCount < 24);
   const configuredPageCount = getKdpPdfConfig(book).pageCount + 2;
 
-  assert.ok(exportedPageCount >= configuredPageCount);
-  assert.ok(exportedPageCount <= configuredPageCount + 1);
+  assert.equal(exportedPageCount, configuredPageCount);
 });
 
 test("KDP PDF body font follows saved font size", () => {
@@ -472,6 +467,26 @@ test("parses ascii tables into PDF table rows", () => {
   assert.match(table.rows[0][2], /Avoid solo tasks/);
 });
 
+test("does not parse boxed pipe tables as boxed lists", () => {
+  const lines = [
+    "+--------------------------------------+",
+    "| THE BUILDING LOOP                    |",
+    "+--------------------------------------+",
+    "+----------------------+----------------------+",
+    "| HUMAN ROLE           | AI ROLE              |",
+    "+----------------------+----------------------+",
+    "| - Defines vision - Sets constraints | - Generates syntax - Explains errors |",
+    "+----------------------+----------------------+",
+  ];
+
+  assert.equal(parseBoxedListDiagram(lines), null);
+  const table = parseAsciiTableDiagram(lines);
+  assert.equal(table.title, "THE BUILDING LOOP");
+  assert.deepEqual(table.header, ["HUMAN ROLE", "AI ROLE"]);
+  assert.equal(table.rows[0][0], "- Defines vision\n- Sets constraints");
+  assert.equal(table.rows[0][1], "- Generates syntax\n- Explains errors");
+});
+
 test("drops empty spacer columns and normalizes bullet glyphs in ascii tables", () => {
   const table = parseAsciiTableDiagram([
     "+----------------------------+     +----------------------------+",
@@ -622,4 +637,22 @@ test("parses sectioned system comparison diagrams before table parsing", () => {
   );
   assert.match(diagram.nodes[0].detail, /Commercial Bank/);
   assert.match(diagram.nodes[1].detail, /Central Bank/);
+});
+
+test("preserves letters while stripping connector markers in system diagrams", () => {
+  const diagram = parseSystemComparisonDiagram([
+    "LEGACY SYSTEM (Fractional Reserve):",
+    "+---------------+     JavaScript validates     +-----------------+     Loans      +---------------+",
+    "|   Consumer    +----------------------------->| Preview Renderer+--------------->|   Borrower    |",
+    "+---------------+                              +-----------------+                +---------------+",
+    "",
+    "CBDC SYSTEM (Disintermediated):",
+    "+---------------+             Direct Digital Liabilities             +---------------+",
+    "|   Consumer    +---------------------------------------------------->| Central Bank  |",
+    "+---------------+                                                     +---------------+",
+    "                      (Risk-free money bypasses the commercial system)",
+  ]);
+
+  assert.match(diagram.nodes[0].detail, /JavaScript/);
+  assert.doesNotMatch(diagram.nodes[0].detail, /Ja aScript/);
 });

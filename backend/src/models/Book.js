@@ -268,6 +268,11 @@ const kdpSettingsSchema = new mongoose.Schema(
       default: "1.35",
       maxLength: [10, "Paragraph indent cannot exceed 10 characters"],
     },
+    renderDiagrams: {
+      type: String,
+      default: "false",
+      maxLength: [10, "Diagram rendering setting cannot exceed 10 characters"],
+    },
     coverImageSize: {
       type: String,
       default: "2K",

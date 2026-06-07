@@ -45,7 +45,7 @@ export function toBookifyDiagram(readerDiagram, label = "") {
   if (readerDiagram.type === "table") {
     return {
       type: "table",
-      title: "Structured Table",
+      title: normalizedLabel || readerDiagram.title || "Structured Table",
       header: readerDiagram.header || [],
       rows: readerDiagram.rows || [],
     };

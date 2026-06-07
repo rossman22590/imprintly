@@ -15,17 +15,34 @@ export default function KdpPreviewBlock({
   paragraphIndent = "1.35",
   showParagraphIndent = false,
   diagramCompact = false,
+  diagramFullPage = false,
 }) {
   if (!block) return null;
 
-  if (block.type === "diagram" || block.type === "code") {
+  if (block.type === "diagram") {
     return (
       <KdpPreviewDiagram
         content={block.content}
         language={block.language}
         label={block.label}
         compact={diagramCompact}
+        fullPage={diagramFullPage}
       />
+    );
+  }
+
+  if (block.type === "code") {
+    return (
+      <div className="not-prose my-[0.45em] w-full">
+        {block.label ? (
+          <p className="m-0 mb-[0.3em] text-center text-[0.82em] font-semibold text-slate-700">
+            {block.label}
+          </p>
+        ) : null}
+        <pre className="m-0 max-w-full whitespace-pre-wrap break-words rounded-md border border-slate-200 bg-slate-50 p-[0.65em] font-mono text-[0.64em] leading-[1.22] text-slate-900">
+          <code>{String(block.content || "").replace(/\n$/, "")}</code>
+        </pre>
+      </div>
     );
   }
 

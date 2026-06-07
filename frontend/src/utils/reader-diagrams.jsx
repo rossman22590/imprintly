@@ -410,6 +410,16 @@ function cleanSegmentLine(line = "") {
     .trim();
 }
 
+function stripDiagramConnectorMarks(value = "") {
+  return String(value || "")
+    .replace(/-{2,}>|<-{2,}|<->|=>|<=|<=>/g, " ")
+    .replace(/[|+<>^/\\]+/g, " ")
+    .replace(/(^|[^A-Za-z0-9])v(?=$|[^A-Za-z0-9])/gi, "$1 ")
+    .replace(/-{2,}/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function isBoxBorderLine(line = "") {
   const trimmed = String(line || "").trim();
   const horizontalCount = (trimmed.match(/[-=]/g) || []).length;
@@ -429,6 +439,11 @@ function parseBoxedListDiagram(lines = []) {
   const nonEmptyLines = getNormalizedDiagramLines(lines);
 
   if (nonEmptyLines.filter(isBoxBorderLine).length < 2) return null;
+
+  const pipeTableRows = nonEmptyLines.filter(
+    (line) => !isBoxBorderLine(line) && (line.match(/\|/g) || []).length >= 3
+  );
+  if (pipeTableRows.length >= 2) return null;
 
   const segments = [];
   let current = [];
@@ -561,8 +576,7 @@ function parseFlowDiagram(lines = []) {
 }
 
 function cleanGenericDiagramDetail(value = "") {
-  return String(value || "")
-    .replace(/[|+<>^v/\\-]+/g, " ")
+  return stripDiagramConnectorMarks(value)
     .replace(/^\((.*)\)$/, "$1")
     .replace(/\s{2,}/g, " ")
     .trim();
@@ -841,7 +855,17 @@ function splitTableLine(line = "") {
   return trimmed
     .slice(1, -1)
     .split("|")
-    .map((cell) => cell.trim());
+    .map((cell) => normalizeTableCellText(cell));
+}
+
+function normalizeTableCellText(value = "") {
+  return String(value || "")
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n")
+    .replace(/(^|[^\n])\s+-\s+/g, "$1\n- ")
+    .trim();
 }
 
 function parseMarkdownPipeTableDiagram(lines = []) {
@@ -858,7 +882,7 @@ function parseMarkdownPipeTableDiagram(lines = []) {
 
   const splitRow = (line) => {
     const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
-    return trimmed.split("|").map((cell) => cell.trim());
+    return trimmed.split("|").map((cell) => normalizeTableCellText(cell));
   };
 
   const header = splitRow(nonEmptyLines[separatorIndex - 1]);
@@ -892,6 +916,7 @@ function parseTableDiagram(lines = []) {
   if (maxColumns < 2) return null;
 
   const rows = [];
+  let title = "";
   let currentGroup = [];
   let hasSeenBorder = false;
 
@@ -901,13 +926,26 @@ function parseTableDiagram(lines = []) {
     const parsedLines = currentGroup.map(splitTableLine).filter(Boolean);
     const columnCount = Math.max(...parsedLines.map((cells) => cells.length), 0);
 
+    if (columnCount === 1 && rows.length === 0) {
+      const titleCandidate = normalizeTableCellText(
+        parsedLines
+          .map((lineCells) => lineCells[0] || "")
+          .filter(Boolean)
+          .join(" ")
+      );
+      if (titleCandidate) title = titleCandidate;
+      currentGroup = [];
+      return;
+    }
+
     if (columnCount >= 2) {
       const cells = Array.from({ length: columnCount }, (_, columnIndex) =>
-        parsedLines
+        normalizeTableCellText(
+          parsedLines
           .map((lineCells) => lineCells[columnIndex] || "")
           .filter(Boolean)
           .join("\n")
-          .trim()
+        )
       );
 
       if (cells.some(Boolean)) rows.push(cells);
@@ -954,6 +992,7 @@ function parseTableDiagram(lines = []) {
 
   return {
     type: "table",
+    title,
     header: compactRows[0],
     rows: compactRows.slice(1),
   };
@@ -1304,12 +1343,11 @@ function parseSystemFlowSection(title = "", sectionLines = []) {
   const detailLines = normalized
     .filter((line) => !isBoxBorderLine(line))
     .map((line) =>
-      line
+      stripDiagramConnectorMarks(
+        line
         .replace(/\[[^\]]+\]/g, " ")
-        .replace(/[+\-|<>^v/\\]+/g, " ")
         .replace(/\([^)]*\)/g, " ")
-        .replace(/\s{2,}/g, " ")
-        .trim()
+      )
     )
     .filter((line) => /[A-Za-z]{3,}/.test(line));
 
@@ -1485,11 +1523,11 @@ export function parseReaderDiagram(lines = []) {
     parseSystemComparisonDiagram(lines) ||
     parseBoxedSystemComparisonDiagram(lines) ||
     parseNestedArchitectureDiagram(lines) ||
+    parseTableDiagram(lines) ||
     parseBoxedListDiagram(lines) ||
     parseStackDiagram(lines) ||
     parseSimpleStepFlowDiagram(lines) ||
     parseProcessDiagram(lines) ||
-    parseTableDiagram(lines) ||
     parseGenericBracketDiagram(lines) ||
     parseFlowDiagram(lines) ||
     parseLinearFlowDiagram(lines) ||

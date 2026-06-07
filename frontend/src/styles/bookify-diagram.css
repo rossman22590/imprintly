@@ -1,15 +1,24 @@
 /* Shared diagram styles — keep in sync with backend/src/utils/epub.generator.js */
 .bookify-diagram-host {
+  box-sizing: border-box;
   text-indent: 0;
   width: 100%;
+}
+
+.bookify-diagram-host *,
+.bookify-diagram-host *::before,
+.bookify-diagram-host *::after {
+  box-sizing: border-box;
 }
 
 .bookify-diagram-host .bookify-diagram {
   background: #f8fafc;
   border: 1px solid #cbd5e1;
   border-radius: 10px;
+  break-inside: avoid;
   margin: 1.4em 0;
   padding: 1em;
+  width: 100%;
 }
 
 .bookify-diagram-host .bookify-diagram figcaption {
@@ -24,8 +33,10 @@
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   margin: 0.5em 0;
+  overflow-wrap: anywhere;
   padding: 0.8em;
   text-align: center;
+  word-break: normal;
 }
 
 .bookify-diagram-host .bookify-node strong {
@@ -53,11 +64,15 @@
   border: 1px solid #dbeafe;
   border-radius: 8px;
   margin: 0.55em 0;
+  overflow-wrap: anywhere;
   padding: 0.65em 0.8em;
 }
 
 .bookify-diagram-host .bookify-table {
   border-collapse: collapse;
+  font-size: 0.88em;
+  line-height: 1.25;
+  table-layout: fixed;
   width: 100%;
 }
 
@@ -66,11 +81,23 @@
   border: 1px solid #cbd5e1;
   padding: 0.5em;
   text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  word-break: normal;
 }
 
 .bookify-diagram-host .bookify-table th {
   background: #111827;
   color: #fff;
+}
+
+.bookify-diagram-host--full-page .bookify-diagram {
+  box-shadow: none;
+}
+
+.bookify-diagram-host--full-page .bookify-table {
+  font-size: 0.92em;
 }
 
 .bookify-diagram-host .bookify-diagram pre {
@@ -88,4 +115,9 @@
   text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.bookify-diagram-host--full-page .bookify-diagram pre {
+  font-size: 0.74em;
+  line-height: 1.28;
 }

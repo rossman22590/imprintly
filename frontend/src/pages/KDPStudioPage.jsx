@@ -98,7 +98,7 @@ const KDP_GUTTER_RULES = [
 const PREVIEW_SERIF_FONT_FAMILY =
   '"Times New Roman", Times, serif';
 const PRINT_AVERAGE_CHAR_WIDTH_RATIO = 0.45;
-const PRINT_PAGE_LINE_SAFETY = 2;
+const PRINT_PAGE_LINE_SAFETY = 0;
 const MAX_PRINT_FONT_SIZE = 32;
 
 const TOC_DESIGNS = [
@@ -174,6 +174,7 @@ const DEFAULT_SETTINGS = {
   marginOutside: "",
   lineSpacing: "1.44",
   paragraphIndent: "1.35",
+  renderDiagrams: "false",
   coverImageSize: "2K",
   tocDesign: "basic",
 };
@@ -232,6 +233,10 @@ function normalizeParagraphIndent(value) {
 
 function usesInteriorBleed(settings = {}) {
   return settings.interiorBleed === "bleed";
+}
+
+function shouldRenderKdpDiagrams(settings = {}) {
+  return String(settings.renderDiagrams || "").toLowerCase() === "true";
 }
 
 function getKdpGutterMinimum(pageCount = 24) {
@@ -317,7 +322,7 @@ function getTextPageMetrics(
     linesPerPage,
     paragraphIndentPoints: fontSize * paragraphIndentRatio,
     paragraphIndentRatio,
-    renderLineBuffer: 2,
+    renderLineBuffer: 0,
     wordsPerPage: Math.max(
       70,
       Math.round(textArea * densityAt12pt * fontScale * lineScale)
@@ -391,7 +396,7 @@ function normalizeTextPageMetrics(metricsOrWordsPerPage = 220) {
 }
 
 function getChapterOpeningReserveLines(textMetrics) {
-  return Math.max(7, Math.floor(textMetrics.linesPerPage * 0.2));
+  return Math.max(3, Math.floor(textMetrics.linesPerPage * 0.1));
 }
 
 function shouldCompactKdpDiagramBlock(block) {
@@ -669,6 +674,7 @@ function estimateTextPageCount({
   metadata,
   tocPageCount,
   textMetrics,
+  settings,
 }) {
   const frontMatterBasePages =
     1 + (String(metadata.copyrightPage || "").trim() ? 1 : 0) + tocPageCount;
@@ -681,6 +687,7 @@ function estimateTextPageCount({
       sum +
       splitTextIntoPreviewPages(chapter.content, textMetrics, {
         firstPageReserveLines,
+        renderDiagrams: shouldRenderKdpDiagrams(settings),
       }).length,
     0
   );
@@ -710,6 +717,7 @@ function estimateBookLayout({ chapters, metadata, trim, fontSize, settings }) {
     metadata,
     tocPageCount,
     textMetrics,
+    settings,
   });
 
   for (let index = 0; index < 5; index += 1) {
@@ -728,6 +736,7 @@ function estimateBookLayout({ chapters, metadata, trim, fontSize, settings }) {
       metadata,
       tocPageCount,
       textMetrics,
+      settings,
     });
   }
 
@@ -736,6 +745,7 @@ function estimateBookLayout({ chapters, metadata, trim, fontSize, settings }) {
       sum +
       splitTextIntoPreviewPages(chapter.content, textMetrics, {
         firstPageReserveLines: getChapterOpeningReserveLines(textMetrics),
+        renderDiagrams: shouldRenderKdpDiagrams(settings),
       }).length,
     0
   );
@@ -787,6 +797,7 @@ function buildPreviewPages({
   tocPageCount,
   textMetrics,
   finalInteriorPageCount,
+  settings,
 }) {
   const pages = [
     { id: "front-cover-blank", kind: "spread-blank", label: "Front Cover" },
@@ -888,6 +899,7 @@ function buildPreviewPages({
 
     splitTextIntoPreviewPages(chapterMarkdown, textMetrics, {
       firstPageReserveLines: imageBlocks.length ? 0 : firstPageReserveLines,
+      renderDiagrams: shouldRenderKdpDiagrams(settings),
     }).forEach((pageContent, pageIndex) => {
         const isDiagramOnlyPage =
           pageContent.blocks?.length === 1 &&
@@ -984,6 +996,7 @@ Trim size: ${settings.trimSize}
 Paper type: ${settings.paperType}
 Interior bleed: ${settings.interiorBleed}
 Font size: ${settings.fontSize}
+Render diagrams: ${shouldRenderKdpDiagrams(settings) ? "enabled" : "disabled"}
 Margins: top ${settings.marginTop || "auto"}, bottom ${
     settings.marginBottom || "auto"
   }, inside ${settings.marginInside || "auto"}, outside ${
@@ -1454,12 +1467,14 @@ function KDPStudioPage() {
         tocPageCount,
         textMetrics,
         finalInteriorPageCount: pageCount,
+        settings,
       }),
     [
       book,
       chapters,
       metadata,
       pageCount,
+      settings,
       tocEntriesPerPage,
       tocPageCount,
       textMetrics,
@@ -2104,6 +2119,29 @@ function KDPStudioPage() {
                   <option value="none">No bleed</option>
                   <option value="bleed">Bleed interior PDF</option>
                 </StudioSelect>
+
+                <label className="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={shouldRenderKdpDiagrams(settings)}
+                    onChange={(e) =>
+                      updateSetting(
+                        "renderDiagrams",
+                        e.target.checked ? "true" : "false"
+                      )
+                    }
+                    className="mt-0.5 size-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold text-gray-900">
+                      Render diagrams
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-4 text-gray-500">
+                      Convert explicit diagram fences into styled KDP diagrams.
+                      Leave off when fenced text should stay as manuscript text.
+                    </span>
+                  </span>
+                </label>
 
                 <div>
                   <StudioLabel>Margins (inches)</StudioLabel>
@@ -2934,7 +2972,7 @@ function KDPStudioPage() {
                                         </div>
                                       )}
                                       <div
-                                        className={`min-h-0 flex-1 overflow-hidden pb-[7cqw] text-[1em]${
+                                        className={`min-h-0 flex-1 overflow-hidden text-[1em]${
                                           isDiagramOnlyRenderPage
                                             ? " flex flex-col justify-center"
                                             : ""
@@ -2979,6 +3017,9 @@ function KDPStudioPage() {
                                                     pageBlock
                                                   )
                                               )
+                                            }
+                                            diagramFullPage={
+                                              isDiagramOnlyRenderPage
                                             }
                                           />
                                         ))}

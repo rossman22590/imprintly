@@ -4,6 +4,7 @@ const {
   estimateDiagramBlockLines,
   isDedicatedDiagramFence,
   parseKdpMarkdownBlocks,
+  shouldUseDedicatedDiagramPage,
   splitKdpMarkdownIntoPages,
 } = require("./kdp-markdown-blocks");
 
@@ -153,6 +154,18 @@ test("isDedicatedDiagramFence treats code fences as inline content", () => {
     isDedicatedDiagramFence("text", ["Node A", "  v", "Node B"].join("\n")),
     true
   );
+  assert.equal(
+    isDedicatedDiagramFence(
+      "",
+      [
+        "Luna, Mariela - Attendance Record (Current)",
+        "Luna, Mariela - Transcript (Official)",
+        "Luna, Mariela - Health Record (Immunizations)",
+        "Luna, Mariela - Incident Report (10/14)",
+      ].join("\n")
+    ),
+    false
+  );
 });
 
 test("splitKdpMarkdownIntoPages keeps code fences inline on text pages", () => {
@@ -195,6 +208,62 @@ test("splitKdpMarkdownIntoPages keeps code fences inline on text pages", () => {
 
   assert.equal(diagramPages.length, 0);
   assert.ok(codePages.length >= 1);
+});
+
+test("splitKdpMarkdownIntoPages can disable KDP diagram rendering", () => {
+  const markdown = [
+    "Intro paragraph.",
+    "",
+    "```text",
+    "Node A",
+    "  v",
+    "Node B",
+    "```",
+    "",
+    "Closing paragraph.",
+  ].join("\n");
+  const textMetrics = {
+    charsPerLine: 54,
+    linesPerPage: 18,
+    wordsPerPage: 140,
+    lineWidthPoints: 300,
+    fontSize: 11,
+    paragraphIndentPoints: 14,
+  };
+  const estimateTextLines = (text) =>
+    Math.max(1, Math.ceil(String(text || "").length / 54));
+
+  const withDiagrams = splitKdpMarkdownIntoPages(
+    markdown,
+    textMetrics,
+    { firstPageReserveLines: 0, renderDiagrams: true },
+    estimateTextLines
+  );
+  const withoutDiagrams = splitKdpMarkdownIntoPages(
+    markdown,
+    textMetrics,
+    { firstPageReserveLines: 0, renderDiagrams: false },
+    estimateTextLines
+  );
+
+  assert.ok(
+    withDiagrams.some((page) =>
+      page.blocks.some((block) => block.type === "diagram")
+    )
+  );
+  assert.equal(
+    withoutDiagrams.some((page) =>
+      page.blocks.some((block) => block.type === "diagram")
+    ),
+    false
+  );
+  assert.ok(
+    withoutDiagrams.some((page) =>
+      page.blocks.some(
+        (block) => block.type === "paragraph" && block.text === "Node A"
+      )
+    )
+  );
 });
 
 test("splitKdpMarkdownIntoPages places large diagrams on dedicated pages", () => {
@@ -358,4 +427,67 @@ test("splitKdpMarkdownIntoPages moves oversized inline code to the next page", (
 
   assert.ok(codePage);
   assert.ok(codeOnlyPage);
+});
+
+test("shouldUseDedicatedDiagramPage keeps medium ASCII flows inline", () => {
+  const content = [
+    "Architecture",
+    "LLM Developer Engines",
+    "  ↓",
+    "Proprietary Models       |       Open-Weights Models",
+    "(Hosted API, Premium)    |       (Local Hosting, Private)",
+    "  ↓                      |        ↓",
+    "- Claude 3.5 Sonnet      +       - Llama 3.3",
+    "- GPT-4o / o1 / o3-mini          - DeepSeek-R1 / Coder",
+  ].join("\n");
+
+  const textMetrics = {
+    charsPerLine: 70,
+    linesPerPage: 43,
+    wordsPerPage: 260,
+    lineWidthPoints: 360,
+    fontSize: 12,
+    paragraphIndentPoints: 16.2,
+  };
+
+  assert.equal(shouldUseDedicatedDiagramPage("text", content, textMetrics), false);
+});
+
+test("splitKdpMarkdownIntoPages splits code blocks that exceed one page", () => {
+  const codeLines = Array.from(
+    { length: 80 },
+    (_, index) => `const row${index} = "This is a long generated roadmap line ${index}";`
+  );
+  const markdown = ["```tsx", ...codeLines, "```"].join("\n");
+  const textMetrics = {
+    charsPerLine: 54,
+    linesPerPage: 18,
+    wordsPerPage: 140,
+    lineWidthPoints: 300,
+    fontSize: 11,
+    paragraphIndentPoints: 14,
+  };
+  const estimateTextLines = (text) =>
+    Math.max(1, Math.ceil(String(text || "").length / 54));
+
+  const pages = splitKdpMarkdownIntoPages(
+    markdown,
+    textMetrics,
+    { firstPageReserveLines: 0 },
+    estimateTextLines
+  );
+  const codePages = pages.filter((page) =>
+    page.blocks.some((block) => block.type === "code")
+  );
+
+  assert.ok(codePages.length > 1);
+  assert.ok(
+    codePages.every((page) => page.blocks.length === 1 && page.blocks[0].type === "code")
+  );
+  assert.ok(
+    codePages.every(
+      (page) =>
+        page.blocks[0].content.split("\n").length < codeLines.length
+    )
+  );
 });
