@@ -27,6 +27,8 @@ import axiosInstance from "../lib/axios";
 import { API_ENDPOINTS, resolveImageUrl } from "../utils/api-endpoints";
 import { normalizeBook } from "../utils/api-shapes";
 import { markdownToPlainText } from "../utils/markdown-clipboard";
+import { splitKdpMarkdownIntoPreviewPages } from "../utils/kdp-markdown-blocks";
+import KdpPreviewDiagram from "../components/kdp/KdpPreviewDiagram";
 
 const TRIM_SIZES = [
   { id: "5x8", label: '5" × 8"', width: 5, height: 8 },
@@ -521,99 +523,19 @@ function estimatePreviewTextLines(text = "", textMetrics, options = {}) {
   return Math.max(1, lineCount);
 }
 
-function getWordCountForLineBudget(
-  words,
-  maxLines,
-  textMetrics,
-  options = {}
-) {
-  if (maxLines <= 0 || !words.length) return 0;
-
-  let low = 1;
-  let high = words.length;
-  let best = 0;
-
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const candidate = words.slice(0, mid).join(" ");
-    const lineCount = estimatePreviewTextLines(candidate, textMetrics, options);
-
-    if (lineCount <= maxLines) {
-      best = mid;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-
-  return best;
-}
-
 function splitTextIntoPreviewPages(
   text = "",
   metricsOrWordsPerPage = 220,
   options = {}
 ) {
   const textMetrics = normalizeTextPageMetrics(metricsOrWordsPerPage);
-  const paragraphs = getPlainParagraphs(text);
-  const firstPageReserveLines = Math.max(
-    0,
-    Number(options.firstPageReserveLines) || 0
+
+  return splitKdpMarkdownIntoPreviewPages(
+    text,
+    textMetrics,
+    options,
+    estimatePreviewTextLines
   );
-  const pages = [];
-  let currentParagraphs = [];
-  let currentLines = firstPageReserveLines;
-
-  const flushPage = () => {
-    if (!currentParagraphs.length) return;
-    pages.push({ paragraphs: currentParagraphs });
-    currentParagraphs = [];
-    currentLines = 0;
-  };
-
-  paragraphs.forEach((paragraph) => {
-    let words = paragraph.split(/\s+/).filter(Boolean);
-    let isContinuation = false;
-
-    while (words.length) {
-      let remainingLines = textMetrics.linesPerPage - currentLines;
-
-      if (remainingLines <= 0) {
-        if (currentParagraphs.length) {
-          flushPage();
-          continue;
-        }
-
-        remainingLines = textMetrics.linesPerPage;
-      }
-
-      const chunkSize =
-        words.length <= 1
-          ? 1
-          : getWordCountForLineBudget(words, remainingLines, textMetrics, {
-              continuation: isContinuation,
-            });
-      const safeChunkSize = Math.max(1, chunkSize);
-      const chunk = words.slice(0, safeChunkSize).join(" ");
-      currentParagraphs.push({
-        continuation: isContinuation,
-        text: chunk,
-      });
-      currentLines += estimatePreviewTextLines(chunk, textMetrics, {
-        continuation: isContinuation,
-      });
-      words = words.slice(safeChunkSize);
-
-      if (words.length) {
-        isContinuation = true;
-        flushPage();
-      }
-    }
-  });
-
-  flushPage();
-
-  return pages.length ? pages : [{ paragraphs: [""] }];
 }
 
 function getTocEntriesPerPage(trim, fontSize, margins) {
@@ -842,7 +764,7 @@ function buildPreviewPages({
             pageIndex === 0 && !imageBlocks.length
               ? chapter.title || `Chapter ${chapterIndex + 1}`
               : "",
-          paragraphs: pageContent.paragraphs,
+          blocks: pageContent.blocks,
         };
 
         const addedPreviewPage = addInteriorPage(previewPage);
@@ -2854,31 +2776,51 @@ function KDPStudioPage() {
                                         className="text-[1em]"
                                         style={{ lineHeight: bodyLineSpacing }}
                                       >
-                                        {(previewPage.paragraphs?.length
-                                          ? previewPage.paragraphs
-                                          : [" "]
-                                        ).map((paragraph, paragraphIndex) => {
-                                          const paragraphText =
-                                            typeof paragraph === "object"
-                                              ? paragraph.text
-                                              : paragraph;
-                                          const isContinuation =
-                                            typeof paragraph === "object" &&
-                                            paragraph.continuation;
+                                        {(previewPage.blocks?.length
+                                          ? previewPage.blocks
+                                          : (previewPage.paragraphs?.length
+                                              ? previewPage.paragraphs.map(
+                                                  (paragraph) => ({
+                                                    type: "paragraph",
+                                                    text:
+                                                      typeof paragraph ===
+                                                      "object"
+                                                        ? paragraph.text
+                                                        : paragraph,
+                                                    continuation:
+                                                      typeof paragraph ===
+                                                        "object" &&
+                                                      paragraph.continuation,
+                                                  })
+                                                )
+                                              : [{ type: "paragraph", text: " " }]
+                                            )
+                                        ).map((block, blockIndex) => {
+                                          if (block.type === "diagram") {
+                                            return (
+                                              <KdpPreviewDiagram
+                                                key={`${previewPage.id}-diagram-${blockIndex}`}
+                                                content={block.content}
+                                                language={block.language}
+                                                label={block.label}
+                                              />
+                                            );
+                                          }
 
                                           return (
                                             <p
-                                              key={`${previewPage.id}-${paragraphIndex}`}
+                                              key={`${previewPage.id}-${blockIndex}`}
                                               className="m-0 text-justify"
                                               style={{
                                                 textIndent:
-                                                  previewPage.kind === "chapter" &&
-                                                  !isContinuation
+                                                  previewPage.kind ===
+                                                    "chapter" &&
+                                                  !block.continuation
                                                     ? `${paragraphIndent}em`
                                                     : "0",
                                               }}
                                             >
-                                              {paragraphText}
+                                              {block.text}
                                             </p>
                                           );
                                         })}

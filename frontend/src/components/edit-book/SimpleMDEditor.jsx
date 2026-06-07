@@ -6,6 +6,7 @@ import {
   findMarkdownImageAtSelection,
   removeMarkdownImage,
 } from "../../utils/markdown-images";
+import { readerMarkdownComponents } from "../../utils/reader-diagrams";
 
 function findImageCommandAtCursor(content = "", cursorPosition = 0) {
   const safeCursor = Math.max(0, Math.min(cursorPosition, content.length));
@@ -191,6 +192,7 @@ function SimpleMDEditor({
           {...editorOptions}
           previewOptions={{
             rehypePlugins: [[rehypeSanitize]],
+            components: readerMarkdownComponents,
           }}
           commands={[
             commands.bold,

@@ -3,6 +3,7 @@ const { authenticate } = require("../middlewares/auth.middleware");
 const {
   cancelFullBookJob,
   createFullBookJob,
+  generateBookBibleFromSourceDocuments,
   generateBookOutline,
   generateChapterContent,
   generateChapterImage,
@@ -16,6 +17,10 @@ const {
 router.use(authenticate);
 
 router.post("/generate-book-outline", generateBookOutline);
+router.post(
+  "/generate-book-bible-from-sources",
+  generateBookBibleFromSourceDocuments
+);
 router.post("/generate-chapter-content", generateChapterContent);
 router.post("/generate-cover-image", generateCoverImage);
 router.post("/generate-chapter-image", generateChapterImage);

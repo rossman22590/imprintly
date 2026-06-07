@@ -38,6 +38,9 @@ const CHAPTER_LENGTH_OPTIONS = [
   { value: "medium", label: "Medium - detailed" },
   { value: "large", label: "Large - most pages" },
 ];
+const SOURCE_FILE_ACCEPT =
+  ".pdf,.docx,.md,.markdown,.txt,.text,.html,.htm,.csv,.json,.rtf";
+const SOURCE_FILE_LIMIT = 6;
 const EMPTY_VISUAL_BIBLE = {
   enabled: true,
   matchBookStyle: true,
@@ -93,6 +96,21 @@ function hasVisualBibleContent(visualBible = EMPTY_VISUAL_BIBLE) {
   );
 }
 
+function hasBibleContent(bible = {}) {
+  return Object.values(bible || {}).some((value) =>
+    String(value || "").trim()
+  );
+}
+
+function formatSourceFileSize(size = 0) {
+  const bytes = Math.max(0, Number(size || 0));
+
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function isChildrensBookType(value = "") {
   const normalized = String(value || "").toLowerCase();
 
@@ -113,6 +131,10 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
   const [bookGenre, setBookGenre] = useState(BOOK_GENRES[0]);
   const [audience, setAudience] = useState("General readers");
   const [useGoogleSearch, setUseGoogleSearch] = useState(false);
+  const [sourceFiles, setSourceFiles] = useState([]);
+  const [isUploadingSourceFiles, setIsUploadingSourceFiles] = useState(false);
+  const [generateBibleFromSource, setGenerateBibleFromSource] = useState(false);
+  const [generatedBookBible, setGeneratedBookBible] = useState(null);
   const [generateCover, setGenerateCover] = useState(true);
   const [includeImages, setIncludeImages] = useState(false);
   const [isVisualBibleExpanded, setIsVisualBibleExpanded] = useState(false);
@@ -146,6 +168,10 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setBookGenre(BOOK_GENRES[0]);
     setAudience("General readers");
     setUseGoogleSearch(false);
+    setSourceFiles([]);
+    setIsUploadingSourceFiles(false);
+    setGenerateBibleFromSource(false);
+    setGeneratedBookBible(null);
     setGenerateCover(true);
     setIncludeImages(false);
     setIsVisualBibleExpanded(false);
@@ -166,6 +192,9 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
 
     if (nextProvider !== "gemini") {
       setUseGoogleSearch(false);
+      setSourceFiles([]);
+      setGenerateBibleFromSource(false);
+      setGeneratedBookBible(null);
     }
   };
 
@@ -211,8 +240,9 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setIsGeneratingOutline(true);
 
     try {
+      const uploadedSourceFiles = await uploadSourceFilesIfNeeded();
       const {
-        data: { outline, generation, title, subtitle },
+        data: { outline, generation, title, subtitle, bible },
       } = await axiosInstance.post(API_ENDPOINTS.AI.GENERATE_OUTLINE, {
         topic: bookTitle,
         description: topic || "",
@@ -224,6 +254,12 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
         genre: bookGenre,
         audience,
         useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
+        sourceFiles: uploadedSourceFiles,
+        useSourceFiles: aiProvider === "gemini" && uploadedSourceFiles.length > 0,
+        generateBibleFromSource:
+          aiProvider === "gemini" &&
+          generateBibleFromSource &&
+          uploadedSourceFiles.length > 0,
       });
 
       if (title) {
@@ -233,6 +269,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
       setBookSubtitle((subtitle || bookSubtitle || "").trim());
       setChapters(outline);
       setGenerationStats(generation || null);
+      setGeneratedBookBible(bible || null);
       setStep(2);
       toast.success(
         isChildrensBook
@@ -312,6 +349,95 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
       ...current,
       [sectionKey]: (current[sectionKey] || []).filter((_, itemIndex) => itemIndex !== index),
     }));
+  };
+
+  const handleSourceFileSelection = (event) => {
+    const files = Array.from(event.target.files || []);
+
+    if (aiProvider !== "gemini") {
+      toast.error("Source files require the Gemini 3.5 Flash Book Engine.");
+      event.target.value = "";
+      return;
+    }
+
+    setSourceFiles((current) => {
+      const remainingSlots = Math.max(0, SOURCE_FILE_LIMIT - current.length);
+      const nextFiles = files.slice(0, remainingSlots).map((file) => ({
+        id: `source-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        file,
+        name: file.name,
+        size: file.size,
+        mimeType: file.type || "",
+        uploaded: false,
+      }));
+
+      if (files.length > remainingSlots) {
+        toast.error(`You can attach up to ${SOURCE_FILE_LIMIT} source files.`);
+      }
+
+      return [...current, ...nextFiles];
+    });
+
+    event.target.value = "";
+  };
+
+  const removeSourceFile = (id) => {
+    setSourceFiles((current) => {
+      const nextFiles = current.filter((file) => file.id !== id);
+
+      if (nextFiles.length === 0) {
+        setGenerateBibleFromSource(false);
+        setGeneratedBookBible(null);
+      }
+
+      return nextFiles;
+    });
+  };
+
+  const uploadSourceFilesIfNeeded = async () => {
+    if (aiProvider !== "gemini" || sourceFiles.length === 0) return [];
+
+    const uploadedFiles = sourceFiles
+      .filter((sourceFile) => sourceFile.uploaded)
+      .map(({ uploaded, file, ...sourceFile }) => sourceFile);
+    const pendingFiles = sourceFiles.filter(
+      (sourceFile) => !sourceFile.uploaded && sourceFile.file
+    );
+
+    if (pendingFiles.length === 0) return uploadedFiles;
+
+    const formData = new FormData();
+    pendingFiles.forEach((sourceFile) => {
+      formData.append("sourceFiles", sourceFile.file);
+    });
+
+    setIsUploadingSourceFiles(true);
+
+    try {
+      const {
+        data: { sourceFiles: uploadedSourceFiles },
+      } = await axiosInstance.post(API_ENDPOINTS.BOOKS.UPLOAD_SOURCE_FILES, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const nextUploadedFiles = [
+        ...uploadedFiles,
+        ...(uploadedSourceFiles || []),
+      ];
+
+      setSourceFiles(
+        nextUploadedFiles.map((sourceFile) => ({
+          ...sourceFile,
+          uploaded: true,
+        }))
+      );
+      return nextUploadedFiles;
+    } catch (error) {
+      console.error("Error uploading source files:", error);
+      toast.error(error.response?.data?.error || "Source file upload failed.");
+      throw error;
+    } finally {
+      setIsUploadingSourceFiles(false);
+    }
   };
 
   const uploadVisualReferenceFile = async (sectionKey, index, file) => {
@@ -395,6 +521,7 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setIsFinalisingBook(true);
 
     try {
+      const uploadedSourceFiles = await uploadSourceFilesIfNeeded();
       const { data } = await axiosInstance.post(API_ENDPOINTS.BOOKS.CREATE, {
         title: bookTitle,
         subtitle: bookSubtitle,
@@ -409,11 +536,18 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
           includeTextGraphics,
           chapterLength,
+          sourcePrompt: bookTitle,
+          description: topic || "",
+          sourceFiles: uploadedSourceFiles,
+          useSourceFiles:
+            aiProvider === "gemini" && uploadedSourceFiles.length > 0,
           ...(aiProvider === "groq"
             ? { structureModel: groqTextModel, sectionModel: groqTextModel }
             : {}),
           ...(generationStats || {}),
         },
+        sourceFiles: uploadedSourceFiles,
+        bible: generatedBookBible || undefined,
         visualBible: getVisualBiblePayload(),
         generateCover,
       });
@@ -453,6 +587,12 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
     setIsGeneratingFullBook(true);
 
     try {
+      const uploadedSourceFiles = await uploadSourceFilesIfNeeded();
+      const shouldGenerateSourceBible =
+        aiProvider === "gemini" &&
+        generateBibleFromSource &&
+        uploadedSourceFiles.length > 0 &&
+        !hasBibleContent(generatedBookBible);
       const {
         data: { job },
       } = await axiosInstance.post(
@@ -471,6 +611,11 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           outline: chapters,
           provider: aiProvider,
           model: aiProvider === "groq" ? groqTextModel : undefined,
+          sourceFiles: uploadedSourceFiles,
+          useSourceFiles:
+            aiProvider === "gemini" && uploadedSourceFiles.length > 0,
+          generateBibleFromSource: shouldGenerateSourceBible,
+          bible: generatedBookBible || undefined,
           generateCover,
           includeImages,
           includeTextGraphics,
@@ -724,43 +869,133 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
           )}
 
           {aiProvider === "gemini" && (
-            <label className="flex items-center justify-between gap-4 rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 cursor-pointer">
-              <span className="flex items-start gap-3 min-w-0">
-                <span className="size-9 rounded-lg bg-white text-blue-700 flex items-center justify-center shrink-0 shadow-sm">
-                  <Search className="size-4" />
+            <div className="space-y-3">
+              <label className="flex items-center justify-between gap-4 rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 cursor-pointer">
+                <span className="flex items-start gap-3 min-w-0">
+                  <span className="size-9 rounded-lg bg-white text-blue-700 flex items-center justify-center shrink-0 shadow-sm">
+                    <Search className="size-4" />
+                  </span>
+
+                  <span className="min-w-0">
+                    <span className="block text-blue-950 text-sm font-semibold">
+                      Ground Gemini with Google Search
+                    </span>
+                    <span className="block text-blue-700 text-xs mt-1">
+                      {isChildrensBook
+                        ? "Use live web search for Gemini children's page planning and writing."
+                        : "Use live web search for Gemini outline and chapter writing."}
+                    </span>
+                  </span>
                 </span>
 
-                <span className="min-w-0">
-                  <span className="block text-blue-950 text-sm font-semibold">
-                    Ground Gemini with Google Search
-                  </span>
-                  <span className="block text-blue-700 text-xs mt-1">
-                    {isChildrensBook
-                      ? "Use live web search for Gemini children's page planning and writing."
-                      : "Use live web search for Gemini outline and chapter writing."}
-                  </span>
-                </span>
-              </span>
-
-              <input
-                type="checkbox"
-                checked={useGoogleSearch}
-                onChange={(event) => setUseGoogleSearch(event.target.checked)}
-                className="sr-only"
-              />
-
-              <span
-                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-                  useGoogleSearch ? "bg-blue-600" : "bg-slate-200"
-                }`}
-              >
-                <span
-                  className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
-                    useGoogleSearch ? "translate-x-5" : "translate-x-0.5"
-                  }`}
+                <input
+                  type="checkbox"
+                  checked={useGoogleSearch}
+                  onChange={(event) => setUseGoogleSearch(event.target.checked)}
+                  className="sr-only"
                 />
-              </span>
-            </label>
+
+                <span
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                    useGoogleSearch ? "bg-blue-600" : "bg-slate-200"
+                  }`}
+                >
+                  <span
+                    className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+                      useGoogleSearch ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </span>
+              </label>
+
+              <section className="rounded-xl border border-blue-200 bg-white px-4 py-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="size-9 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+                      <UploadCloud className="size-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-950">
+                        Source documents
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                        Attach PDF, DOCX, Markdown, text, HTML, CSV, RTF, or JSON
+                        files for Gemini to use as source material.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100">
+                    <UploadCloud className="size-4" />
+                    Add files
+                    <input
+                      type="file"
+                      multiple
+                      accept={SOURCE_FILE_ACCEPT}
+                      onChange={handleSourceFileSelection}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {sourceFiles.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {sourceFiles.map((sourceFile) => (
+                      <div
+                        key={sourceFile.id || sourceFile.url || sourceFile.name}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold text-slate-900">
+                            {sourceFile.name}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {sourceFile.mimeType || "document"} ·{" "}
+                            {formatSourceFileSize(sourceFile.size)}
+                            {sourceFile.uploaded ? " · uploaded" : ""}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeSourceFile(sourceFile.id)}
+                          className="shrink-0 rounded-md p-1.5 text-red-500 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                          aria-label={`Remove ${sourceFile.name}`}
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <label className="mt-3 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-slate-900">
+                      Generate Book Bible from documents
+                    </span>
+                    <span className="mt-1 block text-xs leading-relaxed text-slate-500">
+                      Builds Source, canon, style, and continuity notes from the
+                      uploaded files plus the form inputs.
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={generateBibleFromSource}
+                    disabled={sourceFiles.length === 0}
+                    onChange={(event) =>
+                      setGenerateBibleFromSource(event.target.checked)
+                    }
+                    className="mt-1 size-4 shrink-0 accent-blue-600 disabled:opacity-50"
+                  />
+                </label>
+
+                {isUploadingSourceFiles && (
+                  <p className="mt-2 text-xs font-medium text-blue-700">
+                    Uploading source files...
+                  </p>
+                )}
+              </section>
+            </div>
           )}
 
           <label className="flex items-center justify-between gap-4 rounded-xl border border-violet-200 bg-violet-50/60 px-4 py-3 cursor-pointer">
@@ -1169,6 +1404,43 @@ function CreateBookModal({ isOpen, onClose, onBookCreate }) {
                   {isChildrensBook
                     ? "Gemini will use Google Search when writing the children's pages."
                     : "Gemini will use Google Search when writing the full chapters."}
+                </p>
+              </div>
+            </section>
+          )}
+
+          {aiProvider === "gemini" && sourceFiles.length > 0 && (
+            <section className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-3">
+              <div className="size-9 rounded-lg bg-white text-blue-700 flex items-center justify-center shrink-0 shadow-sm">
+                <UploadCloud className="size-4" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-blue-950 text-sm font-semibold">
+                  Source documents attached
+                </p>
+                <p className="text-blue-700 text-xs mt-1 leading-relaxed">
+                  {sourceFiles.length}{" "}
+                  {sourceFiles.length === 1 ? "file" : "files"} will be saved
+                  with the book and available for regeneration.
+                </p>
+              </div>
+            </section>
+          )}
+
+          {generatedBookBible && (
+            <section className="flex items-start gap-3 rounded-xl border border-violet-200 bg-violet-50/80 px-3 py-3">
+              <div className="size-9 rounded-lg bg-white text-violet-700 flex items-center justify-center shrink-0 shadow-sm">
+                <BookOpen className="size-4" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-violet-950 text-sm font-semibold">
+                  Book Bible generated from source
+                </p>
+                <p className="text-violet-700 text-xs mt-1 leading-relaxed">
+                  The draft will include Source, canon, style, and continuity
+                  notes extracted from the attached documents and inputs.
                 </p>
               </div>
             </section>

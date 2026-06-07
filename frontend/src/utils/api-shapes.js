@@ -20,7 +20,9 @@ export function normalizeBook(book) {
       freeFullPdfEnabledAt:
         book.communityListing?.freeFullPdfEnabledAt || null,
     },
+    sourceFiles: Array.isArray(book.sourceFiles) ? book.sourceFiles : [],
     bible: {
+      source: bible.source || "",
       characters: bible.characters || "",
       locations: bible.locations || "",
       worldRules: bible.worldRules || "",

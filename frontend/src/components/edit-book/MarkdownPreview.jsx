@@ -1,41 +1,4 @@
-import MDEditor from "@uiw/react-md-editor";
-import rehypeSanitize from "rehype-sanitize";
-import { resolveImageUrl } from "../../utils/api-endpoints";
-
-const markdownComponents = {
-  a({ href = "", children }) {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        {children}
-      </a>
-    );
-  },
-  img({ alt = "", src = "" }) {
-    const resolvedSrc = resolveImageUrl(src);
-
-    if (!resolvedSrc) return null;
-
-    return (
-      <figure className="my-6 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-        <img
-          src={resolvedSrc}
-          alt={alt}
-          className="w-full max-h-[520px] object-contain bg-white"
-          loading="lazy"
-        />
-        {alt ? (
-          <figcaption className="px-3 py-2 text-xs text-slate-500">
-            {alt}
-          </figcaption>
-        ) : null}
-      </figure>
-    );
-  },
-};
+import { ReaderMarkdownContent } from "../../utils/reader-diagrams";
 
 function MarkdownPreview({
   className = "",
@@ -52,13 +15,14 @@ function MarkdownPreview({
   }
 
   return (
-    <MDEditor.Markdown
-      source={source}
-      rehypePlugins={[[rehypeSanitize]]}
-      components={markdownComponents}
-      className={className}
-      style={style}
-    />
+    <div className={className}>
+      <ReaderMarkdownContent
+        source={source}
+        fontFamily={style?.fontFamily}
+        fontSize={style?.fontSize || 16}
+        colorMode="light"
+      />
+    </div>
   );
 }
 

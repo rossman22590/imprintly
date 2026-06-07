@@ -28,6 +28,12 @@ function parseExportDiagram(content = "", language = "") {
 
   if (table) return { type: "table", ...table };
 
+  const systemComparison = diagramTools.parseSystemComparisonDiagram(lines);
+
+  if (systemComparison) {
+    return { type: "flow", ...systemComparison };
+  }
+
   const nestedArchitecture = diagramTools.parseNestedArchitectureDiagram(lines);
 
   if (nestedArchitecture) {

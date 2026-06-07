@@ -10,6 +10,7 @@ const {
 } = require("./export-markdown");
 const { getBookTypeFamily } = require("./book-type-guidance");
 const { extractChildrenSpreadParts } = require("./children-spread-content");
+const { splitKdpMarkdownIntoPages } = require("./kdp-markdown-blocks");
 
 const md = new MarkdownIt();
 
@@ -281,14 +282,6 @@ function getPlainWordCount(value = "") {
     .filter(Boolean).length;
 }
 
-function getPrintParagraphs(value = "") {
-  return stripInlineMarkdown(value)
-    .replace(/\r\n/g, "\n")
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-}
-
 function getMarkdownImageBlocks(value = "") {
   return md
     .parse(normalizeMarkdownForExport(value), {})
@@ -451,100 +444,19 @@ function estimateKdpTextLines(text = "", textMetrics, options = {}) {
   return Math.max(1, lineCount);
 }
 
-function getKdpWordCountForLineBudget(
-  words,
-  maxLines,
-  textMetrics,
-  options = {}
-) {
-  if (maxLines <= 0 || !words.length) return 0;
-
-  let low = 1;
-  let high = words.length;
-  let best = 0;
-
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const candidate = words.slice(0, mid).join(" ");
-    const lineCount = estimateKdpTextLines(candidate, textMetrics, options);
-
-    if (lineCount <= maxLines) {
-      best = mid;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-
-  return best;
-}
-
 function splitKdpTextIntoPrintPages(
   text = "",
   metricsOrWordsPerPage = 220,
   options = {}
 ) {
   const textMetrics = normalizeKdpTextPageMetrics(metricsOrWordsPerPage);
-  const paragraphs = getPrintParagraphs(text);
-  const firstPageReserveLines = Math.max(
-    0,
-    Number(options.firstPageReserveLines) || 0
+
+  return splitKdpMarkdownIntoPages(
+    text,
+    textMetrics,
+    options,
+    estimateKdpTextLines
   );
-  const pages = [];
-  let currentParagraphs = [];
-  let currentLines = firstPageReserveLines;
-
-  const flushPage = () => {
-    if (!currentParagraphs.length) return;
-    pages.push({ paragraphs: currentParagraphs });
-    currentParagraphs = [];
-    currentLines = 0;
-  };
-
-  paragraphs.forEach((paragraph) => {
-    let words = paragraph.split(/\s+/).filter(Boolean);
-    let isContinuation = false;
-
-    while (words.length) {
-      let remainingLines = textMetrics.linesPerPage - currentLines;
-
-      if (remainingLines <= 0) {
-        if (currentParagraphs.length) {
-          flushPage();
-          continue;
-        }
-
-        remainingLines = textMetrics.linesPerPage;
-      }
-
-      const chunkSize =
-        words.length <= 1
-          ? 1
-          : getKdpWordCountForLineBudget(words, remainingLines, textMetrics, {
-              continuation: isContinuation,
-            });
-      const safeChunkSize = Math.max(1, chunkSize);
-
-      const chunk = words.slice(0, safeChunkSize).join(" ");
-      currentParagraphs.push({
-        continuation: isContinuation,
-        text: chunk,
-      });
-      currentLines += estimateKdpTextLines(chunk, textMetrics, {
-        continuation: isContinuation,
-      });
-      words = words.slice(safeChunkSize);
-
-      if (words.length) {
-        isContinuation = true;
-        flushPage();
-      }
-    }
-  });
-
-  flushPage();
-
-  return pages.length ? pages : [{ paragraphs: [""] }];
 }
 
 function estimateKdpTextPageCount(text = "", textMetrics = 220, options = {}) {
@@ -1098,14 +1010,40 @@ function renderKdpChapterPrintPages(doc, chapter, chapterIndex, runtimeConfig) {
       );
     }
 
-    pageContent.paragraphs.forEach((paragraph) => {
-      const paragraphText =
-        typeof paragraph === "object" ? paragraph.text : paragraph;
-      const isContinuation =
-        typeof paragraph === "object" && paragraph.continuation;
+    const pageBlocks = Array.isArray(pageContent.blocks)
+      ? pageContent.blocks
+      : (pageContent.paragraphs || []).map((paragraph) => {
+          const paragraphText =
+            typeof paragraph === "object" ? paragraph.text : paragraph;
+          const isContinuation =
+            typeof paragraph === "object" && paragraph.continuation;
 
-      renderKdpFixedBodyParagraph(doc, paragraphText, textMetrics, {
-        continuation: isContinuation,
+          return {
+            type: "paragraph",
+            text: paragraphText,
+            continuation: isContinuation,
+          };
+        });
+
+    pageBlocks.forEach((block) => {
+      if (block.type === "diagram") {
+        const originalLines = String(block.content || "")
+          .replace(/\n$/, "")
+          .split("\n");
+        const language = String(block.language || "").trim();
+
+        doc.moveDown(0.25);
+
+        if (!renderSemanticDiagram(doc, originalLines, language)) {
+          renderPreformattedDiagram(doc, originalLines);
+        }
+
+        doc.moveDown(0.25);
+        return;
+      }
+
+      renderKdpFixedBodyParagraph(doc, block.text || "", textMetrics, {
+        continuation: Boolean(block.continuation),
       });
     });
   });

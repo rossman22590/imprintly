@@ -117,6 +117,51 @@ const visualBibleSchema = new mongoose.Schema(
   }
 );
 
+const sourceFileSchema = new mongoose.Schema(
+  {
+    id: {
+      type: String,
+      default: "",
+      maxLength: [80, "Source file ID cannot exceed 80 characters"],
+    },
+    name: {
+      type: String,
+      default: "",
+      maxLength: [180, "Source file name cannot exceed 180 characters"],
+    },
+    url: {
+      type: String,
+      default: "",
+    },
+    mimeType: {
+      type: String,
+      default: "",
+      maxLength: [120, "Source file type cannot exceed 120 characters"],
+    },
+    size: {
+      type: Number,
+      default: 0,
+    },
+    extractedText: {
+      type: String,
+      default: "",
+      maxLength: [60000, "Source file text cannot exceed 60000 characters"],
+    },
+    textPreview: {
+      type: String,
+      default: "",
+      maxLength: [1800, "Source file preview cannot exceed 1800 characters"],
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
 const chapterSchema = new mongoose.Schema(
   {
     title: {
@@ -324,6 +369,11 @@ const communityListingSchema = new mongoose.Schema(
 
 const bookBibleSchema = new mongoose.Schema(
   {
+    source: {
+      type: String,
+      default: "",
+      maxLength: [12000, "Source bible cannot exceed 12000 characters"],
+    },
     characters: {
       type: String,
       default: "",
@@ -565,6 +615,10 @@ const bookSchema = new mongoose.Schema(
     bible: {
       type: bookBibleSchema,
       default: () => ({}),
+    },
+    sourceFiles: {
+      type: [sourceFileSchema],
+      default: [],
     },
     visualBible: {
       type: visualBibleSchema,

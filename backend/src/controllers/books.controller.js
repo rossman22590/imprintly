@@ -34,6 +34,12 @@ const { generateShareToken } = require("../utils/share-token");
 const { normalizeChapterLength } = require("../utils/chapter-length");
 const { normalizeBookBiblePayload } = require("../utils/book-bible");
 const { normalizeVisualBiblePayload } = require("../utils/visual-bible");
+const {
+  buildSourceFileRecord,
+  deleteSourceFiles,
+  mergeSourceIntoBible,
+  normalizeSourceFilesPayload,
+} = require("../utils/book-source-documents");
 
 const KDP_SETTING_LIMITS = {
   format: 20,
@@ -107,6 +113,12 @@ async function normalizeChapterPayloads(chapters = []) {
       return normalizedChapter;
     })
   );
+}
+
+function normalizeBookSourcesForSave(sourceFiles) {
+  if (sourceFiles === undefined) return undefined;
+
+  return normalizeSourceFilesPayload(sourceFiles);
 }
 
 function isEnabled(value) {
@@ -325,6 +337,7 @@ async function createBook(req, res) {
       targetWordCount,
       generation,
       bible,
+      sourceFiles,
       visualBible,
       generateCover,
       coverPrompt,
@@ -338,6 +351,7 @@ async function createBook(req, res) {
       return res.status(400).json({ error: "Title and author are required!" });
     }
 
+    const normalizedSourceFiles = normalizeSourceFilesPayload(sourceFiles);
     const book = await Book.create({
       userId: req.user.id,
       title,
@@ -348,7 +362,16 @@ async function createBook(req, res) {
       language,
       targetWordCount,
       generation: normalizeGenerationPayload(generation),
-      bible: normalizeBookBiblePayload(bible),
+      bible: normalizeBookBiblePayload(
+        mergeSourceIntoBible(bible, {
+          sourceFiles: normalizedSourceFiles,
+          topic: generation?.sourcePrompt || title,
+          description: generation?.description || "",
+          genre,
+          audience,
+        })
+      ),
+      sourceFiles: normalizedSourceFiles,
       visualBible: normalizeVisualBiblePayload(visualBible),
       chapters: await normalizeChapterPayloads(chapters || []),
     });
@@ -433,6 +456,7 @@ async function updateBookContent(req, res) {
       language: req.body.language,
       targetWordCount: req.body.targetWordCount,
       generation: normalizeGenerationPayload(req.body.generation),
+      sourceFiles: normalizeBookSourcesForSave(req.body.sourceFiles),
       bible:
         req.body.bible === undefined
           ? undefined
@@ -509,6 +533,35 @@ async function uploadVisualReference(req, res) {
     if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
     }
+
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.message || "Internal Server Error!" });
+  }
+}
+
+async function uploadBookSources(req, res) {
+  const files = Array.isArray(req.files) ? req.files : [];
+
+  try {
+    if (files.length === 0) {
+      return res.status(400).json({ error: "No source files provided!" });
+    }
+
+    const sourceFiles = await Promise.all(files.map(buildSourceFileRecord));
+
+    return res.status(200).json({
+      message: "Source files uploaded.",
+      sourceFiles,
+    });
+  } catch (error) {
+    console.error("Error uploading source files:", error);
+
+    files.forEach((file) => {
+      if (file?.path && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
+    });
 
     return res
       .status(error.statusCode || 500)
@@ -857,6 +910,7 @@ async function deleteBook(req, res) {
       deleteUploadFile(book.coverImage);
     }
 
+    deleteSourceFiles(book.sourceFiles || []);
     deleteChapterImages(book);
 
     await book.deleteOne();
@@ -885,6 +939,7 @@ module.exports = {
   updateBookContent,
   updateBookCover,
   updateBookKdp,
+  uploadBookSources,
   uploadVisualReference,
   enableBookPreviewShare,
   disableBookPreviewShare,

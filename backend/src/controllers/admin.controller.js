@@ -21,6 +21,7 @@ const {
   setMonthlyCreditAllowance,
 } = require("../utils/credits.service");
 const { deleteUploadFile } = require("../utils/upload-paths");
+const { deleteSourceFiles } = require("../utils/book-source-documents");
 
 function escapeRegex(value = "") {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -76,6 +77,8 @@ function deleteBookUploads(book) {
       }
     });
   });
+
+  deleteSourceFiles(book.sourceFiles || []);
 }
 
 function deleteUserUploads(user) {

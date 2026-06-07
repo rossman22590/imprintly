@@ -7,11 +7,13 @@ const {
 
 test("normalizes Book Bible payload to supported fields only", () => {
   const bible = normalizeBookBiblePayload({
+    source: "uploaded.pdf",
     characters: "Mira: green eyes",
     canonFacts: "<b>Magic cannot revive the dead.</b>",
     ignored: "drop me",
   });
 
+  assert.equal(bible.source, "uploaded.pdf");
   assert.equal(bible.characters, "Mira: green eyes");
   assert.equal(bible.canonFacts, "Magic cannot revive the dead.");
   assert.equal(Object.hasOwn(bible, "ignored"), false);

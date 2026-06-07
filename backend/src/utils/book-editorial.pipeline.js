@@ -12,7 +12,7 @@ const {
 } = require("./book-type-guidance");
 
 const BIBLE_JSON_SHAPE =
-  '{"characters":"","locations":"","worldRules":"","timeline":"","styleGuide":"","canonFacts":"","unresolvedThreads":"","notes":""}';
+  '{"source":"","characters":"","locations":"","worldRules":"","timeline":"","styleGuide":"","canonFacts":"","unresolvedThreads":"","notes":""}';
 
 function cleanModelText(value = "") {
   return String(value || "")

@@ -8,6 +8,7 @@ const {
   updateBookContent,
   updateBookCover,
   updateBookKdp,
+  uploadBookSources,
   uploadVisualReference,
   enableBookPreviewShare,
   disableBookPreviewShare,
@@ -16,6 +17,7 @@ const {
 } = require("../controllers/books.controller");
 const {
   uploadBookCoverImage,
+  uploadBookSourceFiles,
   uploadVisualReferenceImage,
 } = require("../middlewares/upload.middleware");
 
@@ -33,6 +35,9 @@ router
 
 // POST /api/books/visual-references/import-url - Import an image URL into durable storage
 router.route("/visual-references/import-url").post(importVisualReferenceUrl);
+
+// POST /api/books/source-files/upload - Upload source documents for Gemini book creation
+router.route("/source-files/upload").post(uploadBookSourceFiles, uploadBookSources);
 
 // GET /api/books/:bookId - Get a specific book
 // PUT /api/books/:bookId - Update book content/metadata

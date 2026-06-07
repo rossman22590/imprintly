@@ -152,6 +152,7 @@ const AI_APPEND_HEADINGS = {
 };
 
 const DEFAULT_BOOK_BIBLE = {
+  source: "",
   characters: "",
   locations: "",
   worldRules: "",
@@ -164,6 +165,7 @@ const DEFAULT_BOOK_BIBLE = {
 };
 
 const BIBLE_JSON_KEYS = [
+  "source",
   "characters",
   "locations",
   "worldRules",
@@ -507,6 +509,8 @@ function EditBookPage() {
   const [isDownloadingContinuityReport, setIsDownloadingContinuityReport] =
     useState(false);
   const [runningBibleTool, setRunningBibleTool] = useState("");
+  const [isUploadingSourceFiles, setIsUploadingSourceFiles] = useState(false);
+  const [isGeneratingSourceBible, setIsGeneratingSourceBible] = useState(false);
   const [generationJob, setGenerationJob] = useState(null);
   const [newChapterOptions, setNewChapterOptions] = useState(null);
   const [regenerateOptions, setRegenerateOptions] = useState(null);
@@ -764,6 +768,153 @@ function EditBookPage() {
       toast.error(
         error.response?.data?.error || "Failed to upload visual reference."
       );
+    }
+  };
+
+  const SOURCE_FILE_LIMIT = 6;
+
+  const handleAddSourceFiles = async (files = []) => {
+    if (!files.length) return;
+
+    if (book.generation?.provider !== "gemini") {
+      toast.error("Source documents require the Gemini 3.5 Flash Book Engine.");
+      return;
+    }
+
+    const currentFiles = Array.isArray(book.sourceFiles) ? book.sourceFiles : [];
+    const remainingSlots = Math.max(0, SOURCE_FILE_LIMIT - currentFiles.length);
+    const filesToUpload = files.slice(0, remainingSlots);
+
+    if (!filesToUpload.length) {
+      toast.error(`You can attach up to ${SOURCE_FILE_LIMIT} source documents.`);
+      return;
+    }
+
+    const formData = new FormData();
+
+    filesToUpload.forEach((file) => {
+      formData.append("sourceFiles", file);
+    });
+
+    setIsUploadingSourceFiles(true);
+
+    try {
+      const {
+        data: { sourceFiles: uploadedSourceFiles = [] },
+      } = await axiosInstance.post(
+        API_ENDPOINTS.BOOKS.UPLOAD_SOURCE_FILES,
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      const nextBook = {
+        ...book,
+        sourceFiles: [...currentFiles, ...uploadedSourceFiles].slice(
+          0,
+          SOURCE_FILE_LIMIT
+        ),
+      };
+
+      skipNextAutosaveRef.current = true;
+      setBook(nextBook);
+
+      const saved = await handleSaveChanges(nextBook, false);
+
+      if (saved) {
+        toast.success(
+          `${uploadedSourceFiles.length} source ${
+            uploadedSourceFiles.length === 1 ? "document" : "documents"
+          } added.`
+        );
+      }
+    } catch (error) {
+      console.error("Error uploading source files:", error);
+      toast.error(error.response?.data?.error || "Failed to upload source files.");
+    } finally {
+      setIsUploadingSourceFiles(false);
+    }
+  };
+
+  const handleRemoveSourceFile = async (fileId) => {
+    const currentFiles = Array.isArray(book.sourceFiles) ? book.sourceFiles : [];
+    const nextFiles = currentFiles.filter(
+      (file) => file.id !== fileId && file.url !== fileId
+    );
+
+    if (nextFiles.length === currentFiles.length) return;
+
+    const nextBook = {
+      ...book,
+      sourceFiles: nextFiles,
+    };
+
+    skipNextAutosaveRef.current = true;
+    setBook(nextBook);
+
+    const saved = await handleSaveChanges(nextBook, false);
+
+    if (saved) {
+      toast.success("Source document removed.");
+    }
+  };
+
+  const handleGenerateBibleFromSource = async () => {
+    if (book.generation?.provider !== "gemini") {
+      toast.error("Source Bible generation requires the Gemini 3.5 Flash Book Engine.");
+      return;
+    }
+
+    if (!Array.isArray(book.sourceFiles) || book.sourceFiles.length === 0) {
+      toast.error("Add at least one source document first.");
+      return;
+    }
+
+    setIsGeneratingSourceBible(true);
+    const loadingToast = toast.loading("Generating Book Bible from source documents...");
+
+    try {
+      const {
+        data: { bible, billing },
+      } = await axiosInstance.post(
+        API_ENDPOINTS.AI.GENERATE_BOOK_BIBLE_FROM_SOURCES,
+        {
+          bookId,
+          sourceFiles: book.sourceFiles,
+          useSourceFiles: true,
+          provider: book.generation?.provider || "gemini",
+        }
+      );
+
+      toast.dismiss(loadingToast);
+
+      setPendingBibleReview({
+        action: "bible_from_source",
+        bible: {
+          ...DEFAULT_BOOK_BIBLE,
+          ...BIBLE_JSON_KEYS.reduce((nextBible, key) => {
+            nextBible[key] = String(bible?.[key] || "");
+            return nextBible;
+          }, {}),
+        },
+      });
+      setActiveTab("bible");
+
+      const chargedCredits = billing?.charge?.credits;
+
+      toast.success(
+        chargedCredits
+          ? `Book Bible ready to review. Charged ${chargedCredits} credits.`
+          : "Book Bible ready to review."
+      );
+    } catch (error) {
+      console.error("Error generating Book Bible from source documents:", error);
+      toast.dismiss(loadingToast);
+      toast.error(
+        error.response?.data?.error ||
+          "Failed to generate Book Bible from source documents."
+      );
+    } finally {
+      setIsGeneratingSourceBible(false);
     }
   };
 
@@ -1465,6 +1616,9 @@ function EditBookPage() {
     );
     const hasBible = hasBibleContent(book.bible);
     const hasVisualBible = hasVisualBibleContent(book.visualBible);
+    const hasSourceFiles = Array.isArray(book.sourceFiles) && book.sourceFiles.length > 0;
+    const canUseSourceFiles =
+      book.generation?.provider === "gemini" && hasSourceFiles;
 
     setRegenerateOptions({
       replaceExistingContent: hasExistingContent,
@@ -1472,6 +1626,11 @@ function EditBookPage() {
       generateImages: Boolean(book.generation?.includeImages),
       hasBible,
       hasVisualBible,
+      hasSourceFiles,
+      canUseSourceFiles,
+      useSourceFiles: canUseSourceFiles,
+      regenerateOutlineFromSource: canUseSourceFiles,
+      generateBibleFromSource: canUseSourceFiles,
     });
   };
 
@@ -1488,6 +1647,8 @@ function EditBookPage() {
     let pollKey = null;
     const useBibleForInput = Boolean(options.useBible);
     const generateImages = Boolean(options.generateImages);
+    const useSourceFiles =
+      Boolean(options.useSourceFiles) && book.generation?.provider === "gemini";
     const visualBibleForGeneration =
       generateImages || useBibleForInput ? book.visualBible : { enabled: false };
     const originalBookSnapshot = cloneBookSnapshot(book);
@@ -1525,6 +1686,13 @@ function EditBookPage() {
           useBibleForInput,
           useBibleForImages: generateImages,
           bible: useBibleForInput ? book.bible : undefined,
+          sourceFiles: useSourceFiles ? book.sourceFiles : undefined,
+          useSourceFiles,
+          regenerateFromSource: useSourceFiles,
+          regenerateOutlineFromSource:
+            useSourceFiles && Boolean(options.regenerateOutlineFromSource),
+          generateBibleFromSource:
+            useSourceFiles && Boolean(options.generateBibleFromSource),
           visualBible: visualBibleForGeneration,
         }
       );
@@ -2364,6 +2532,99 @@ function EditBookPage() {
                   )}
               </span>
             </label>
+
+            {regenerateOptions.hasSourceFiles && (
+              <label
+                className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
+                  regenerateOptions.canUseSourceFiles
+                    ? "cursor-pointer border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/40"
+                    : "border-amber-200 bg-amber-50"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(regenerateOptions.useSourceFiles)}
+                  disabled={!regenerateOptions.canUseSourceFiles}
+                  onChange={(event) =>
+                    setRegenerateOptions((prev) => ({
+                      ...prev,
+                      useSourceFiles: event.target.checked,
+                      regenerateOutlineFromSource:
+                        event.target.checked &&
+                        Boolean(prev.regenerateOutlineFromSource),
+                      generateBibleFromSource:
+                        event.target.checked && Boolean(prev.generateBibleFromSource),
+                    }))
+                  }
+                  className="mt-1 size-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500 disabled:opacity-50"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <FileText className="size-4 text-violet-600" />
+                    Regenerate from source files
+                  </span>
+                  <span className="mt-1 block text-sm text-slate-500">
+                    Uses {book.sourceFiles?.length || 0} saved source{" "}
+                    {(book.sourceFiles?.length || 0) === 1 ? "file" : "files"} as
+                    Gemini reference material.
+                  </span>
+                  {!regenerateOptions.canUseSourceFiles && (
+                    <span className="mt-2 block text-xs text-amber-700">
+                      Source regeneration requires the Gemini 3.5 Flash Book Engine.
+                    </span>
+                  )}
+                </span>
+              </label>
+            )}
+
+            {regenerateOptions.canUseSourceFiles &&
+              regenerateOptions.useSourceFiles && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(regenerateOptions.regenerateOutlineFromSource)}
+                      onChange={(event) =>
+                        setRegenerateOptions((prev) => ({
+                          ...prev,
+                          regenerateOutlineFromSource: event.target.checked,
+                        }))
+                      }
+                      className="mt-1 size-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-900">
+                        Rebuild outline
+                      </span>
+                      <span className="mt-1 block text-xs leading-relaxed text-slate-500">
+                        Replace the current chapter plan from the source files.
+                      </span>
+                    </span>
+                  </label>
+
+                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(regenerateOptions.generateBibleFromSource)}
+                      onChange={(event) =>
+                        setRegenerateOptions((prev) => ({
+                          ...prev,
+                          generateBibleFromSource: event.target.checked,
+                        }))
+                      }
+                      className="mt-1 size-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-900">
+                        Rebuild Bible
+                      </span>
+                      <span className="mt-1 block text-xs leading-relaxed text-slate-500">
+                        Refresh Source and canon notes from the saved documents.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
 
             <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-violet-200 hover:bg-violet-50/40">
               <input
@@ -3208,6 +3469,11 @@ function EditBookPage() {
               onRemoveVisualReference={handleRemoveVisualReference}
               onUploadVisualReference={handleUploadVisualReference}
               onImportVisualReferenceUrl={handleImportVisualReferenceUrl}
+              onAddSourceFiles={handleAddSourceFiles}
+              onRemoveSourceFile={handleRemoveSourceFile}
+              onGenerateBibleFromSource={handleGenerateBibleFromSource}
+              isUploadingSourceFiles={isUploadingSourceFiles}
+              isGeneratingSourceBible={isGeneratingSourceBible}
               onRunBibleTool={handleBibleTool}
               runningBibleTool={runningBibleTool}
               pendingBibleReview={pendingBibleReview}

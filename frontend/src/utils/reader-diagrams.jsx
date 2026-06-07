@@ -1,7 +1,10 @@
 import React from "react";
 import MDEditor from "@uiw/react-md-editor";
 import rehypeSanitize from "rehype-sanitize";
+import BookifyDiagram from "../components/diagrams/BookifyDiagram";
 import { resolveImageUrl } from "./api-endpoints";
+import { toBookifyDiagram, toBookifyPreDiagram } from "./bookify-diagram";
+import "../styles/bookify-diagram.css";
 
 const diagramCharacterReplacements = new Map([
   ["\u2500", "-"],
@@ -148,6 +151,105 @@ function hasNearbyAsciiDiagramLine(lines = [], startIndex = 0) {
     .some((line) => isAsciiDiagramLine(line));
 }
 
+function isMarkdownDiagramHeading(line = "") {
+  return /^\s{0,3}#{1,6}\s+\S/.test(String(line || ""));
+}
+
+function getMarkdownDiagramHeadingLabel(line = "") {
+  return String(line || "")
+    .replace(/^\s{0,3}#{1,6}\s+/, "")
+    .trim();
+}
+
+function isSimpleStepLine(line = "") {
+  const trimmed = String(line || "").trim();
+
+  if (!trimmed || trimmed.length > 100) return false;
+  if (/^(```|~~~)/.test(trimmed)) return false;
+  if (/^\s{0,3}#{1,6}\s+/.test(trimmed)) return false;
+  if (/^[-*+]\s+/.test(trimmed)) return false;
+  if (/^\d+\.\s+/.test(trimmed)) return false;
+  if (/^[+\-|<>^v\\/_.\s]+$/.test(trimmed)) return false;
+  if (/[.!?]["']?\s*$/.test(trimmed) && !/^Title:/i.test(trimmed)) return false;
+
+  return /[A-Za-z]/.test(trimmed);
+}
+
+function isSimpleStepFlowLabel(line = "") {
+  const trimmed = String(line || "").trim();
+
+  if (!trimmed || trimmed.length > 72) return false;
+
+  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+
+  if (wordCount > 10) return false;
+  if (/[.!?]["']?$/.test(trimmed)) return false;
+  if (!isSimpleStepLine(trimmed)) return false;
+  if (/^Title:/i.test(trimmed)) return false;
+
+  return true;
+}
+
+function collectSimpleStepFlowLines(lines = [], startIndex = 0) {
+  const collected = [];
+
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const currentLine = lines[index];
+
+    if (!currentLine.trim()) break;
+    if (isFenceLine(currentLine)) break;
+    if (isMarkdownDiagramHeading(currentLine)) break;
+    if (isAsciiDiagramLine(currentLine)) break;
+    if (!isSimpleStepLine(currentLine)) break;
+
+    collected.push(currentLine);
+  }
+
+  return collected;
+}
+
+function parseSimpleStepFlowDiagram(lines = []) {
+  const nonEmptyLines = getNormalizedDiagramLines(lines);
+
+  if (nonEmptyLines.length < 3 || nonEmptyLines.length > 12) return null;
+  if (!nonEmptyLines.every(isSimpleStepLine)) return null;
+
+  let title = "";
+  let startIndex = 0;
+  const titleMatch = nonEmptyLines[0].match(/^Title:\s*(.+)$/i);
+
+  if (titleMatch) {
+    title = titleMatch[1].trim();
+    startIndex = 1;
+  }
+
+  const steps = nonEmptyLines.slice(startIndex);
+
+  if (steps.length < 2) return null;
+
+  return {
+    type: "process",
+    title,
+    nodes: steps.map((label) => ({ label, detail: "" })),
+    connectors: [],
+  };
+}
+
+function extractDiagramLabelDirective(lines = []) {
+  if (!lines.length) return { label: "", lines };
+
+  const match = String(lines[0] || "")
+    .trim()
+    .match(/^@label\s+(.+)$/i);
+
+  if (!match) return { label: "", lines };
+
+  return {
+    label: match[1].trim(),
+    lines: lines.slice(1),
+  };
+}
+
 function isAsciiDiagramContinuationLine(line = "", block = []) {
   if (block.length === 0) return false;
 
@@ -190,12 +292,74 @@ function normalizeReaderMarkdown(markdown = "") {
     block = [];
   };
 
-  lines.forEach((line, index) => {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+
     if (isFenceLine(line)) {
       flushBlock();
       output.push(line);
       inFence = !inFence;
-      return;
+      continue;
+    }
+
+    if (!inFence && isMarkdownDiagramHeading(line)) {
+      const label = getMarkdownDiagramHeadingLabel(line);
+      const stepLines = collectSimpleStepFlowLines(lines, index + 1);
+      const normalizedSteps = getNormalizedDiagramLines(stepLines);
+
+      if (parseSimpleStepFlowDiagram(normalizedSteps)) {
+        flushBlock();
+
+        if (output.length > 0 && output[output.length - 1] !== "") {
+          output.push("");
+        }
+
+        output.push("```reader-diagram");
+
+        if (label) {
+          output.push(`@label ${label}`);
+        }
+
+        output.push(...normalizedSteps);
+        output.push("```");
+        index += stepLines.length;
+
+        while (index + 1 < lines.length && !lines[index + 1].trim()) {
+          index += 1;
+        }
+
+        continue;
+      }
+    }
+
+    if (!inFence && isSimpleStepFlowLabel(line)) {
+      const stepLines = collectSimpleStepFlowLines(lines, index + 1);
+      const normalizedSteps = getNormalizedDiagramLines(stepLines);
+
+      if (
+        normalizedSteps.length >= 2 &&
+        parseSimpleStepFlowDiagram(
+          getNormalizedDiagramLines([line.trim(), ...normalizedSteps])
+        )
+      ) {
+        flushBlock();
+
+        if (output.length > 0 && output[output.length - 1] !== "") {
+          output.push("");
+        }
+
+        output.push("```reader-diagram");
+        output.push(`@label ${line.trim()}`);
+        output.push(...normalizedSteps);
+        output.push("```");
+        index += stepLines.length;
+
+        while (index + 1 < lines.length && !lines[index + 1].trim()) {
+          index += 1;
+        }
+
+        continue;
+      }
     }
 
     if (
@@ -205,22 +369,22 @@ function normalizeReaderMarkdown(markdown = "") {
       hasNearbyAsciiDiagramLine(lines, index)
     ) {
       block.push(line);
-      return;
+      continue;
     }
 
     if (!inFence && isAsciiDiagramLine(line)) {
       block.push(line);
-      return;
+      continue;
     }
 
     if (!inFence && isAsciiDiagramContinuationLine(line, block)) {
       block.push(line);
-      return;
+      continue;
     }
 
     flushBlock();
     output.push(line);
-  });
+  }
 
   flushBlock();
 
@@ -1209,13 +1373,14 @@ function parseSystemComparisonDiagram(lines = []) {
   };
 }
 
-function parseReaderDiagram(lines = []) {
+export function parseReaderDiagram(lines = []) {
   return (
     parseSystemComparisonDiagram(lines) ||
     parseBoxedSystemComparisonDiagram(lines) ||
     parseNestedArchitectureDiagram(lines) ||
     parseBoxedListDiagram(lines) ||
     parseStackDiagram(lines) ||
+    parseSimpleStepFlowDiagram(lines) ||
     parseProcessDiagram(lines) ||
     parseTableDiagram(lines) ||
     parseGenericBracketDiagram(lines) ||
@@ -1657,14 +1822,33 @@ function getCodeClassName(children) {
   return "";
 }
 
+function renderBookifyReaderDiagram(code = "", language = "") {
+  const normalizedLanguage = String(language || "").trim().toLowerCase();
+  const shouldTryDiagram =
+    normalizedLanguage === "reader-diagram" ||
+    ["text", "txt", "plain", "diagram", "flow", ""].includes(normalizedLanguage);
+
+  if (!shouldTryDiagram) return null;
+
+  const { label, lines } = extractDiagramLabelDirective(code.split("\n"));
+  const diagramLines = lines.join("\n").replace(/\n$/, "").split("\n");
+  const readerDiagram = parseReaderDiagram(diagramLines);
+  const bookifyDiagram =
+    toBookifyDiagram(readerDiagram, label) ||
+    toBookifyPreDiagram(diagramLines, label);
+
+  if (!bookifyDiagram) return null;
+
+  return (
+    <div className="bookify-diagram-host not-prose my-8">
+      <BookifyDiagram diagram={bookifyDiagram} />
+    </div>
+  );
+}
+
 export function ReaderCodeBlock({ children, className = "", inline = false }) {
   const code = String(children || "").replace(/\n$/, "");
   const language = className.match(/language-(\S+)/)?.[1] || "";
-  const lines = code.split("\n");
-  const shouldTryDiagram =
-    language === "reader-diagram" ||
-    ["text", "txt", "plain", "diagram", "flow", ""].includes(language);
-  const diagram = shouldTryDiagram ? parseReaderDiagram(lines) : null;
 
   if (inline) {
     return (
@@ -1674,27 +1858,23 @@ export function ReaderCodeBlock({ children, className = "", inline = false }) {
     );
   }
 
-  if (diagram?.type === "table") return <TableDiagram diagram={diagram} />;
-  if (diagram?.type === "boxed-list") return <BoxedListDiagram diagram={diagram} />;
-  if (diagram?.type === "system-comparison") {
-    return <SystemComparisonDiagram diagram={diagram} />;
-  }
-  if (diagram?.type === "architecture") {
-    return <ArchitectureDiagram diagram={diagram} />;
-  }
-  if (diagram?.type === "generic-flow") {
-    return <GenericFlowDiagram diagram={diagram} />;
-  }
-  if (diagram?.type === "stack") return <StackDiagram diagram={diagram} />;
-  if (diagram?.type === "process") return <ProcessDiagram diagram={diagram} />;
-  if (diagram?.type === "flow") return <FlowDiagram diagram={diagram} />;
-  if (diagram?.type === "linear") return <LinearDiagram diagram={diagram} />;
-  if (diagram?.type === "badge") return <BadgeBlock diagram={diagram} />;
+  const bookifyDiagram = renderBookifyReaderDiagram(code, language);
 
-  return <ReaderDiagramBlock code={code} title={shouldTryDiagram ? "Diagram" : "Code"} />;
+  if (bookifyDiagram) return bookifyDiagram;
+
+  const shouldTryDiagram =
+    language === "reader-diagram" ||
+    ["text", "txt", "plain", "diagram", "flow", ""].includes(language);
+
+  return (
+    <ReaderDiagramBlock
+      code={code}
+      title={shouldTryDiagram ? "Diagram" : "Code"}
+    />
+  );
 }
 
-const readerMarkdownComponents = {
+export const readerMarkdownComponents = {
   a({ href = "", children }) {
     const isExternal = /^https?:\/\//i.test(href);
 

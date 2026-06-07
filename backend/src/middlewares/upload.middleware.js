@@ -38,6 +38,45 @@ function checkFileType(file, callback) {
   }
 }
 
+function checkSourceFileType(file, callback) {
+  const extension = path.extname(file.originalname).toLowerCase();
+  const allowedExtensions = new Set([
+    ".csv",
+    ".docx",
+    ".htm",
+    ".html",
+    ".json",
+    ".md",
+    ".markdown",
+    ".pdf",
+    ".rtf",
+    ".text",
+    ".txt",
+  ]);
+  const allowedMimeTypes = new Set([
+    "application/json",
+    "application/msword",
+    "application/pdf",
+    "application/rtf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/csv",
+    "text/html",
+    "text/markdown",
+    "text/plain",
+    "text/rtf",
+  ]);
+
+  if (allowedExtensions.has(extension) && allowedMimeTypes.has(file.mimetype)) {
+    callback(null, true);
+  } else {
+    callback(
+      new Error(
+        "Only PDF, DOCX, Markdown, text, HTML, CSV, RTF, and JSON source files are allowed."
+      )
+    );
+  }
+}
+
 const uploadBookCoverImage = multer({
   storage: storageEngine,
   limits: {
@@ -71,8 +110,20 @@ const uploadVisualReferenceImage = multer({
   },
 }).single("referenceImage");
 
+const uploadBookSourceFiles = multer({
+  storage: storageEngine,
+  limits: {
+    files: 8,
+    fileSize: 12 * 1024 * 1024,
+  },
+  fileFilter(req, file, callback) {
+    checkSourceFileType(file, callback);
+  },
+}).array("sourceFiles", 8);
+
 module.exports = {
   uploadAvatarImage,
   uploadBookCoverImage,
+  uploadBookSourceFiles,
   uploadVisualReferenceImage,
 };

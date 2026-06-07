@@ -1,4 +1,5 @@
 const BOOK_BIBLE_FIELDS = [
+  "source",
   "characters",
   "locations",
   "worldRules",
@@ -10,6 +11,7 @@ const BOOK_BIBLE_FIELDS = [
 ];
 
 const BOOK_BIBLE_LABELS = {
+  source: "Source",
   characters: "Characters",
   locations: "Locations",
   worldRules: "World Rules",
@@ -83,11 +85,32 @@ function serializeBookBible(bible = {}) {
   return sections.join("\n\n").slice(0, BOOK_BIBLE_PROMPT_LIMIT);
 }
 
+function parseBookBibleJsonContent(content = "") {
+  const raw = String(content || "")
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  const firstBrace = raw.indexOf("{");
+  const lastBrace = raw.lastIndexOf("}");
+  const trimmed =
+    firstBrace >= 0 && lastBrace > firstBrace
+      ? raw.slice(firstBrace, lastBrace + 1)
+      : raw;
+
+  try {
+    return normalizeBookBiblePayload(JSON.parse(trimmed));
+  } catch {
+    return normalizeBookBiblePayload({ notes: trimmed });
+  }
+}
+
 module.exports = {
   BOOK_BIBLE_FIELDS,
   BOOK_BIBLE_FIELD_LIMIT,
   BOOK_BIBLE_LABELS,
   normalizeBookBiblePayload,
+  parseBookBibleJsonContent,
   stringifyBibleValue,
   serializeBookBible,
 };

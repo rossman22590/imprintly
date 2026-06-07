@@ -2,6 +2,10 @@ import { useNavigate, useParams } from "react-router";
 import { useEffect, useState } from "react";
 import { API_ENDPOINTS } from "../utils/api-endpoints";
 import { normalizeBook } from "../utils/api-shapes";
+import {
+  isSourceDocumentOnlyBook,
+  normalizeBookForReader,
+} from "../utils/reader-book";
 import axiosInstance from "../lib/axios";
 import { Book } from "lucide-react";
 import { BookView } from "../components";
@@ -62,7 +66,15 @@ function BookPage() {
         const { data } = await axiosInstance.get(
           `${API_ENDPOINTS.BOOKS.GET_BY_ID}/${bookId}`
         );
-        setBook(normalizeBook(data?.book));
+        const nextBook = normalizeBook(data?.book);
+
+        if (isSourceDocumentOnlyBook(nextBook)) {
+          toast.error("This book is not available to read.", { duration: 5000 });
+          navigate("/dashboard");
+          return;
+        }
+
+        setBook(normalizeBookForReader(nextBook));
       } catch (error) {
         console.error("Error fetching book:", error);
         toast.error("Failed to fetch book details!", { duration: 5000 });
