@@ -1518,7 +1518,11 @@ function renderKdpTableOfContents(doc, entries, pageIndex = 0) {
   const rowHeight = Math.max(PDF_CONFIG.sizes.body * 1.35, 14);
 
   entries.forEach((entry, index) => {
-    ensureSpace(doc, rowHeight + 2);
+    doc.font(PDF_CONFIG.fonts.body).fontSize(PDF_CONFIG.sizes.body);
+    const titleHeight = doc.heightOfString(entry.title, { width: titleWidth });
+    const currentRowHeight = Math.max(rowHeight, titleHeight);
+
+    ensureSpace(doc, currentRowHeight + 2);
 
     const y = doc.y;
     doc
@@ -1536,7 +1540,6 @@ function renderKdpTableOfContents(doc, entries, pageIndex = 0) {
       .fillColor(PDF_CONFIG.colors.body)
       .text(entry.title, PDF_CONFIG.margins.left + labelWidth + 8, y, {
         width: titleWidth,
-        lineBreak: false,
       });
 
     doc
@@ -1554,7 +1557,7 @@ function renderKdpTableOfContents(doc, entries, pageIndex = 0) {
         }
       );
 
-    doc.y = y + rowHeight;
+    doc.y = y + currentRowHeight;
 
     if (start + index < entries.length - 1) {
       doc
