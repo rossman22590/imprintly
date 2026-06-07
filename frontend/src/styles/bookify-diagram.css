@@ -1,0 +1,89 @@
+/* Shared diagram styles — keep in sync with backend/src/utils/epub.generator.js */
+.bookify-diagram-host {
+  text-indent: 0;
+  width: 100%;
+}
+
+.bookify-diagram-host .bookify-diagram {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  margin: 1.4em 0;
+  padding: 1em;
+}
+
+.bookify-diagram-host .bookify-diagram figcaption {
+  color: #312e81;
+  font-weight: bold;
+  margin-bottom: 0.8em;
+  text-align: center;
+}
+
+.bookify-diagram-host .bookify-node {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  margin: 0.5em 0;
+  padding: 0.8em;
+  text-align: center;
+}
+
+.bookify-diagram-host .bookify-node strong {
+  font-weight: 700;
+}
+
+.bookify-diagram-host .bookify-node p {
+  color: #475569;
+  margin: 0.35em 0 0;
+}
+
+.bookify-diagram-host .bookify-arrow {
+  color: #7c3aed;
+  font-weight: bold;
+  text-align: center;
+}
+
+.bookify-diagram-host .bookify-list {
+  margin: 0;
+  padding-left: 1.4em;
+}
+
+.bookify-diagram-host .bookify-list li {
+  background: #fff;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  margin: 0.55em 0;
+  padding: 0.65em 0.8em;
+}
+
+.bookify-diagram-host .bookify-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.bookify-diagram-host .bookify-table th,
+.bookify-diagram-host .bookify-table td {
+  border: 1px solid #cbd5e1;
+  padding: 0.5em;
+  text-align: left;
+}
+
+.bookify-diagram-host .bookify-table th {
+  background: #111827;
+  color: #fff;
+}
+
+.bookify-diagram-host .bookify-diagram pre {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: #0f172a;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 0.86em;
+  line-height: 1.45;
+  margin: 0;
+  overflow-x: auto;
+  padding: 0;
+  text-align: left;
+  white-space: pre;
+}

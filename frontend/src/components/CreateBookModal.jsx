@@ -1,0 +1,1779 @@
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
+import { useAuthContext } from "../contexts/AuthContext";
+import Modal from "./ui/Modal";
+import Input from "./ui/Input";
+import {
+  ArrowLeft,
+  Bot,
+  BookOpen,
+  ChevronDown,
+  FileText,
+  Hash,
+  Image as ImageIcon,
+  Lightbulb,
+  Link,
+  Palette,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  UploadCloud,
+  Users,
+} from "lucide-react";
+import Select from "./ui/Select";
+import {
+  AI_PROVIDERS,
+  BOOK_GENRES,
+  GROQ_TEXT_MODELS,
+  WRITING_STYLES,
+} from "../utils/constants";
+import Button from "./ui/Button";
+import toast from "react-hot-toast";
+import axiosInstance from "../lib/axios";
+import { API_ENDPOINTS } from "../utils/api-endpoints";
+
+const CHAPTER_LENGTH_OPTIONS = [
+  { value: "small", label: "Small - focused" },
+  { value: "medium", label: "Medium - detailed" },
+  { value: "large", label: "Large - most pages" },
+];
+const SOURCE_FILE_ACCEPT =
+  ".pdf,.docx,.md,.markdown,.txt,.text,.html,.htm,.csv,.json,.rtf";
+const SOURCE_FILE_LIMIT = 6;
+const EMPTY_VISUAL_BIBLE = {
+  enabled: true,
+  matchBookStyle: true,
+  characters: [],
+  styleReferences: [],
+  worldReferences: [],
+  notes: "",
+};
+const VISUAL_REFERENCE_SECTIONS = [
+  {
+    key: "characters",
+    label: "Characters",
+    nameLabel: "Character name",
+    descriptionLabel: "Appearance / role",
+    addLabel: "Add character",
+  },
+  {
+    key: "styleReferences",
+    label: "Style",
+    nameLabel: "Style label",
+    descriptionLabel: "Mood, palette, art direction",
+    addLabel: "Add style ref",
+  },
+  {
+    key: "worldReferences",
+    label: "World / locations",
+    nameLabel: "Place or object",
+    descriptionLabel: "Setting look, recurring object, location notes",
+    addLabel: "Add world ref",
+  },
+];
+
+function createVisualReference() {
+  return {
+    id: `ref-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name: "",
+    label: "",
+    description: "",
+    imageUrl: "",
+    sourceUrl: "",
+  };
+}
+
+function hasVisualBibleContent(visualBible = EMPTY_VISUAL_BIBLE) {
+  return VISUAL_REFERENCE_SECTIONS.some(({ key }) =>
+    (visualBible[key] || []).some(
+      (reference) =>
+        reference.imageUrl ||
+        reference.name ||
+        reference.label ||
+        reference.description
+    )
+  );
+}
+
+function hasBibleContent(bible = {}) {
+  return Object.values(bible || {}).some((value) =>
+    String(value || "").trim()
+  );
+}
+
+function formatSourceFileSize(size = 0) {
+  const bytes = Math.max(0, Number(size || 0));
+
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isChildrensBookType(value = "") {
+  const normalized = String(value || "").toLowerCase();
+
+  return /children|kid|picture|storybook/.test(normalized);
+}
+
+function CreateBookModal({ isOpen, onClose, onBookCreate }) {
+  const [step, setStep] = useState(1);
+  const [bookTitle, setBookTitle] = useState("");
+  const [bookSubtitle, setBookSubtitle] = useState("");
+  const [chapterCount, setChapterCount] = useState(5);
+  const [chapterLength, setChapterLength] = useState("medium");
+  const [chapters, setChapters] = useState([]);
+  const [topic, setTopic] = useState("");
+  const [writingStyle, setWritingStyle] = useState(WRITING_STYLES[0]);
+  const [aiProvider, setAiProvider] = useState("groq");
+  const [groqTextModel, setGroqTextModel] = useState(GROQ_TEXT_MODELS[0].value);
+  const [bookGenre, setBookGenre] = useState(BOOK_GENRES[0]);
+  const [audience, setAudience] = useState("General readers");
+  const [useGoogleSearch, setUseGoogleSearch] = useState(false);
+  const [sourceFiles, setSourceFiles] = useState([]);
+  const [isUploadingSourceFiles, setIsUploadingSourceFiles] = useState(false);
+  const [generateBibleFromSource, setGenerateBibleFromSource] = useState(false);
+  const [generatedBookBible, setGeneratedBookBible] = useState(null);
+  const [generateCover, setGenerateCover] = useState(true);
+  const [includeImages, setIncludeImages] = useState(false);
+  const [isVisualBibleExpanded, setIsVisualBibleExpanded] = useState(false);
+  const [includeTextGraphics, setIncludeTextGraphics] = useState(false);
+  const [visualBible, setVisualBible] = useState(EMPTY_VISUAL_BIBLE);
+  const [uploadingReferenceId, setUploadingReferenceId] = useState("");
+  const [generationStats, setGenerationStats] = useState(null);
+  const [generationJob, setGenerationJob] = useState(null);
+  const [isGeneratingOutline, setIsGeneratingOutline] = useState(false);
+  const [isGeneratingFullBook, setIsGeneratingFullBook] = useState(false);
+  const [isFinalisingBook, setIsFinalisingBook] = useState(false);
+  const isChildrensBook = isChildrensBookType(bookGenre);
+
+  const chaptersContainerRef = useRef(null);
+  const modalScrollRef = useRef(null);
+
+  const { user } = useAuthContext();
+  const navigate = useNavigate();
+
+  const resetModal = () => {
+    setStep(1);
+    setBookTitle("");
+    setBookSubtitle("");
+    setChapterCount(5);
+    setChapterLength("medium");
+    setChapters([]);
+    setTopic("");
+    setWritingStyle(WRITING_STYLES[0]);
+    setAiProvider("groq");
+    setGroqTextModel(GROQ_TEXT_MODELS[0].value);
+    setBookGenre(BOOK_GENRES[0]);
+    setAudience("General readers");
+    setUseGoogleSearch(false);
+    setSourceFiles([]);
+    setIsUploadingSourceFiles(false);
+    setGenerateBibleFromSource(false);
+    setGeneratedBookBible(null);
+    setGenerateCover(true);
+    setIncludeImages(false);
+    setIsVisualBibleExpanded(false);
+    setIncludeTextGraphics(false);
+    setVisualBible(EMPTY_VISUAL_BIBLE);
+    setUploadingReferenceId("");
+    setGenerationStats(null);
+    setGenerationJob(null);
+    setIsGeneratingOutline(false);
+    setIsGeneratingFullBook(false);
+    setIsFinalisingBook(false);
+  };
+
+  const handleProviderChange = (event) => {
+    const nextProvider = event.target.value;
+
+    setAiProvider(nextProvider);
+
+    if (nextProvider !== "gemini") {
+      setUseGoogleSearch(false);
+      setSourceFiles([]);
+      setGenerateBibleFromSource(false);
+      setGeneratedBookBible(null);
+    }
+  };
+
+  const handleBookGenreChange = (event) => {
+    const nextGenre = event.target.value;
+
+    setBookGenre(nextGenre);
+
+    if (isChildrensBookType(nextGenre)) {
+      setIncludeImages(true);
+      setChapterCount((current) => {
+        const parsed = Number.parseInt(current, 10);
+
+        return !Number.isFinite(parsed) || parsed === 5 ? 20 : Math.min(parsed, 52);
+      });
+    } else {
+      setChapterCount((current) => {
+        const parsed = Number.parseInt(current, 10);
+
+        return Number.isFinite(parsed) ? Math.min(parsed, 26) : 5;
+      });
+    }
+  };
+
+  const handleGenerateOutline = async () => {
+    const parsedChapterCount =
+      typeof chapterCount === "string" ? parseInt(chapterCount) : chapterCount;
+    const validChapterCount = Number.isFinite(parsedChapterCount)
+      ? Math.max(1, Math.min(isChildrensBook ? 52 : 26, parsedChapterCount))
+      : 0;
+
+    if (!bookTitle || !validChapterCount || validChapterCount < 1) {
+      toast.error(
+        isChildrensBook
+          ? "Book title and a valid number of interior pages are required!"
+          : "Book title and a valid number of chapters are required!",
+        { duration: 5000 }
+      );
+
+      return;
+    }
+
+    setIsGeneratingOutline(true);
+
+    try {
+      const uploadedSourceFiles = await uploadSourceFilesIfNeeded();
+      const {
+        data: { outline, generation, title, subtitle, bible },
+      } = await axiosInstance.post(API_ENDPOINTS.AI.GENERATE_OUTLINE, {
+        topic: bookTitle,
+        description: topic || "",
+        style: writingStyle,
+        chapterCount: validChapterCount,
+        chapterLength,
+        provider: aiProvider,
+        model: aiProvider === "groq" ? groqTextModel : undefined,
+        genre: bookGenre,
+        audience,
+        useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
+        sourceFiles: uploadedSourceFiles,
+        useSourceFiles: aiProvider === "gemini" && uploadedSourceFiles.length > 0,
+        generateBibleFromSource:
+          aiProvider === "gemini" &&
+          generateBibleFromSource &&
+          uploadedSourceFiles.length > 0,
+      });
+
+      if (title) {
+        setBookTitle(title);
+      }
+
+      setBookSubtitle((subtitle || bookSubtitle || "").trim());
+      setChapters(outline);
+      setGenerationStats(generation || null);
+      setGeneratedBookBible(bible || null);
+      setStep(2);
+      toast.success(
+        isChildrensBook
+          ? "Page plan generated! Review and edit scenes if needed."
+          : "Outline generated! Review and edit chapters if needed."
+      );
+    } catch (error) {
+      console.error("Error generating book outline:", error);
+      toast.error(
+        error.response?.data?.message || "Failed to generate book outline."
+      );
+    } finally {
+      setIsGeneratingOutline(false);
+    }
+  };
+
+  const handleAddChapter = () => {
+    if (chapters.length >= 26) {
+      toast.error(
+        isChildrensBook
+          ? "AI book creation supports up to 26 illustrated scenes."
+          : "AI book creation supports up to 26 chapters."
+      );
+      return;
+    }
+
+    setChapters((prev) => [
+      ...prev,
+      {
+        title: `${isChildrensBook ? "Scene" : "Chapter"} ${prev.length + 1}`,
+        description: "",
+      },
+    ]);
+  };
+
+  const handleEditChapter = (index, field, value) => {
+    const updatedChapters = [...chapters];
+    updatedChapters[index][field] = value;
+    setChapters(updatedChapters);
+  };
+
+  const handleDeleteChapter = (index) => {
+    if (chapters.length <= 1) return;
+
+    setChapters((prev) => [...prev].filter((_, i) => i !== index));
+  };
+
+  const updateVisualReference = (sectionKey, index, field, value) => {
+    setVisualBible((current) => {
+      const nextItems = [...(current[sectionKey] || [])];
+      nextItems[index] = {
+        ...nextItems[index],
+        [field]: value,
+      };
+
+      if (field === "name") {
+        nextItems[index].label = value;
+      }
+
+      return {
+        ...current,
+        [sectionKey]: nextItems,
+      };
+    });
+  };
+
+  const addVisualReference = (sectionKey) => {
+    setVisualBible((current) => ({
+      ...current,
+      [sectionKey]: [...(current[sectionKey] || []), createVisualReference()],
+    }));
+    setIsVisualBibleExpanded(true);
+  };
+
+  const removeVisualReference = (sectionKey, index) => {
+    setVisualBible((current) => ({
+      ...current,
+      [sectionKey]: (current[sectionKey] || []).filter((_, itemIndex) => itemIndex !== index),
+    }));
+  };
+
+  const handleSourceFileSelection = (event) => {
+    const files = Array.from(event.target.files || []);
+
+    if (aiProvider !== "gemini") {
+      toast.error("Source files require the Gemini 3.5 Flash Book Engine.");
+      event.target.value = "";
+      return;
+    }
+
+    setSourceFiles((current) => {
+      const remainingSlots = Math.max(0, SOURCE_FILE_LIMIT - current.length);
+      const nextFiles = files.slice(0, remainingSlots).map((file) => ({
+        id: `source-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        file,
+        name: file.name,
+        size: file.size,
+        mimeType: file.type || "",
+        uploaded: false,
+      }));
+
+      if (files.length > remainingSlots) {
+        toast.error(`You can attach up to ${SOURCE_FILE_LIMIT} source files.`);
+      }
+
+      return [...current, ...nextFiles];
+    });
+
+    event.target.value = "";
+  };
+
+  const removeSourceFile = (id) => {
+    setSourceFiles((current) => {
+      const nextFiles = current.filter((file) => file.id !== id);
+
+      if (nextFiles.length === 0) {
+        setGenerateBibleFromSource(false);
+        setGeneratedBookBible(null);
+      }
+
+      return nextFiles;
+    });
+  };
+
+  const uploadSourceFilesIfNeeded = async () => {
+    if (aiProvider !== "gemini" || sourceFiles.length === 0) return [];
+
+    const uploadedFiles = sourceFiles
+      .filter((sourceFile) => sourceFile.uploaded)
+      .map(({ uploaded, file, ...sourceFile }) => sourceFile);
+    const pendingFiles = sourceFiles.filter(
+      (sourceFile) => !sourceFile.uploaded && sourceFile.file
+    );
+
+    if (pendingFiles.length === 0) return uploadedFiles;
+
+    const formData = new FormData();
+    pendingFiles.forEach((sourceFile) => {
+      formData.append("sourceFiles", sourceFile.file);
+    });
+
+    setIsUploadingSourceFiles(true);
+
+    try {
+      const {
+        data: { sourceFiles: uploadedSourceFiles },
+      } = await axiosInstance.post(API_ENDPOINTS.BOOKS.UPLOAD_SOURCE_FILES, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const nextUploadedFiles = [
+        ...uploadedFiles,
+        ...(uploadedSourceFiles || []),
+      ];
+
+      setSourceFiles(
+        nextUploadedFiles.map((sourceFile) => ({
+          ...sourceFile,
+          uploaded: true,
+        }))
+      );
+      return nextUploadedFiles;
+    } catch (error) {
+      console.error("Error uploading source files:", error);
+      toast.error(error.response?.data?.error || "Source file upload failed.");
+      throw error;
+    } finally {
+      setIsUploadingSourceFiles(false);
+    }
+  };
+
+  const uploadVisualReferenceFile = async (sectionKey, index, file) => {
+    if (!file) return;
+
+    const reference = visualBible[sectionKey]?.[index];
+    const uploadKey = `${sectionKey}-${reference?.id || index}`;
+    const formData = new FormData();
+
+    formData.append("referenceImage", file);
+    setUploadingReferenceId(uploadKey);
+
+    try {
+      const {
+        data: { imageUrl },
+      } = await axiosInstance.post(
+        API_ENDPOINTS.BOOKS.UPLOAD_VISUAL_REFERENCE,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+
+      updateVisualReference(sectionKey, index, "imageUrl", imageUrl);
+      toast.success("Reference uploaded.");
+    } catch (error) {
+      console.error("Error uploading reference:", error);
+      toast.error(error.response?.data?.error || "Reference upload failed.");
+    } finally {
+      setUploadingReferenceId("");
+    }
+  };
+
+  const importVisualReferenceUrl = async (sectionKey, index) => {
+    const reference = visualBible[sectionKey]?.[index];
+    const sourceUrl = reference?.sourceUrl?.trim();
+
+    if (!sourceUrl) {
+      toast.error("Paste an image URL first.");
+      return;
+    }
+
+    const uploadKey = `${sectionKey}-${reference?.id || index}`;
+    setUploadingReferenceId(uploadKey);
+
+    try {
+      const {
+        data: { imageUrl },
+      } = await axiosInstance.post(API_ENDPOINTS.BOOKS.IMPORT_VISUAL_REFERENCE_URL, {
+        url: sourceUrl,
+      });
+
+      updateVisualReference(sectionKey, index, "imageUrl", imageUrl);
+      toast.success("Reference stored.");
+    } catch (error) {
+      console.error("Error importing reference URL:", error);
+      toast.error(error.response?.data?.error || "Could not store image URL.");
+    } finally {
+      setUploadingReferenceId("");
+    }
+  };
+
+  const getVisualBiblePayload = () => ({
+    ...visualBible,
+    enabled: includeImages && visualBible.enabled !== false,
+    updatedAt: new Date().toISOString(),
+  });
+
+  const handleFinaliseBook = async () => {
+    if (chapters.length === 0) {
+      toast.error(
+        isChildrensBook
+          ? "At least one scene is required!"
+          : "At least one chapter is required!",
+        { duration: 5000 }
+      );
+
+      return;
+    }
+
+    setIsFinalisingBook(true);
+
+    try {
+      const uploadedSourceFiles = await uploadSourceFilesIfNeeded();
+      const { data } = await axiosInstance.post(API_ENDPOINTS.BOOKS.CREATE, {
+        title: bookTitle,
+        subtitle: bookSubtitle,
+        author: user?.name || "Unknown Author",
+        genre: bookGenre,
+        audience,
+        chapters,
+        generation: {
+          provider: aiProvider,
+          status: "outline",
+          style: writingStyle,
+          useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
+          includeTextGraphics,
+          chapterLength,
+          sourcePrompt: bookTitle,
+          description: topic || "",
+          sourceFiles: uploadedSourceFiles,
+          useSourceFiles:
+            aiProvider === "gemini" && uploadedSourceFiles.length > 0,
+          ...(aiProvider === "groq"
+            ? { structureModel: groqTextModel, sectionModel: groqTextModel }
+            : {}),
+          ...(generationStats || {}),
+        },
+        sourceFiles: uploadedSourceFiles,
+        bible: generatedBookBible || undefined,
+        visualBible: getVisualBiblePayload(),
+        generateCover,
+      });
+      const { book } = data;
+
+      toast.success(
+        book.coverImage
+          ? "Book draft and cover created successfully!"
+          : "Book draft created successfully!"
+      );
+      if (data.coverError) {
+        toast.error(`Cover generation failed: ${data.coverError}`);
+      }
+      onBookCreate(book._id);
+      onClose();
+      resetModal();
+    } catch (error) {
+      console.error("Error while creating book:", error);
+      toast.error(error.response?.data?.message || "Failed to create book!");
+    } finally {
+      setIsFinalisingBook(false);
+    }
+  };
+
+  const handleGenerateFullBook = async () => {
+    if (chapters.length === 0) {
+      toast.error(
+        isChildrensBook
+          ? "Generate or add at least one scene first."
+          : "Generate or add at least one chapter first.",
+        { duration: 5000 }
+      );
+
+      return;
+    }
+
+    setIsGeneratingFullBook(true);
+
+    try {
+      const uploadedSourceFiles = await uploadSourceFilesIfNeeded();
+      const shouldGenerateSourceBible =
+        aiProvider === "gemini" &&
+        generateBibleFromSource &&
+        uploadedSourceFiles.length > 0 &&
+        !hasBibleContent(generatedBookBible);
+      const {
+        data: { job },
+      } = await axiosInstance.post(
+        API_ENDPOINTS.AI.FULL_BOOK_JOBS,
+        {
+          title: bookTitle,
+          subtitle: bookSubtitle,
+          author: user?.name || "Unknown Author",
+          topic: bookTitle,
+          description: topic || "",
+          style: writingStyle,
+          chapterCount: chapters.length,
+          chapterLength,
+          genre: bookGenre,
+          audience,
+          outline: chapters,
+          provider: aiProvider,
+          model: aiProvider === "groq" ? groqTextModel : undefined,
+          sourceFiles: uploadedSourceFiles,
+          useSourceFiles:
+            aiProvider === "gemini" && uploadedSourceFiles.length > 0,
+          generateBibleFromSource: shouldGenerateSourceBible,
+          bible: generatedBookBible || undefined,
+          generateCover,
+          includeImages,
+          includeTextGraphics,
+          visualBible: getVisualBiblePayload(),
+          useGoogleSearch: aiProvider === "gemini" && useGoogleSearch,
+        }
+      );
+
+      setGenerationJob(job);
+      toast.success("Generation job queued.");
+      onClose();
+      resetModal();
+      navigate("/jobs");
+    } catch (error) {
+      console.error("Error generating full book:", error);
+      toast.error(
+        error.response?.data?.error || "Failed to generate the full book."
+      );
+    } finally {
+      setIsGeneratingFullBook(false);
+    }
+  };
+
+  const handleCancelGeneration = async () => {
+    if (!generationJob?.id) return;
+
+    try {
+      const {
+        data: { job },
+      } = await axiosInstance.delete(
+        `${API_ENDPOINTS.AI.FULL_BOOK_JOBS}/${generationJob.id}`
+      );
+
+      setGenerationJob(job);
+    } catch (error) {
+      console.error("Error cancelling generation:", error);
+      toast.error("Failed to cancel generation.");
+    }
+  };
+
+  const outlineStats = generationStats?.stats;
+  const isGeminiSearchGrounded = aiProvider === "gemini" && useGoogleSearch;
+
+  useEffect(() => {
+    if (step === 2 && chaptersContainerRef.current) {
+      const scrollableDiv = chaptersContainerRef.current;
+      scrollableDiv.scrollTo({
+        top: scrollableDiv.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [step, chapters.length]);
+
+  useEffect(() => {
+    if (!includeImages && modalScrollRef.current) {
+      modalScrollRef.current.scrollTop = 0;
+    }
+  }, [includeImages]);
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={() => {
+        onClose();
+        resetModal();
+      }}
+      sizeClassName="max-w-[min(64rem,calc(100vw-1rem))]"
+      title="Create AI Book"
+      contentRef={modalScrollRef}
+      footer={
+        step === 1 ? (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-slate-500 text-xs">
+              Step 1 of 2 &middot; Review the outline before generating the book
+            </p>
+            <Button
+              type="button"
+              onClick={handleGenerateOutline}
+              isLoading={isGeneratingOutline}
+              icon={Sparkles}
+            >
+              Generate Outline with AI
+            </Button>
+          </div>
+        ) : null
+      }
+    >
+      {step === 1 && (
+        <div className="space-y-3 md:space-y-3.5">
+          {/* Progress indicator */}
+          <ol className="flex items-center gap-2 mb-3 md:mb-4">
+            <li
+              aria-label="Step 1"
+              className="size-7 md:size-8 bg-violet-100 text-violet-600 text-xs md:text-sm font-semibold rounded-full flex justify-center items-center"
+            >
+              1
+            </li>
+
+            <div className="flex-1 h-0.5 bg-gray-200" />
+
+            <li
+              aria-label="Step 2"
+              className="size-7 md:size-8 bg-gray-100 text-gray-400 text-xs md:text-sm font-semibold rounded-full flex justify-center items-center"
+            >
+              2
+            </li>
+          </ol>
+
+          {/* Form inputs */}
+          <Input
+            type="text"
+            value={bookTitle}
+            onChange={(event) => setBookTitle(event.target.value)}
+            icon={BookOpen}
+            label="Book Title"
+            required
+            placeholder="What should we call your book?"
+          />
+
+          <Input
+            type="text"
+            value={bookSubtitle}
+            onChange={(event) => setBookSubtitle(event.target.value)}
+            icon={FileText}
+            label="Subtitle"
+            placeholder="Optional. AI can fill this after the outline."
+            helperText="Leave blank if you want Bookify to suggest one from the outline."
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              type="number"
+              value={chapterCount}
+              onChange={(event) => {
+                const value = event.target.value;
+
+                if (value === "") {
+                  setChapterCount("");
+
+                  return;
+                }
+
+                const parsed = parseInt(value);
+
+                if (!isNaN(parsed)) {
+                  setChapterCount(
+                    Math.max(1, Math.min(isChildrensBook ? 52 : 26, parsed))
+                  );
+                }
+              }}
+              onBlur={(event) => {
+                const value = event.target.value;
+
+                if (value === "" || isNaN(parseInt(value))) {
+                  setChapterCount(isChildrensBook ? 20 : 5);
+                }
+              }}
+              icon={Hash}
+              label={isChildrensBook ? "Interior Pages" : "Number of Chapters"}
+              min="1"
+              max={isChildrensBook ? "52" : "26"}
+              step="1"
+              placeholder={isChildrensBook ? "20" : "5"}
+            />
+
+            <Select
+              name="chapterLength"
+              value={chapterLength}
+              onChange={(event) => setChapterLength(event.target.value)}
+              options={CHAPTER_LENGTH_OPTIONS}
+              icon={BookOpen}
+              label={isChildrensBook ? "Story Text Amount" : "Chapter Length"}
+            />
+          </div>
+
+          {isChildrensBook && (
+            <p className="-mt-2 text-xs text-gray-500">
+              20 interior pages creates 10 image pages and 10 text pages.
+            </p>
+          )}
+
+          <div className="w-full grid grid-cols-1 gap-y-2">
+            <label
+              htmlFor="book-topic"
+              className="text-gray-700 text-sm font-medium"
+            >
+              Topic (Optional)
+            </label>
+
+            <div className="relative">
+              <div className="pl-3 pt-3 pointer-events-none absolute inset-y-0 left-0">
+                <Lightbulb className="size-4 text-gray-400" />
+              </div>
+
+              <textarea
+                id="book-topic"
+                value={topic}
+                onChange={(event) => setTopic(event.target.value)}
+                rows={3}
+                className="w-full min-h-20 resize-y bg-white text-gray-900 text-sm placeholder-gray-400 pl-10 pr-3 py-3 border border-gray-200 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder="Describe the book idea, angle, audience needs, must-cover points, or anything the AI should know."
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Select
+              value={writingStyle}
+              onChange={(event) => setWritingStyle(event.target.value)}
+              options={WRITING_STYLES}
+              icon={Palette}
+              label="Writing Style"
+            />
+
+            <Input
+              type="text"
+              value={audience}
+              onChange={(event) => setAudience(event.target.value)}
+              icon={Users}
+              label="Audience"
+              placeholder="General readers, founders, beginners..."
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Select
+              value={aiProvider}
+              onChange={handleProviderChange}
+              options={AI_PROVIDERS}
+              icon={Bot}
+              label="AI Provider"
+            />
+
+            <Select
+              value={bookGenre}
+              onChange={handleBookGenreChange}
+              options={BOOK_GENRES}
+              icon={FileText}
+              label="Book Type"
+            />
+          </div>
+
+          {aiProvider === "groq" && (
+            <Select
+              value={groqTextModel}
+              onChange={(event) => setGroqTextModel(event.target.value)}
+              options={GROQ_TEXT_MODELS}
+              icon={Bot}
+              label="Groq Text Model"
+            />
+          )}
+
+          {aiProvider === "gemini" && (
+            <div className="space-y-3">
+              <label className="flex items-center justify-between gap-4 rounded-xl border border-blue-200 bg-blue-50/70 px-4 py-3 cursor-pointer">
+                <span className="flex items-start gap-3 min-w-0">
+                  <span className="size-9 rounded-lg bg-white text-blue-700 flex items-center justify-center shrink-0 shadow-sm">
+                    <Search className="size-4" />
+                  </span>
+
+                  <span className="min-w-0">
+                    <span className="block text-blue-950 text-sm font-semibold">
+                      Ground Gemini with Google Search
+                    </span>
+                    <span className="block text-blue-700 text-xs mt-1">
+                      {isChildrensBook
+                        ? "Use live web search for Gemini children's page planning and writing."
+                        : "Use live web search for Gemini outline and chapter writing."}
+                    </span>
+                  </span>
+                </span>
+
+                <input
+                  type="checkbox"
+                  checked={useGoogleSearch}
+                  onChange={(event) => setUseGoogleSearch(event.target.checked)}
+                  className="sr-only"
+                />
+
+                <span
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                    useGoogleSearch ? "bg-blue-600" : "bg-slate-200"
+                  }`}
+                >
+                  <span
+                    className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+                      useGoogleSearch ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </span>
+              </label>
+
+              <section className="rounded-xl border border-blue-200 bg-white px-4 py-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="size-9 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+                      <UploadCloud className="size-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-950">
+                        Source documents
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                        Attach PDF, DOCX, Markdown, text, HTML, CSV, RTF, or JSON
+                        files for Gemini to use as source material.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100">
+                    <UploadCloud className="size-4" />
+                    Add files
+                    <input
+                      type="file"
+                      multiple
+                      accept={SOURCE_FILE_ACCEPT}
+                      onChange={handleSourceFileSelection}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {sourceFiles.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {sourceFiles.map((sourceFile) => (
+                      <div
+                        key={sourceFile.id || sourceFile.url || sourceFile.name}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold text-slate-900">
+                            {sourceFile.name}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {sourceFile.mimeType || "document"} ·{" "}
+                            {formatSourceFileSize(sourceFile.size)}
+                            {sourceFile.uploaded ? " · uploaded" : ""}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeSourceFile(sourceFile.id)}
+                          className="shrink-0 rounded-md p-1.5 text-red-500 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                          aria-label={`Remove ${sourceFile.name}`}
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <label className="mt-3 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-slate-900">
+                      Generate Book Bible from documents
+                    </span>
+                    <span className="mt-1 block text-xs leading-relaxed text-slate-500">
+                      Builds Source, canon, style, and continuity notes from the
+                      uploaded files plus the form inputs.
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={generateBibleFromSource}
+                    disabled={sourceFiles.length === 0}
+                    onChange={(event) =>
+                      setGenerateBibleFromSource(event.target.checked)
+                    }
+                    className="mt-1 size-4 shrink-0 accent-blue-600 disabled:opacity-50"
+                  />
+                </label>
+
+                {isUploadingSourceFiles && (
+                  <p className="mt-2 text-xs font-medium text-blue-700">
+                    Uploading source files...
+                  </p>
+                )}
+              </section>
+            </div>
+          )}
+
+          <label className="flex items-center justify-between gap-4 rounded-xl border border-violet-200 bg-violet-50/60 px-4 py-3 cursor-pointer">
+            <span className="flex items-start gap-3 min-w-0">
+              <span className="size-9 rounded-lg bg-white text-violet-700 flex items-center justify-center shrink-0 shadow-sm">
+                <Sparkles className="size-4" />
+              </span>
+
+              <span className="min-w-0">
+                <span className="block text-violet-950 text-sm font-semibold">
+                  Generate cover on creation
+                </span>
+                <span className="block text-violet-700 text-xs mt-1">
+                  Creates a durable ebook cover before opening the new book.
+                </span>
+              </span>
+            </span>
+
+            <input
+              type="checkbox"
+              checked={generateCover}
+              onChange={(event) => setGenerateCover(event.target.checked)}
+              className="sr-only"
+            />
+
+            <span
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                generateCover ? "bg-violet-600" : "bg-slate-200"
+              }`}
+            >
+              <span
+                className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+                  generateCover ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+          </label>
+
+          <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 cursor-pointer">
+            <span className="flex items-start gap-3 min-w-0">
+              <span className="size-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                <ImageIcon className="size-4" />
+              </span>
+
+              <span className="min-w-0">
+                <span className="block text-slate-900 text-sm font-semibold">
+                  {isChildrensBook ? "Add page images" : "Add chapter images"}
+                </span>
+                <span className="block text-slate-500 text-xs mt-1">
+                  {isChildrensBook
+                    ? "When generating the full book, Bookify creates one image page for each two-page scene using Visual Bible references."
+                    : "When generating the full book, Bookify creates one inline image per chapter using Visual Bible references."}
+                </span>
+              </span>
+            </span>
+
+            <input
+              type="checkbox"
+              checked={includeImages}
+              onChange={(event) => setIncludeImages(event.target.checked)}
+              className="sr-only"
+            />
+
+            <span
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                includeImages ? "bg-violet-600" : "bg-slate-200"
+              }`}
+            >
+              <span
+                className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+                  includeImages ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+          </label>
+
+          {includeImages && (
+            <section className="rounded-xl border border-slate-200 bg-slate-950 text-white overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.3),transparent_40%),linear-gradient(135deg,rgba(15,23,42,1),rgba(30,41,59,1))] flex items-center justify-between gap-3">
+                <p className="text-white text-sm font-semibold shrink-0">
+                  Visual Bible
+                </p>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <label className="hidden md:flex items-center gap-2 text-xs text-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={visualBible.matchBookStyle !== false}
+                      onChange={(event) =>
+                        setVisualBible((current) => ({
+                          ...current,
+                          matchBookStyle: event.target.checked,
+                        }))
+                      }
+                      className="size-4 accent-violet-500"
+                    />
+                    Match book style
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsVisualBibleExpanded((value) => !value)}
+                    aria-expanded={isVisualBibleExpanded}
+                    aria-label={
+                      isVisualBibleExpanded
+                        ? "Hide Visual Bible references"
+                        : "Show Visual Bible references"
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
+                  >
+                    {isVisualBibleExpanded ? "Hide" : "Add references"}
+                    <ChevronDown
+                      className={`size-3.5 transition-transform ${
+                        isVisualBibleExpanded ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {isVisualBibleExpanded && (
+              <div className="p-3 md:p-4 space-y-3 bg-slate-50 text-slate-900">
+                  {VISUAL_REFERENCE_SECTIONS.map((section) => (
+                    <div key={section.key} className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <h4 className="text-sm font-semibold text-slate-900">
+                          {section.label}
+                        </h4>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          icon={Plus}
+                          onClick={() => addVisualReference(section.key)}
+                        >
+                          {section.addLabel}
+                        </Button>
+                      </div>
+
+                    {(visualBible[section.key] || []).length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2.5 text-xs text-slate-500">
+                        No {section.label.toLowerCase()} references yet.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                        {(visualBible[section.key] || []).map(
+                          (reference, index) => {
+                            const uploadKey = `${section.key}-${reference.id || index}`;
+                            const isUploadingReference =
+                              uploadingReferenceId === uploadKey;
+
+                            return (
+                              <div
+                                key={reference.id || index}
+                                className="group relative rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col"
+                              >
+                                <div className="relative aspect-square bg-slate-100 overflow-hidden">
+                                  {reference.imageUrl ? (
+                                    <img
+                                      src={reference.imageUrl}
+                                      alt={reference.name || reference.label || "Reference"}
+                                      className="size-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="size-full flex items-center justify-center">
+                                      <ImageIcon className="size-8 text-slate-400" />
+                                    </div>
+                                  )}
+
+                                  <label
+                                    className="absolute inset-0 flex items-center justify-center gap-1.5 bg-slate-950/0 text-white text-xs font-semibold opacity-0 transition-all duration-200 group-hover:bg-slate-950/55 group-hover:opacity-100 cursor-pointer"
+                                    aria-label="Upload reference image"
+                                  >
+                                    <UploadCloud className="size-4" />
+                                    Upload
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={(event) => {
+                                        uploadVisualReferenceFile(
+                                          section.key,
+                                          index,
+                                          event.target.files?.[0]
+                                        );
+                                        event.target.value = "";
+                                      }}
+                                    />
+                                  </label>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      removeVisualReference(section.key, index)
+                                    }
+                                    className="absolute top-1.5 right-1.5 size-7 rounded-full bg-white/90 backdrop-blur text-red-600 shadow-sm flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 hover:bg-red-50 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                    aria-label="Remove reference"
+                                    title="Remove reference"
+                                  >
+                                    <Trash2 className="size-3.5" />
+                                  </button>
+
+                                  {isUploadingReference && (
+                                    <div className="absolute inset-0 bg-slate-950/40 flex items-center justify-center text-white text-xs font-semibold">
+                                      Uploading...
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="p-2 space-y-1.5">
+                                  <input
+                                    type="text"
+                                    value={reference.name || reference.label || ""}
+                                    onChange={(event) =>
+                                      updateVisualReference(
+                                        section.key,
+                                        index,
+                                        "name",
+                                        event.target.value
+                                      )
+                                    }
+                                    placeholder={section.nameLabel}
+                                    className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                  />
+
+                                  <textarea
+                                    value={reference.description || ""}
+                                    onChange={(event) =>
+                                      updateVisualReference(
+                                        section.key,
+                                        index,
+                                        "description",
+                                        event.target.value
+                                      )
+                                    }
+                                    rows={2}
+                                    maxLength={600}
+                                    placeholder={section.descriptionLabel}
+                                    className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                                  />
+
+                                  <div className="flex items-center gap-1">
+                                    <input
+                                      type="url"
+                                      value={reference.sourceUrl || ""}
+                                      onChange={(event) =>
+                                        updateVisualReference(
+                                          section.key,
+                                          index,
+                                          "sourceUrl",
+                                          event.target.value
+                                        )
+                                      }
+                                      placeholder="Image URL"
+                                      className="w-full min-w-0 rounded-md border border-slate-200 px-2 py-1.5 text-[11px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                                    />
+
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        importVisualReferenceUrl(
+                                          section.key,
+                                          index
+                                        )
+                                      }
+                                      disabled={isUploadingReference}
+                                      aria-label="Store image link"
+                                      title="Store image link"
+                                      className="shrink-0 size-7 rounded-md border border-slate-200 bg-slate-50 text-slate-700 flex items-center justify-center hover:bg-slate-100 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                                    >
+                                      <Link className="size-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                        )}
+                      </div>
+                    )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 cursor-pointer">
+            <span className="flex items-start gap-3 min-w-0">
+              <span className="size-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                <Palette className="size-4" />
+              </span>
+
+              <span className="min-w-0">
+                <span className="block text-slate-900 text-sm font-semibold">
+                  Include text graphics
+                </span>
+                <span className="block text-slate-500 text-xs mt-1">
+                  Allows charts, diagrams, and visual explainers in the written
+                  {isChildrensBook
+                    ? " pages. Off means the AI is prompted for no graphs."
+                    : " chapters. Off means the AI is prompted for no graphs."}
+                </span>
+              </span>
+            </span>
+
+            <input
+              type="checkbox"
+              checked={includeTextGraphics}
+              onChange={(event) => setIncludeTextGraphics(event.target.checked)}
+              className="sr-only"
+            />
+
+            <span
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                includeTextGraphics ? "bg-violet-600" : "bg-slate-200"
+              }`}
+            >
+              <span
+                className={`inline-block size-5 rounded-full bg-white shadow transition-transform ${
+                  includeTextGraphics ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+          </label>
+
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-4 md:space-y-5">
+          {/* Progress indicator */}
+          <ol className="mb-4 md:mb-6 flex items-center gap-2">
+            <li
+              aria-label="Step 1 completed"
+              className="size-7 md:size-8 bg-violet-100 text-violet-600 text-xs md:text-sm font-semibold rounded-full flex justify-center items-center"
+            >
+              &#10003;
+            </li>
+
+            <div className="flex-1 h-0.5 bg-violet-600" />
+
+            <li
+              aria-label="Step 2"
+              className="size-7 md:size-8 bg-violet-100 text-violet-600 text-xs md:text-sm font-semibold rounded-full flex justify-center items-center"
+            >
+              2
+            </li>
+          </ol>
+
+          {/* Chapter review header */}
+          <section className="mb-3 md:mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h3 className="text-gray-900 text-base md:text-lg font-semibold">
+                {isChildrensBook ? "Review Pages" : "Review Chapters"}
+              </h3>
+              <p className="text-gray-500 text-xs md:text-sm mt-1">
+                {isChildrensBook
+                  ? "Confirm the title, subtitle, and image/text page plan before creating the book."
+                  : "Confirm the title, subtitle, and chapter plan before creating the book."}
+              </p>
+            </div>
+
+            <span className="text-gray-500 text-xs md:text-sm">
+              {chapters.length}{" "}
+              {isChildrensBook
+                ? chapters.length === 1
+                  ? "scene"
+                  : "scenes"
+                : chapters.length === 1
+                  ? "chapter"
+                  : "chapters"}
+            </span>
+          </section>
+
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <Input
+              type="text"
+              value={bookTitle}
+              onChange={(event) => setBookTitle(event.target.value)}
+              icon={BookOpen}
+              label="Book Title"
+              required
+            />
+            <Input
+              type="text"
+              value={bookSubtitle}
+              onChange={(event) => setBookSubtitle(event.target.value)}
+              icon={FileText}
+              label="Subtitle"
+              placeholder="Optional subtitle"
+            />
+          </section>
+
+          {isGeminiSearchGrounded && (
+            <section className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-3">
+              <div className="size-9 rounded-lg bg-white text-blue-700 flex items-center justify-center shrink-0 shadow-sm">
+                <Search className="size-4" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-blue-950 text-sm font-semibold">
+                  Search grounding on
+                </p>
+                <p className="text-blue-700 text-xs mt-1 leading-relaxed">
+                  {isChildrensBook
+                    ? "Gemini will use Google Search when writing the children's pages."
+                    : "Gemini will use Google Search when writing the full chapters."}
+                </p>
+              </div>
+            </section>
+          )}
+
+          {aiProvider === "gemini" && sourceFiles.length > 0 && (
+            <section className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-3">
+              <div className="size-9 rounded-lg bg-white text-blue-700 flex items-center justify-center shrink-0 shadow-sm">
+                <UploadCloud className="size-4" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-blue-950 text-sm font-semibold">
+                  Source documents attached
+                </p>
+                <p className="text-blue-700 text-xs mt-1 leading-relaxed">
+                  {sourceFiles.length}{" "}
+                  {sourceFiles.length === 1 ? "file" : "files"} will be saved
+                  with the book and available for regeneration.
+                </p>
+              </div>
+            </section>
+          )}
+
+          {generatedBookBible && (
+            <section className="flex items-start gap-3 rounded-xl border border-violet-200 bg-violet-50/80 px-3 py-3">
+              <div className="size-9 rounded-lg bg-white text-violet-700 flex items-center justify-center shrink-0 shadow-sm">
+                <BookOpen className="size-4" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-violet-950 text-sm font-semibold">
+                  Book Bible generated from source
+                </p>
+                <p className="text-violet-700 text-xs mt-1 leading-relaxed">
+                  The draft will include Source, canon, style, and continuity
+                  notes extracted from the attached documents and inputs.
+                </p>
+              </div>
+            </section>
+          )}
+
+          {includeImages && hasVisualBibleContent(visualBible) && (
+            <section className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="size-9 rounded-lg bg-white text-slate-700 flex items-center justify-center shrink-0 shadow-sm">
+                <ImageIcon className="size-4" />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-slate-950 text-sm font-semibold">
+                  Visual Bible active
+                </p>
+                <p className="text-slate-600 text-xs mt-1 leading-relaxed">
+                  {isChildrensBook
+                    ? "Page images will use your character, style, and world references as visual canon."
+                    : "Chapter images will use your character, style, and world references as visual canon."}
+                </p>
+              </div>
+            </section>
+          )}
+
+          {outlineStats && (
+            <section className="grid grid-cols-3 gap-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <div>
+                <p className="text-[11px] uppercase text-slate-400 font-semibold">
+                  Speed
+                </p>
+                <p className="text-slate-900 text-sm font-semibold">
+                  {Number(outlineStats.outputTokensPerSecond || 0).toFixed(1)}{" "}
+                  T/s
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[11px] uppercase text-slate-400 font-semibold">
+                  Time
+                </p>
+                <p className="text-slate-900 text-sm font-semibold">
+                  {Number(outlineStats.totalTime || 0).toFixed(2)}s
+                </p>
+              </div>
+
+              <div>
+                <p className="text-[11px] uppercase text-slate-400 font-semibold">
+                  Tokens
+                </p>
+                <p className="text-slate-900 text-sm font-semibold">
+                  {outlineStats.totalTokens || 0}
+                </p>
+              </div>
+            </section>
+          )}
+
+          {generationJob && (
+            <section className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-emerald-950 text-sm font-semibold capitalize">
+                    {generationJob.status}
+                  </p>
+                  <p className="text-emerald-800 text-xs">
+                    {generationJob.progress?.message || "Generating"}
+                  </p>
+                </div>
+
+                {isGeneratingFullBook && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleCancelGeneration}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+
+              <div className="mt-3 h-2 bg-white rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 transition-all"
+                  style={{
+                    width: `${
+                      generationJob.progress?.total
+                        ? ((generationJob.progress.completed +
+                            generationJob.progress.failed) /
+                            generationJob.progress.total) *
+                          100
+                        : 5
+                    }%`,
+                  }}
+                />
+              </div>
+            </section>
+          )}
+
+          {/* Chapters/scenes list */}
+          <div
+            ref={chaptersContainerRef}
+            className="space-y-3 max-h-[min(20rem,34dvh)] md:max-h-[min(24rem,38dvh)] overflow-y-auto pr-1"
+          >
+            {chapters.length === 0 ? (
+              <div className="bg-gray-50 text-center rounded-xl px-4 py-10 md:py-12">
+                <BookOpen className="size-10 md:size-12 text-gray-300 mx-auto mb-3" />
+
+                <p className="text-gray-500 text-xs md:text-sm">
+                  {isChildrensBook
+                    ? "No scenes yet. Add one to start."
+                    : "No chapters yet. Add one to start."}
+                </p>
+              </div>
+            ) : (
+              chapters.map(({ title, description }, index) => (
+                <div
+                  key={index}
+                  className="bg-white border border-gray-200 rounded-xl p-3 md:p-4 transition-all duration-200 hover:border-gray-300 hover:shadow-sm focus-within:border-gray-300 focus-within:shadow-sm group"
+                >
+                  <div className="mb-2 md:mb-3 flex items-start gap-2 md:gap-3">
+                    <div className="shrink-0 size-5 md:size-6 bg-violet-50 text-violet-600 text-xs font-semibold rounded-full mt-1 flex justify-center items-center">
+                      {index + 1}
+                    </div>
+
+                    {/* Chapter/scene title input */}
+                    <input
+                      type="text"
+                      value={title}
+                      onChange={(event) =>
+                        handleEditChapter(index, "title", event.target.value)
+                      }
+                      placeholder={isChildrensBook ? "Scene Title" : "Chapter Title"}
+                      className="flex-1 bg-transparent text-gray-900 text-sm md:text-base font-medium border-none focus:outline-none focus:ring-0 p-0"
+                    />
+
+                    {/* Delete button */}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteChapter(index)}
+                      aria-label={isChildrensBook ? "Delete scene" : "Delete chapter"}
+                      title={isChildrensBook ? "Delete scene" : "Delete chapter"}
+                      disabled={chapters.length === 1}
+                      className="opacity-0 rounded-lg p-1 md:p-1.5 transition-all duration-200 disabled:opacity-0 disabled:cursor-not-allowed group-hover:opacity-100 group-hover:bg-red-50 group-focus-within:opacity-100 group-focus-within:bg-red-50 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                    >
+                      <Trash2 className="size-3.5 md:size-4 text-red-500" />
+                    </button>
+                  </div>
+
+                  {/* Chapter/scene description textarea */}
+                  <textarea
+                    value={description}
+                    onChange={(event) =>
+                      handleEditChapter(
+                        index,
+                        "description",
+                        event.target.value
+                      )
+                    }
+                    rows={2}
+                    placeholder={
+                      isChildrensBook
+                        ? "Brief description of this two-page scene..."
+                        : "Brief description of what this chapter covers..."
+                    }
+                    className="w-full bg-transparent text-gray-600 text-xs md:text-sm placeholder-gray-400 border-none resize-none focus:outline-none focus:ring-0 p-0"
+                  />
+                </div>
+              ))
+            )}
+          </div>
+
+          <section className="border-t border-gray-100 pt-4 md:pt-5">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="border border-slate-200 rounded-xl p-4 md:p-5 bg-white flex flex-col gap-4 min-w-0">
+                <div className="flex items-start gap-3">
+                  <div className="size-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                    <FileText className="size-4" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <h4 className="text-slate-900 text-sm font-semibold">
+                      {isChildrensBook
+                        ? "Start with a page-plan draft"
+                        : "Start with an outline draft"}
+                    </h4>
+                    <p className="text-slate-500 text-xs mt-1 leading-relaxed">
+                      {isChildrensBook
+                        ? "Saves the page plan so you can edit image/text scenes before writing the story text."
+                        : "Saves the chapter plan so you can edit structure before writing chapter content."}
+                    </p>
+                  </div>
+                </div>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 cursor-pointer">
+                  <span className="text-slate-800 text-sm font-medium">
+                    Generate cover
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={generateCover}
+                    onChange={(event) => setGenerateCover(event.target.checked)}
+                    className="size-4 accent-violet-600"
+                  />
+                </label>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleFinaliseBook}
+                  isLoading={isFinalisingBook}
+                  className="w-full"
+                >
+                  Create Outline Draft
+                </Button>
+              </div>
+
+              <div className="border border-violet-200 rounded-xl p-4 md:p-5 bg-violet-50/60 flex flex-col gap-4 min-w-0">
+                <div className="flex items-start gap-3">
+                  <div className="size-9 rounded-lg bg-white text-violet-700 flex items-center justify-center shrink-0 shadow-sm">
+                    <Sparkles className="size-4" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <h4 className="text-violet-950 text-sm font-semibold">
+                      Generate the full book now
+                    </h4>
+                    <p className="text-violet-700 text-xs mt-1 leading-relaxed">
+                      {isChildrensBook
+                        ? "Fills each two-page scene with an image page, short text under the image, and a following text page."
+                        : "Fills every chapter with the selected provider and tracks progress while it runs."}
+                    </p>
+                  </div>
+                </div>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg bg-white/70 border border-violet-100 px-3 py-2 cursor-pointer">
+                  <span className="text-violet-950 text-sm font-medium">
+                    Generate cover
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={generateCover}
+                    onChange={(event) => setGenerateCover(event.target.checked)}
+                    className="size-4 accent-violet-600"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg bg-white/70 border border-violet-100 px-3 py-2 cursor-pointer">
+                  <span className="text-violet-950 text-sm font-medium">
+                    {isChildrensBook ? "Include page images" : "Include chapter images"}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={includeImages}
+                    onChange={(event) => setIncludeImages(event.target.checked)}
+                    className="size-4 accent-violet-600"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg bg-white/70 border border-violet-100 px-3 py-2 cursor-pointer">
+                  <span className="min-w-0">
+                    <span className="block text-violet-950 text-sm font-medium">
+                      Include text graphics
+                    </span>
+                    <span className="block text-violet-700 text-[11px] leading-relaxed">
+                      {isChildrensBook
+                        ? "Allows charts, diagrams, and visual explainers in page text."
+                        : "Allows charts, diagrams, and visual explainers in chapter text."}
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={includeTextGraphics}
+                    onChange={(event) =>
+                      setIncludeTextGraphics(event.target.checked)
+                    }
+                    className="size-4 shrink-0 accent-violet-600"
+                  />
+                </label>
+
+                <div className="rounded-lg bg-white/70 border border-violet-100 px-3 py-3">
+                  <Select
+                    name="stepTwoChapterLength"
+                    value={chapterLength}
+                    onChange={(event) => setChapterLength(event.target.value)}
+                    options={CHAPTER_LENGTH_OPTIONS}
+                    label={isChildrensBook ? "Story text amount" : "Chapter length"}
+                  />
+                  <p className="text-violet-700 text-[11px] leading-relaxed mt-2">
+                    {isChildrensBook
+                      ? "Large asks for the most text-heavy two-page scene copy."
+                      : "Large asks for the most detailed, page-rich chapters."}
+                  </p>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={handleGenerateFullBook}
+                  isLoading={isGeneratingFullBook}
+                  icon={Sparkles}
+                  className="w-full"
+                >
+                  Generate Full Book
+                </Button>
+              </div>
+            </div>
+          </section>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap justify-between items-center gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setStep(1)}
+              icon={ArrowLeft}
+              ariaLabel="Go back to step 1"
+            >
+              Back
+            </Button>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={handleAddChapter}
+                icon={Plus}
+                disabled={chapters.length >= 26}
+              >
+                {isChildrensBook ? "Add Scene" : "Add Chapter"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+export default CreateBookModal;
