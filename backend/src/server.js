@@ -14,6 +14,7 @@ const profileRouter = require("./routes/profile.route");
 const booksRouter = require("./routes/books.route");
 const aiRouter = require("./routes/ai.route");
 const exportsRouter = require("./routes/exports.route");
+const audiobookRouter = require("./routes/audiobook.route");
 const publicRouter = require("./routes/public.route");
 const developerApiRouter = require("./routes/developer-api.route");
 const {
@@ -25,6 +26,7 @@ const {
 } = require("./utils/public-share-meta");
 
 const app = express();
+app.set("trust proxy", 1);
 function getCspImageSources() {
   const configuredHosts = [
     ENV.TRUSTED_IMAGE_HOSTS,
@@ -116,6 +118,7 @@ app.use("/api/profile", profileRouter);
 app.use("/api/books", booksRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/exports", exportsRouter);
+app.use("/api/audiobook", audiobookRouter);
 app.use("/api/public", publicRouter);
 app.use("/api/v1", developerApiRouter);
 
