@@ -67,6 +67,14 @@ axiosInstance.interceptors.response.use(
       return Promise.reject(err);
     }
 
+    // If the backend sent a token via cookie auth, cache it so subsequent
+    // requests use Bearer auth (which bypasses cross-origin CSRF issues).
+    const refreshedToken = response.headers?.["x-auth-token"];
+
+    if (refreshedToken && typeof window !== "undefined") {
+      localStorage.setItem("token", refreshedToken);
+    }
+
     const url = response.config?.url || "";
     const method = (response.config?.method || "get").toLowerCase();
     const shouldRefreshCredits =
@@ -87,8 +95,16 @@ axiosInstance.interceptors.response.use(
       console.error("Error in Axios response interceptor:", err);
     }
 
-    // Handle common erros centrally
+    // Handle common errors centrally
     if (err.response) {
+      if (err.response.status === 401 && typeof window !== "undefined") {
+        // Token expired or invalid — clear stale credentials and send to login
+        localStorage.removeItem("token");
+        localStorage.removeItem("refreshToken");
+        localStorage.removeItem("user");
+        window.dispatchEvent(new Event("auth:logout"));
+      }
+
       if (err.response.status === 500) {
         console.error(
           "Internal Server Error! Please try again in a few minutes."

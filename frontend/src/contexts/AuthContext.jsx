@@ -80,6 +80,19 @@ export function AuthContextProvider({ children }) {
     checkAuthStatus();
   }, [checkAuthStatus]);
 
+  // Auto-logout when axios detects an expired/invalid token (401)
+  useEffect(() => {
+    function handleForceLogout() {
+      clearStoredAuth();
+      setIsAuthenticated(false);
+      setUser(null);
+    }
+
+    window.addEventListener("auth:logout", handleForceLogout);
+
+    return () => window.removeEventListener("auth:logout", handleForceLogout);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{

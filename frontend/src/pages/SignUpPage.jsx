@@ -77,8 +77,10 @@ function SignUpPage() {
     try {
       // registration request
       const {
-        data: { user },
+        data: { user, token },
       } = await axiosInstance.post(API_ENDPOINTS.AUTH.REGISTER, trimmedData);
+
+      if (token) localStorage.setItem("token", token);
 
       // update auth context
       authenticateUser(user);

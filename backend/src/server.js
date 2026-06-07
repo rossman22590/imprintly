@@ -91,6 +91,9 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Trust Render's proxy so express-rate-limit can read X-Forwarded-For correctly
+app.set("trust proxy", 1);
+
 // Middlewares
 app.use(
   helmet({

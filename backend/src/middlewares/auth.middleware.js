@@ -42,6 +42,12 @@ async function authenticate(req, res, next) {
       setAuthCookie(res, token);
     }
 
+    // Let the frontend cache the token in localStorage so it can use Bearer auth
+    // (which bypasses CSRF). Safe to expose — it's the same token the client sent.
+    if (source === "cookie") {
+      res.setHeader("X-Auth-Token", token);
+    }
+
     next(); // token valid, proceed to route
   } catch (error) {
     console.error("Error authenticating user:", error);
