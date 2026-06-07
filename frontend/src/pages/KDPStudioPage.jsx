@@ -578,9 +578,6 @@ function estimateMeasuredPreviewTextLines(normalized, textMetrics, options = {})
   return Math.max(1, lineCount);
 }
 
-  return Math.max(1, lineCount);
-}
-
 function estimatePreviewTextLines(text = "", textMetrics, options = {}) {
   const normalized = String(text || "").trim();
 
