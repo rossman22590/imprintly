@@ -76,6 +76,7 @@ const corsOptions = {
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
+  exposedHeaders: ["X-Auth-Token"],
   optionsSuccessStatus: 204,
 };
 const apiLimiter = rateLimit({
