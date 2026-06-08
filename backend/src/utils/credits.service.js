@@ -114,6 +114,20 @@ const DEFAULT_IMAGE_MODEL_PRICES = {
   },
 };
 
+// ElevenLabs text-to-speech is billed per character. Rates below are USD per
+// 1,000 characters (Multilingual v2 / Eleven v3 bill 1 credit/char ≈ $0.10/1k;
+// Flash/Turbo bill 0.5 credit/char ≈ $0.05/1k on the ElevenLabs API).
+const ELEVENLABS_AUDIO_PRICES = {
+  eleven_v3: { usdPer1kChars: 0.1 },
+  eleven_multilingual_v2: { usdPer1kChars: 0.1 },
+  eleven_multilingual_v1: { usdPer1kChars: 0.1 },
+  eleven_flash_v2_5: { usdPer1kChars: 0.05 },
+  eleven_flash_v2: { usdPer1kChars: 0.05 },
+  eleven_turbo_v2_5: { usdPer1kChars: 0.05 },
+  eleven_turbo_v2: { usdPer1kChars: 0.05 },
+  default: { usdPer1kChars: 0.1 },
+};
+
 function normalizeProviderKey(provider = "") {
   const selected = String(provider || "").trim().toLowerCase();
 
@@ -165,6 +179,7 @@ function getImageModelPricing({ provider = "gemini", model = "" } = {}) {
 
 const bookifyUsdPerCredit = numberFromEnv(ENV.BOOKIFY_USD_PER_CREDIT, 0.01);
 const tokenMarkupMultiplier = numberFromEnv(ENV.AI_TOKEN_MARKUP_MULTIPLIER, 2);
+const audioMarkupMultiplier = numberFromEnv(ENV.ELEVENLABS_MARKUP_MULTIPLIER, 1.2);
 const defaultImagePricing = getImageModelPricing({
   provider: "gemini",
   model: ENV.GEMINI_IMAGE_MODEL,
@@ -182,7 +197,17 @@ const CREDIT_CONFIG = {
   usdPerCredit: bookifyUsdPerCredit,
   imageCredits: defaultImageCredits,
   tokenMarkupMultiplier,
+  audioMarkupMultiplier,
 };
+
+function getAudioModelPricing(model = "") {
+  const modelKey = normalizeModelKey(model || ENV.ELEVENLABS_DEFAULT_MODEL);
+
+  return {
+    model: modelKey || "default",
+    ...(ELEVENLABS_AUDIO_PRICES[modelKey] || ELEVENLABS_AUDIO_PRICES.default),
+  };
+}
 
 const CREDIT_HISTORY_DAYS = 40;
 const MONTHLY_CREDIT_PRESETS = DEFAULT_MONTHLY_CREDIT_PRESETS;
@@ -703,6 +728,74 @@ async function chargeImageUsage({
   };
 }
 
+function calculateAudioCharge({ model = "", charCount = 0 } = {}) {
+  const pricing = getAudioModelPricing(model);
+  const chars = Math.max(0, Math.round(Number(charCount) || 0));
+  const baseUsd = (chars / 1000) * pricing.usdPer1kChars;
+  const markedUpUsd = baseUsd * CREDIT_CONFIG.audioMarkupMultiplier;
+  const credits = roundCredits(markedUpUsd / CREDIT_CONFIG.usdPerCredit);
+
+  return {
+    charCount: chars,
+    baseUsd: roundMoney(baseUsd),
+    usdCost: roundMoney(markedUpUsd),
+    credits,
+    pricing: {
+      model: pricing.model,
+      usdPer1kChars: pricing.usdPer1kChars,
+    },
+    markupMultiplier: CREDIT_CONFIG.audioMarkupMultiplier,
+  };
+}
+
+function getAudioCreditEstimate(options = {}) {
+  return calculateAudioCharge(options).credits;
+}
+
+async function chargeAudioUsage({
+  userId,
+  reason = "audiobook_generation",
+  description = "Audiobook narration",
+  model = "",
+  charCount = 0,
+  metadata = {},
+}) {
+  const charge = calculateAudioCharge({ model, charCount });
+
+  if (charge.credits <= 0) {
+    const user = await ensureUserCredits(userId);
+    return {
+      charge,
+      credits: serializeCredits(user),
+      transaction: null,
+    };
+  }
+
+  await assertHasCredits(userId, charge.credits);
+
+  const result = await debitCredits({
+    userId,
+    amount: charge.credits,
+    reason,
+    description,
+    provider: "elevenlabs",
+    model: charge.pricing.model,
+    usage: { characterCount: charge.charCount },
+    usdCost: charge.usdCost,
+    markupMultiplier: CREDIT_CONFIG.audioMarkupMultiplier,
+    metadata: {
+      ...metadata,
+      baseUsd: charge.baseUsd,
+      pricing: charge.pricing,
+    },
+  });
+
+  return {
+    ...result,
+    charge,
+  };
+}
+
 async function adjustUserCredits({
   userId,
   action,
@@ -888,11 +981,14 @@ module.exports = {
   adjustUserCredits,
   assertHasCredits,
   buildCreditHistoryQuery,
+  calculateAudioCharge,
   calculateImageCharge,
   calculateTokenCharge,
+  chargeAudioUsage,
   chargeImageUsage,
   chargeTokenUsage,
   ensureUserCredits,
+  getAudioCreditEstimate,
   getCreditHistorySince,
   getImageCreditEstimate,
   getMonthlyResetKey,
@@ -903,4 +999,5 @@ module.exports = {
   serializeCredits,
   serializeTransaction,
   setMonthlyCreditAllowance,
+  roundCredits,
 };

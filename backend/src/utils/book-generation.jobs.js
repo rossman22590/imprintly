@@ -31,6 +31,10 @@ const {
 } = require("./credits.service");
 const { normalizeChapterLength } = require("./chapter-length");
 const {
+  isPlaceholderChapterTitle,
+  resolvePlaceholderChapterTitle,
+} = require("./chapter-title");
+const {
   normalizeBookBiblePayload,
   parseBookBibleJsonContent,
   serializeBookBible,
@@ -1187,6 +1191,7 @@ async function runGenerationJob(jobId) {
 
       try {
         let chapterContent = String(chapter.content || "");
+        let resolvedChapterTitle = chapter.title;
         const chapterStats = {
           ...(chapter.generationStats?.toObject?.() ||
             chapter.generationStats ||
@@ -1207,6 +1212,11 @@ async function runGenerationJob(jobId) {
             currentBookBible,
             visualBibleForText
           );
+          const shouldGenerateTitle = isPlaceholderChapterTitle(
+            chapter.title,
+            chapterIndex,
+            safeGenre
+          );
           const result = await generateSectionForProvider(provider, {
             chapterTitle: chapter.title,
             chapterDescription: chapter.description,
@@ -1220,6 +1230,7 @@ async function runGenerationJob(jobId) {
             includeTextGraphics,
             chapterLength,
             sourceParts,
+            generateChapterTitle: shouldGenerateTitle,
             ...modelPayload,
           });
           chapterContent = assertGeneratedChapterContent(result, {
@@ -1230,20 +1241,28 @@ async function runGenerationJob(jobId) {
             chapterContent,
             safeGenre
           );
+          const resolvedTitle = resolvePlaceholderChapterTitle({
+            content: chapterContent,
+            currentTitle: chapter.title,
+            chapterIndex,
+            genre: safeGenre,
+          });
+          chapterContent = resolvedTitle.content;
+          resolvedChapterTitle = resolvedTitle.chapterTitle;
 
           totalStats = addStats(totalStats, result.stats);
           await chargeTokenUsage({
             userId: job.userId,
             usage: result.stats,
             reason: "full_book_chapter_generation",
-            description: `Generated chapter "${chapter.title}"`,
+            description: `Generated chapter "${resolvedChapterTitle}"`,
             provider,
             model: result.modelName,
             metadata: buildUsageMetadata(job, {
               jobId: job.id,
               bookId: book._id.toString(),
               chapterIndex,
-              chapterTitle: chapter.title,
+              chapterTitle: resolvedChapterTitle,
             }),
           });
           Object.assign(chapterStats, {
@@ -1252,7 +1271,7 @@ async function runGenerationJob(jobId) {
           });
           if (await stopIfCancelled(job, jobId, book)) break;
 
-          job.progress.message = `Editing ${chapter.title}`;
+          job.progress.message = `Editing ${resolvedChapterTitle}`;
           await updateBookProgress(book, job);
           if (await stopIfCancelled(job, jobId, book)) break;
 
@@ -1262,7 +1281,7 @@ async function runGenerationJob(jobId) {
             bookTitle: book.title,
             genre: safeGenre,
             audience: safeAudience,
-            chapterTitle: chapter.title,
+            chapterTitle: resolvedChapterTitle,
             chapterDescription: chapter.description,
             bookContext,
             bookBible: currentBookBible,
@@ -1276,16 +1295,14 @@ async function runGenerationJob(jobId) {
               userId: job.userId,
               usage: step.result.stats,
               reason: `full_book_${step.action}`,
-              description: `Ran ${step.action.replace(/_/g, " ")} for "${
-                chapter.title
-              }"`,
+              description: `Ran ${step.action.replace(/_/g, " ")} for "${resolvedChapterTitle}"`,
               provider,
               model: step.result.modelName,
               metadata: {
                 jobId: job.id,
                 bookId: book._id.toString(),
                 chapterIndex,
-                chapterTitle: chapter.title,
+                chapterTitle: resolvedChapterTitle,
                 action: step.action,
               },
             });
@@ -1294,7 +1311,7 @@ async function runGenerationJob(jobId) {
 
           chapterContent = assertGeneratedChapterContent(
             { content: premiumResult.content },
-            { provider, chapterTitle: chapter.title }
+            { provider, chapterTitle: resolvedChapterTitle }
           );
           chapterContent = normalizeGeneratedManuscriptForGenre(
             chapterContent,
@@ -1499,6 +1516,7 @@ async function runGenerationJob(jobId) {
         }
 
         book.chapters[chapterIndex].content = chapterContent;
+        book.chapters[chapterIndex].title = resolvedChapterTitle;
         book.chapters[chapterIndex].generationStatus = chapterStatus;
         book.chapters[chapterIndex].wordCount = countWords(chapterContent);
         book.chapters[chapterIndex].generationStats = chapterStats;

@@ -67,6 +67,18 @@ export const API_ENDPOINTS = {
     FULL_BOOK_JOBS: "/api/ai/full-book-jobs",
     QUALITY_TOOL: "/api/ai/quality-tool",
   },
+  AUDIOBOOK: {
+    BASE: "/api/audiobook",
+    VOICES: "/api/audiobook/voices",
+    JOBS: "/api/audiobook/jobs",
+    CHAPTER_VERSION: (bookId, chapterIndex) =>
+      `/api/audiobook/${bookId}/chapters/${chapterIndex}/version`,
+    CHAPTER_SCRIPT: (bookId, chapterIndex) =>
+      `/api/audiobook/${bookId}/chapters/${chapterIndex}/script`,
+    CHAPTER_SCRIPT_RESET: (bookId, chapterIndex) =>
+      `/api/audiobook/${bookId}/chapters/${chapterIndex}/script/reset`,
+    INTRO_VERSION: (bookId) => `/api/audiobook/${bookId}/intro/version`,
+  },
   EXPORTS: {
     DOCX: "/api/exports",
     EPUB: "/api/exports",

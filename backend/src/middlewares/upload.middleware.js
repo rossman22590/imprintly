@@ -110,6 +110,31 @@ const uploadVisualReferenceImage = multer({
   },
 }).single("referenceImage");
 
+function checkAudioFileType(file, callback) {
+  const allowedExtensions = /mp3|m4a|mp4|wav|webm|ogg/;
+  const extensionMatched = allowedExtensions.test(
+    path.extname(file.originalname).toLowerCase()
+  );
+  const mimetypeMatched = /^audio\/|^video\/(mp4|webm)/.test(file.mimetype);
+
+  if (extensionMatched || mimetypeMatched) {
+    callback(null, true);
+  } else {
+    callback(new Error("Only audio files are allowed for the intro recording."));
+  }
+}
+
+const uploadIntroAudio = multer({
+  storage: storageEngine,
+  limits: {
+    files: 1,
+    fileSize: 25 * 1024 * 1024, // 25MB limit
+  },
+  fileFilter(req, file, callback) {
+    checkAudioFileType(file, callback);
+  },
+}).single("introAudio");
+
 const uploadBookSourceFiles = multer({
   storage: storageEngine,
   limits: {
@@ -125,5 +150,6 @@ module.exports = {
   uploadAvatarImage,
   uploadBookCoverImage,
   uploadBookSourceFiles,
+  uploadIntroAudio,
   uploadVisualReferenceImage,
 };

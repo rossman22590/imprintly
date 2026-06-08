@@ -40,6 +40,9 @@ function getExtensionFromMime(mimeType = "") {
   if (mimeType === "image/png") return "png";
   if (mimeType === "image/webp") return "webp";
   if (mimeType === "image/gif") return "gif";
+  if (mimeType === "audio/mpeg" || mimeType === "audio/mp3") return "mp3";
+  if (mimeType === "audio/mp4" || mimeType === "audio/x-m4a") return "m4a";
+  if (mimeType === "audio/wav" || mimeType === "audio/x-wav") return "wav";
 
   return "png";
 }
@@ -61,7 +64,7 @@ function shouldRetryUploadError(error = {}) {
   );
 }
 
-async function uploadImageBufferToStorage({
+async function uploadBufferToStorage({
   buffer,
   fileName = "",
   mimeType = "image/png",
@@ -69,17 +72,18 @@ async function uploadImageBufferToStorage({
   retryDelayMs = 700,
 }) {
   if (!ENV.IMAGE_UPLOAD_API_URL) {
-    const error = new Error("Image upload API is not configured.");
+    const error = new Error("Upload API is not configured.");
     error.statusCode = 500;
     throw error;
   }
 
+  const fallbackPrefix = mimeType.startsWith("audio/") ? "audio" : "image";
   const safeFileName =
     path
       .basename(fileName || "")
       .replace(/[^\w.\-]/g, "-")
       .slice(0, 180) ||
-    `image-${Date.now()}.${getExtensionFromMime(mimeType)}`;
+    `${fallbackPrefix}-${Date.now()}.${getExtensionFromMime(mimeType)}`;
   const base64 = Buffer.isBuffer(buffer)
     ? buffer.toString("base64")
     : Buffer.from(buffer).toString("base64");
@@ -238,6 +242,14 @@ async function uploadImageUrlToStorage(url = "", fileName = "") {
   });
 }
 
+async function uploadImageBufferToStorage(options) {
+  return uploadBufferToStorage({ mimeType: "image/png", ...options });
+}
+
+async function uploadAudioBufferToStorage(buffer, fileName, mimeType = "audio/mpeg") {
+  return uploadBufferToStorage({ buffer, fileName, mimeType });
+}
+
 async function uploadImageFileToStorage(filePath, fileName, mimeType) {
   return uploadImageBufferToStorage({
     buffer: await fs.promises.readFile(filePath),
@@ -249,7 +261,9 @@ async function uploadImageFileToStorage(filePath, fileName, mimeType) {
 module.exports = {
   isTrustedImageUrl,
   normalizeTrustedImageUrl,
+  uploadBufferToStorage,
   uploadImageBufferToStorage,
+  uploadAudioBufferToStorage,
   uploadImageFileToStorage,
   uploadImageUrlToStorage,
   shouldRetryUploadError,

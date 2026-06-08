@@ -20,6 +20,7 @@ const EditBookPage = lazy(() => import("../pages/EditBookPage"));
 const ForgotPasswordPage = lazy(() => import("../pages/ForgotPasswordPage"));
 const JobsPage = lazy(() => import("../pages/JobsPage"));
 const KDPStudioPage = lazy(() => import("../pages/KDPStudioPage"));
+const AudiobookStudioPage = lazy(() => import("../pages/AudiobookStudioPage"));
 const LandingPage = lazy(() => import("../pages/LandingPage"));
 const PricingPage = lazy(() => import("../pages/PricingPage"));
 const ProfilePage = lazy(() => import("../pages/ProfilePage"));
@@ -166,6 +167,14 @@ const router = createBrowserRouter([
         element: routeElement(
           <ProtectedRoute>
             <KDPStudioPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "books/:bookId/audiobook",
+        element: routeElement(
+          <ProtectedRoute>
+            <AudiobookStudioPage />
           </ProtectedRoute>
         ),
       },

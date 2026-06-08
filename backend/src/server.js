@@ -108,6 +108,12 @@ app.use(cors(corsOptions));
 app.options("/{*any}", cors(corsOptions));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" })); // for form data
+
+app.use((req, res, next) => {
+  console.log(`[REQUEST] ${req.method} ${req.originalUrl || req.url} query=${JSON.stringify(req.query)} body=${JSON.stringify(req.body)}`);
+  next();
+});
+
 app.use("/api", apiLimiter);
 
 // Routes
@@ -217,6 +223,7 @@ async function startServer() {
   app.listen(ENV.PORT, () => {
     console.log(`Server running on port ${ENV.PORT}`);
     console.log(`Environment: ${ENV.NODE_ENV}`);
+    console.log(`ElevenLabs API Key configured: ${!!ENV.ELEVENLABS_API_KEY}`);
   });
 
   recoverInterruptedGenerationJobs().catch((error) => {

@@ -71,7 +71,9 @@ axiosInstance.interceptors.response.use(
     const method = (response.config?.method || "get").toLowerCase();
     const shouldRefreshCredits =
       method !== "get" &&
-      (url.includes("/api/ai") || url.includes("/api/books"));
+      (url.includes("/api/ai") ||
+        url.includes("/api/books") ||
+        url.includes("/api/audiobook"));
 
     if (shouldRefreshCredits && typeof window !== "undefined") {
       window.dispatchEvent(new Event("credits:refresh"));

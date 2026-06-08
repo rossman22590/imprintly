@@ -54,6 +54,10 @@ const {
 } = require("../utils/export-markdown");
 const { normalizeChapterLength } = require("../utils/chapter-length");
 const {
+  isPlaceholderChapterTitle,
+  resolvePlaceholderChapterTitle,
+} = require("../utils/chapter-title");
+const {
   normalizeBookBiblePayload,
   parseBookBibleJsonContent,
   serializeBookBible,
@@ -799,8 +803,17 @@ async function generateChapterContent(req, res) {
     const safeChapterDescription = sanitizeInput(chapterDescription, 600);
     const safeStyle = sanitizeInput(style, 50);
     const safeGenre = sanitizeInput(genre, 100) || "Nonfiction";
+    const chapterIndex = Number.isFinite(Number(req.body.chapterIndex))
+      ? Number(req.body.chapterIndex)
+      : 0;
 
     await assertHasCredits(req.user.id, 0.0001);
+
+    const shouldGenerateTitle = isPlaceholderChapterTitle(
+      safeChapterTitle,
+      chapterIndex,
+      safeGenre
+    );
 
     const result = await generateSectionForProvider(selectedProvider, {
       chapterTitle: safeChapterTitle,
@@ -815,23 +828,31 @@ async function generateChapterContent(req, res) {
       includeTextGraphics,
       chapterLength,
       model,
+      generateChapterTitle: shouldGenerateTitle,
     });
-    const content = normalizeGeneratedManuscriptForGenre(
+    let content = normalizeGeneratedManuscriptForGenre(
       assertGeneratedChapterContent(result, {
         provider: selectedProvider,
         chapterTitle: safeChapterTitle,
       }),
       safeGenre
     );
+    const resolvedTitle = resolvePlaceholderChapterTitle({
+      content,
+      currentTitle: safeChapterTitle,
+      chapterIndex,
+      genre: safeGenre,
+    });
+    content = resolvedTitle.content;
 
     const billing = await chargeGeneratedTokens({
       req,
       stats: result.stats,
       reason: "chapter_generation",
-      description: `Generated chapter "${safeChapterTitle}"`,
+      description: `Generated chapter "${resolvedTitle.chapterTitle}"`,
       provider: selectedProvider,
       model: result.modelName,
-      metadata: { chapterTitle: safeChapterTitle },
+      metadata: { chapterTitle: resolvedTitle.chapterTitle },
     });
 
     return res.status(200).json({
@@ -839,6 +860,9 @@ async function generateChapterContent(req, res) {
         selectedProvider === "gemini" ? "Gemini" : "Groq"
       } chapter content generated successfully!`,
       content,
+      ...(resolvedTitle.titleGenerated
+        ? { chapterTitle: resolvedTitle.chapterTitle }
+        : {}),
       provider: selectedProvider,
       model: result.modelName,
       stats: result.stats,
@@ -1045,6 +1069,11 @@ async function generateFullBook(req, res) {
           currentBookBible,
           visualBible
         );
+        const shouldGenerateTitle = isPlaceholderChapterTitle(
+          chapter.title,
+          chapterIndex,
+          safeGenre
+        );
         const result = await generateSectionForProvider(selectedProvider, {
           chapterTitle: chapter.title,
           chapterDescription: chapter.description,
@@ -1058,6 +1087,7 @@ async function generateFullBook(req, res) {
           includeTextGraphics,
           chapterLength,
           sourceParts,
+          generateChapterTitle: shouldGenerateTitle,
           ...modelPayload,
         });
         let content = assertGeneratedChapterContent(result, {
@@ -1065,16 +1095,24 @@ async function generateFullBook(req, res) {
           chapterTitle: chapter.title,
         });
         content = normalizeGeneratedManuscriptForGenre(content, safeGenre);
+        const resolvedTitle = resolvePlaceholderChapterTitle({
+          content,
+          currentTitle: chapter.title,
+          chapterIndex,
+          genre: safeGenre,
+        });
+        content = resolvedTitle.content;
+        const chapterTitle = resolvedTitle.chapterTitle;
 
         totalStats = addStats(totalStats, result.stats);
         const chapterBilling = await chargeGeneratedTokens({
           req,
           stats: result.stats,
           reason: "full_book_chapter_generation",
-          description: `Generated chapter "${chapter.title}"`,
+          description: `Generated chapter "${chapterTitle}"`,
           provider: selectedProvider,
           model: result.modelName,
-          metadata: { title: workingTitle, chapterTitle: chapter.title },
+          metadata: { title: workingTitle, chapterTitle },
         });
         billingCharges.push(serializeBilling(chapterBilling));
 
@@ -1084,7 +1122,7 @@ async function generateFullBook(req, res) {
           bookTitle: workingTitle,
           genre: safeGenre,
           audience: safeAudience,
-          chapterTitle: chapter.title,
+          chapterTitle,
           chapterDescription: chapter.description,
           bookContext,
           bookBible: currentBookBible,
@@ -1098,14 +1136,12 @@ async function generateFullBook(req, res) {
             req,
             stats: step.result.stats,
             reason: `full_book_${step.action}`,
-            description: `Ran ${step.action.replace(/_/g, " ")} for "${
-              chapter.title
-            }"`,
+            description: `Ran ${step.action.replace(/_/g, " ")} for "${chapterTitle}"`,
             provider: selectedProvider,
             model: step.result.modelName,
             metadata: {
               title: workingTitle,
-              chapterTitle: chapter.title,
+              chapterTitle,
               chapterIndex,
               action: step.action,
             },
@@ -1117,13 +1153,14 @@ async function generateFullBook(req, res) {
           { content: premiumResult.content },
           {
             provider: selectedProvider,
-            chapterTitle: chapter.title,
+            chapterTitle,
           }
         );
         content = normalizeGeneratedManuscriptForGenre(content, safeGenre);
         currentBookBible = premiumResult.bookBible || currentBookBible;
         generatedChapters.push({
           ...chapter,
+          title: chapterTitle,
           content,
           generationStatus: "complete",
           wordCount: countWords(content),

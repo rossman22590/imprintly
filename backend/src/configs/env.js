@@ -1,3 +1,50 @@
+const fs = require("fs");
+const path = require("path");
+
+function parseEnvValue(raw = "") {
+  let value = String(raw || "").trim();
+
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+
+  return value;
+}
+
+function loadEnvFiles() {
+  const root = path.join(__dirname, "../..");
+
+  for (const fileName of [".env", ".env.local"]) {
+    const filePath = path.join(root, fileName);
+
+    if (!fs.existsSync(filePath)) continue;
+
+    const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      if (!trimmed || trimmed.startsWith("#")) continue;
+
+      const eqIdx = trimmed.indexOf("=");
+
+      if (eqIdx <= 0) continue;
+
+      const key = trimmed.slice(0, eqIdx).trim();
+      const value = parseEnvValue(trimmed.slice(eqIdx + 1));
+
+      if (fileName === ".env.local" || process.env[key] === undefined) {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
+loadEnvFiles();
+
 const ENV = {
   NODE_ENV: process.env.NODE_ENV ?? "development",
   PORT: process.env.PORT ?? 3000,
@@ -21,6 +68,11 @@ const ENV = {
   GEMINI_IMAGE_MODEL:
     process.env.GEMINI_IMAGE_MODEL ?? "gemini-3.1-flash-image-preview",
   GEMINI_IMAGE_SIZE: process.env.GEMINI_IMAGE_SIZE ?? "1K",
+  ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY ?? "",
+  ELEVENLABS_DEFAULT_MODEL:
+    process.env.ELEVENLABS_DEFAULT_MODEL ?? "eleven_v3",
+  ELEVENLABS_MARKUP_MULTIPLIER:
+    process.env.ELEVENLABS_MARKUP_MULTIPLIER ?? "1.2",
   IMAGE_UPLOAD_API_URL:
     process.env.IMAGE_UPLOAD_API_URL ??
     "https://uplaodpixio-production.up.railway.app/api/upload",

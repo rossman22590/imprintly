@@ -4,6 +4,12 @@ import rehypeSanitize from "rehype-sanitize";
 import BookifyDiagram from "../components/diagrams/BookifyDiagram";
 import { resolveImageUrl } from "./api-endpoints";
 import { toBookifyDiagram, toBookifyPreDiagram } from "./bookify-diagram";
+import {
+  isBlockquoteLine,
+  isMarkdownEmphasisOnlyLine,
+  isProseCalloutBlock,
+  isRecipeOrMeasurementLine,
+} from "./reader-diagram-prose-guards.js";
 import "../styles/bookify-diagram.css";
 
 const diagramCharacterReplacements = new Map([
@@ -165,6 +171,9 @@ function isSimpleStepLine(line = "") {
   const trimmed = String(line || "").trim();
 
   if (!trimmed || trimmed.length > 100) return false;
+  if (isBlockquoteLine(trimmed)) return false;
+  if (isMarkdownEmphasisOnlyLine(trimmed)) return false;
+  if (isRecipeOrMeasurementLine(trimmed)) return false;
   if (/^(```|~~~)/.test(trimmed)) return false;
   if (/^\s{0,3}#{1,6}\s+/.test(trimmed)) return false;
   if (/^[-*+]\s+/.test(trimmed)) return false;
@@ -179,6 +188,7 @@ function isSimpleStepFlowLabel(line = "") {
   const trimmed = String(line || "").trim();
 
   if (!trimmed || trimmed.length > 72) return false;
+  if (isMarkdownEmphasisOnlyLine(trimmed)) return false;
 
   const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
 
@@ -212,6 +222,7 @@ function parseSimpleStepFlowDiagram(lines = []) {
   const nonEmptyLines = getNormalizedDiagramLines(lines);
 
   if (nonEmptyLines.length < 3 || nonEmptyLines.length > 12) return null;
+  if (isProseCalloutBlock(nonEmptyLines)) return null;
   if (!nonEmptyLines.every(isSimpleStepLine)) return null;
 
   let title = "";
@@ -299,6 +310,12 @@ function normalizeReaderMarkdown(markdown = "") {
       flushBlock();
       output.push(line);
       inFence = !inFence;
+      continue;
+    }
+
+    if (!inFence && isBlockquoteLine(line)) {
+      flushBlock();
+      output.push(line);
       continue;
     }
 

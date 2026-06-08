@@ -4,6 +4,7 @@ const {
   buildCreditHistoryQuery,
   calculateImageCharge,
   calculateTokenCharge,
+  calculateAudioCharge,
   CREDIT_CONFIG,
   CREDIT_HISTORY_DAYS,
   getCreditHistorySince,
@@ -150,4 +151,18 @@ test("monthly credit plan payload rejects non-positive amounts", () => {
       }),
     /Premium recurring amount must be greater than zero/
   );
+});
+
+test("ElevenLabs audiobook generation charges are based on characters and model", () => {
+  const multilingualCharge = calculateAudioCharge({
+    model: "eleven_multilingual_v2",
+    charCount: 1000,
+  });
+  const flashCharge = calculateAudioCharge({
+    model: "eleven_flash_v2_5",
+    charCount: 1000,
+  });
+
+  assert.equal(multilingualCharge.credits, 12);
+  assert.equal(flashCharge.credits, 6);
 });

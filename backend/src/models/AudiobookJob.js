@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const progressSchema = new mongoose.Schema(
+const audiobookProgressSchema = new mongoose.Schema(
   {
     total: {
       type: Number,
@@ -30,7 +30,7 @@ const progressSchema = new mongoose.Schema(
   { _id: false }
 );
 
-const generationJobSchema = new mongoose.Schema(
+const audiobookJobSchema = new mongoose.Schema(
   {
     id: {
       type: String,
@@ -47,47 +47,44 @@ const generationJobSchema = new mongoose.Schema(
     bookId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Book",
-      default: null,
+      required: true,
       index: true,
     },
-    provider: {
+    voiceId: {
       type: String,
-      enum: ["gemini", "groq", "elevenlabs"],
-      required: true,
-      default: "groq",
+      default: "",
     },
-    payload: {
-      type: mongoose.Schema.Types.Mixed,
-      default: {},
+    voiceName: {
+      type: String,
+      default: "",
     },
-    retryFailedOnly: {
-      type: Boolean,
-      default: false,
+    modelId: {
+      type: String,
+      default: "",
     },
-    cancelled: {
-      type: Boolean,
-      default: false,
+    // "all" regenerates every chapter; "chapter" regenerates a single chapter.
+    scope: {
+      type: String,
+      enum: ["all", "chapter"],
+      default: "all",
+    },
+    chapterIndex: {
+      type: Number,
+      default: null,
     },
     status: {
       type: String,
-      enum: [
-        "queued",
-        "generating",
-        "cancelling",
-        "cancelled",
-        "complete",
-        "failed",
-      ],
+      enum: ["queued", "generating", "complete", "failed"],
       default: "queued",
       index: true,
     },
     progress: {
-      type: progressSchema,
+      type: audiobookProgressSchema,
       default: () => ({}),
     },
-    failedChapters: {
-      type: [mongoose.Schema.Types.Mixed],
-      default: [],
+    creditsCharged: {
+      type: Number,
+      default: 0,
     },
     error: {
       type: String,
@@ -105,9 +102,8 @@ const generationJobSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-generationJobSchema.index({ userId: 1, createdAt: -1 });
-generationJobSchema.index({ status: 1, updatedAt: 1 });
+audiobookJobSchema.index({ userId: 1, createdAt: -1 });
 
-const GenerationJob = mongoose.model("GenerationJob", generationJobSchema);
+const AudiobookJob = mongoose.model("AudiobookJob", audiobookJobSchema);
 
-module.exports = GenerationJob;
+module.exports = AudiobookJob;

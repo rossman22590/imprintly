@@ -8,6 +8,7 @@ import {
   PanelLeftClose,
   Settings2,
   Store,
+  Headphones,
   Sun,
   Moon,
   BookOpen,
@@ -627,6 +628,26 @@ function BookView({ book }) {
                       >
                         <Store className="size-4" />
                         Open KDP Studio
+                      </Link>
+
+                      <Link
+                        to={`/books/${book._id}/audiobook`}
+                        className="mt-2 flex items-center justify-center gap-2 w-full rounded-xl py-2.5 text-sm font-medium border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2"
+                        style={{
+                          borderColor: "var(--reader-accent)",
+                          color: "var(--reader-accent)",
+                          "--tw-ring-color": "var(--reader-accent)",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.opacity = "0.78")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.opacity = "1")
+                        }
+                        onClick={() => setIsSettingsOpen(false)}
+                      >
+                        <Headphones className="size-4" />
+                        Open Audiobook
                       </Link>
                     </div>
                   </div>

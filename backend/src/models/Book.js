@@ -429,6 +429,190 @@ const bookBibleSchema = new mongoose.Schema(
   }
 );
 
+const audiobookChapterVersionSchema = new mongoose.Schema(
+  {
+    id: {
+      type: String,
+      required: true,
+    },
+    audioUrl: {
+      type: String,
+      default: "",
+    },
+    duration: {
+      type: Number,
+      default: 0,
+    },
+    charCount: {
+      type: Number,
+      default: 0,
+    },
+    voiceId: {
+      type: String,
+      default: "",
+    },
+    voiceName: {
+      type: String,
+      default: "",
+    },
+    modelId: {
+      type: String,
+      default: "",
+    },
+    createdAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
+const audiobookChapterSchema = new mongoose.Schema(
+  {
+    chapterIndex: {
+      type: Number,
+      default: 0,
+    },
+    title: {
+      type: String,
+      default: "",
+    },
+    script: {
+      type: String,
+      default: "",
+    },
+    audioUrl: {
+      type: String,
+      default: "",
+    },
+    duration: {
+      type: Number,
+      default: 0,
+    },
+    charCount: {
+      type: Number,
+      default: 0,
+    },
+    activeVersionId: {
+      type: String,
+      default: "",
+    },
+    versions: {
+      type: [audiobookChapterVersionSchema],
+      default: [],
+    },
+    status: {
+      type: String,
+      enum: ["empty", "queued", "generating", "complete", "failed"],
+      default: "empty",
+    },
+    error: {
+      type: String,
+      default: "",
+    },
+    updatedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
+const audiobookIntroSchema = new mongoose.Schema(
+  {
+    mode: {
+      type: String,
+      enum: ["none", "generated", "recorded"],
+      default: "none",
+    },
+    script: {
+      type: String,
+      default: "",
+      maxLength: [8000, "Intro script cannot exceed 8000 characters"],
+    },
+    audioUrl: {
+      type: String,
+      default: "",
+    },
+    duration: {
+      type: Number,
+      default: 0,
+    },
+    charCount: {
+      type: Number,
+      default: 0,
+    },
+    activeVersionId: {
+      type: String,
+      default: "",
+    },
+    versions: {
+      type: [audiobookChapterVersionSchema],
+      default: [],
+    },
+    updatedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
+const audiobookSchema = new mongoose.Schema(
+  {
+    voiceId: {
+      type: String,
+      default: "",
+    },
+    voiceName: {
+      type: String,
+      default: "",
+    },
+    modelId: {
+      type: String,
+      default: "",
+    },
+    status: {
+      type: String,
+      enum: ["empty", "queued", "generating", "complete", "failed"],
+      default: "empty",
+    },
+    jobId: {
+      type: String,
+      default: "",
+    },
+    progress: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    intro: {
+      type: audiobookIntroSchema,
+      default: () => ({}),
+    },
+    chapters: {
+      type: [audiobookChapterSchema],
+      default: [],
+    },
+    totalDuration: {
+      type: Number,
+      default: 0,
+    },
+    lastGeneratedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    _id: false,
+  }
+);
+
 const bookSchema = new mongoose.Schema(
   {
     userId: {
@@ -616,6 +800,10 @@ const bookSchema = new mongoose.Schema(
         type: Date,
         default: null,
       },
+    },
+    audiobook: {
+      type: audiobookSchema,
+      default: () => ({}),
     },
     bible: {
       type: bookBibleSchema,

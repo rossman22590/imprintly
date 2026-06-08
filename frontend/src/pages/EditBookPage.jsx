@@ -17,6 +17,7 @@ import {
   FileDown,
   FileText,
   FileType,
+  Headphones,
   Image,
   Library,
   Menu,
@@ -1265,10 +1266,11 @@ function EditBookPage() {
 
     try {
       const {
-        data: { content, stats },
+        data: { content, stats, chapterTitle: generatedChapterTitle },
       } = await axiosInstance.post(API_ENDPOINTS.AI.GENERATE_CHAPTER_CONTENT, {
         chapterTitle: chapter.title,
         chapterDescription: chapter.description || "",
+        chapterIndex: index,
         style: sourceBook.generation?.style || "Informative",
         provider,
         model:
@@ -1289,9 +1291,12 @@ function EditBookPage() {
         }),
       });
 
+      const updatedChapterTitle =
+        generatedChapterTitle?.trim() || chapter.title;
       const updatedChapters = [...sourceBook.chapters];
       updatedChapters[index] = {
         ...updatedChapters[index],
+        ...(generatedChapterTitle ? { title: updatedChapterTitle } : {}),
         content,
         generationStatus: "complete",
         wordCount: countWords(content),
@@ -1303,9 +1308,12 @@ function EditBookPage() {
       setBook(updatedBook);
 
       toast.dismiss(loadingToast);
-      toast.success(`${providerName} content generated for "${chapter.title}"`, {
-        duration: 3000,
-      });
+      toast.success(
+        `${providerName} content generated for "${updatedChapterTitle}"`,
+        {
+          duration: 3000,
+        }
+      );
 
       if (saveAfter) {
         return await saveBookSnapshot(updatedBook, false);
@@ -3094,6 +3102,21 @@ function EditBookPage() {
                 className="h-9 px-3"
               >
                 KDP
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  requestEditorNavigation(`/books/${bookId}/audiobook`)
+                }
+                icon={Headphones}
+                size="sm"
+                ariaLabel="Open Audiobook studio"
+                title="Open Audiobook studio"
+                className="h-9 px-3"
+              >
+                Audiobook
               </Button>
 
               <Dropdown
