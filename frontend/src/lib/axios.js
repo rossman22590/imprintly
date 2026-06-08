@@ -1,18 +1,6 @@
 import axios from "axios";
 import { API_BASE_URL } from "../utils/api-endpoints";
 
-function getCookieValue(name) {
-  if (typeof document === "undefined") return "";
-
-  const prefix = `${name}=`;
-  const cookie = document.cookie
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(prefix));
-
-  return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : "";
-}
-
 const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
@@ -27,18 +15,9 @@ const axiosInstance = axios.create({
 axiosInstance.interceptors.request.use(
   (config) => {
     const jwt = localStorage.getItem("token");
-    const method = (config.method || "get").toLowerCase();
 
     if (jwt) {
       config.headers.Authorization = `Bearer ${jwt}`;
-    }
-
-    if (!["get", "head", "options"].includes(method)) {
-      const csrfToken = getCookieValue("imprintly_csrf");
-
-      if (csrfToken) {
-        config.headers["X-CSRF-Token"] = csrfToken;
-      }
     }
 
     return config;

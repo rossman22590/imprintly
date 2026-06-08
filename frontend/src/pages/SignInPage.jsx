@@ -62,13 +62,20 @@ function SignInPage() {
     setIsLoading(true);
 
     try {
-      // login request
       const {
-        data: { user },
+        data: { token },
       } = await axiosInstance.post(API_ENDPOINTS.AUTH.LOGIN, trimmedData);
 
-      // update auth context
-      authenticateUser(user);
+      const { data: profileInfo } = await axiosInstance.get(
+        API_ENDPOINTS.PROFILE.GET,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      authenticateUser(token, profileInfo.user);
 
       toast.success("Welcome back!");
 

@@ -11,15 +11,13 @@ const clearStoredAuth = () => {
 };
 
 export function AuthContextProvider({ children }) {
-  // starting with isLoading as true since we need to check auth on mount!!
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
 
-  const authenticateUser = useCallback((userInfoOrToken, maybeUserInfo) => {
-    const userInfo = maybeUserInfo || userInfoOrToken;
-
-    clearStoredAuth();
+  const authenticateUser = useCallback((jwt, userInfo) => {
+    localStorage.setItem("token", jwt);
+    localStorage.setItem("user", JSON.stringify(userInfo));
     setIsAuthenticated(true);
     setUser(userInfo);
   }, []);
@@ -35,21 +33,18 @@ export function AuthContextProvider({ children }) {
         console.error("Error signing out:", error);
       });
 
-    // consumers can pass this callback to handle navigation
     callback?.();
   }, []);
 
-  const checkAuthStatus = useCallback(async () => {
+  const checkAuthStatus = useCallback(() => {
     setIsLoading(true);
 
     try {
-      const { data } = await axiosInstance.get(API_ENDPOINTS.PROFILE.GET, {
-        suppressAuthErrorLog: true,
-      });
-      const userInfo = data?.user;
+      const jwt = localStorage.getItem("token");
+      const stringifiedUser = localStorage.getItem("user");
 
-      if (userInfo) {
-        clearStoredAuth();
+      if (jwt && stringifiedUser) {
+        const userInfo = JSON.parse(stringifiedUser);
         setIsAuthenticated(true);
         setUser(userInfo);
       } else {
@@ -57,9 +52,7 @@ export function AuthContextProvider({ children }) {
         setUser(null);
       }
     } catch (error) {
-      if (error?.response?.status !== 401) {
-        console.error("Error checking auth status:", error);
-      }
+      console.error("Error checking auth status:", error);
       clearStoredAuth();
       setIsAuthenticated(false);
       setUser(null);
@@ -71,11 +64,11 @@ export function AuthContextProvider({ children }) {
   const updateUser = useCallback((updatedUserInfo) => {
     setUser((currentUser) => {
       const newUserInfo = { ...(currentUser || {}), ...updatedUserInfo };
+      localStorage.setItem("user", JSON.stringify(newUserInfo));
       return newUserInfo;
     });
   }, []);
 
-  // check auth status on mount
   useEffect(() => {
     checkAuthStatus();
   }, [checkAuthStatus]);
