@@ -1,5 +1,8 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const {
   buildBookDownloadLinks,
   serializePublicBook,
@@ -8,7 +11,24 @@ const {
   serializeV1Credits,
   serializeV1GenerationJob,
   serializeV1List,
+  uploadSourceFilesV1,
 } = require("./developer-api.controller");
+const { mapSourceUploadError } = require("../middlewares/upload.middleware");
+
+function mockRes() {
+  return {
+    statusCode: null,
+    body: null,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload) {
+      this.body = payload;
+      return this;
+    },
+  };
+}
 
 test("serializes developer API generation jobs without user IDs", () => {
   const createdAt = new Date("2026-01-02T00:00:00.000Z");
@@ -199,4 +219,71 @@ test("serializes public book fields without internal ownership data", () => {
   assert.equal(serialized.chapters[0].images[0].id, "image_1");
   assert.equal(Object.hasOwn(serialized, "userId"), false);
   assert.equal(Object.hasOwn(serialized, "__v"), false);
+});
+
+test("rejects source-file uploads with no files", async () => {
+  const res = mockRes();
+
+  await uploadSourceFilesV1({ files: [] }, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body.error, /No source files/);
+});
+
+test("builds source-file records from uploaded documents", async () => {
+  const tmpPath = path.join(
+    os.tmpdir(),
+    `bookify-src-test-${process.pid}.txt`
+  );
+  fs.writeFileSync(tmpPath, "Field notes: the tide came in at dawn.", "utf8");
+
+  try {
+    const res = mockRes();
+    await uploadSourceFilesV1(
+      {
+        files: [
+          {
+            path: tmpPath,
+            originalname: "notes.txt",
+            filename: path.basename(tmpPath),
+            mimetype: "text/plain",
+            size: fs.statSync(tmpPath).size,
+          },
+        ],
+      },
+      res
+    );
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.object, "source_files");
+    assert.equal(res.body.sourceFiles.length, 1);
+
+    const record = res.body.sourceFiles[0];
+    assert.equal(record.name, "notes.txt");
+    assert.equal(record.mimeType, "text/plain");
+    assert.match(record.url, /^\/uploads\//);
+    assert.match(record.extractedText, /tide came in at dawn/);
+  } finally {
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+  }
+});
+
+test("maps source upload errors to clear messages", () => {
+  const sizeErr = Object.assign(new Error("File too large"), {
+    name: "MulterError",
+    code: "LIMIT_FILE_SIZE",
+  });
+  Object.setPrototypeOf(sizeErr, require("multer").MulterError.prototype);
+
+  assert.match(mapSourceUploadError(sizeErr), /12MB or smaller/);
+
+  const countErr = Object.assign(new Error("Too many"), {
+    code: "LIMIT_FILE_COUNT",
+  });
+  Object.setPrototypeOf(countErr, require("multer").MulterError.prototype);
+
+  assert.match(mapSourceUploadError(countErr), /at most 6 source files/);
+
+  const filterErr = new Error("Only PDF, DOCX, ... are allowed.");
+  assert.equal(mapSourceUploadError(filterErr), "Only PDF, DOCX, ... are allowed.");
 });

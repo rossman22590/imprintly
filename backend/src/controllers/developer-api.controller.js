@@ -14,7 +14,9 @@ const {
   validateFullBookJobRequest,
 } = require("../utils/book-generation.jobs");
 const { getCreditSummary } = require("../utils/credits.service");
+const { buildSourceFileRecord } = require("../utils/book-source-documents");
 const Book = require("../models/Book");
+const fs = require("fs");
 
 const JOB_STATUSES = new Set([
   "queued",
@@ -325,6 +327,38 @@ async function listBooksV1(req, res) {
   }
 }
 
+async function uploadSourceFilesV1(req, res) {
+  const files = Array.isArray(req.files) ? req.files : [];
+
+  try {
+    if (files.length === 0) {
+      return res.status(400).json({
+        error:
+          "No source files provided. Send multipart/form-data with one or more `sourceFiles` fields.",
+      });
+    }
+
+    const sourceFiles = await Promise.all(files.map(buildSourceFileRecord));
+
+    return res.status(201).json({
+      object: "source_files",
+      message:
+        "Source files uploaded. Pass these objects as `sourceFiles` on a Gemini generation job.",
+      sourceFiles,
+    });
+  } catch (error) {
+    console.error("Error uploading developer API source files:", error);
+
+    files.forEach((file) => {
+      if (file?.path && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
+    });
+
+    return sendV1Error(res, error);
+  }
+}
+
 async function getCreditsV1(req, res) {
   try {
     const summary = await getCreditSummary(req.user.id, {
@@ -446,6 +480,7 @@ module.exports = {
   listBooksV1,
   listGenerationJobsV1,
   retryGenerationJobV1,
+  uploadSourceFilesV1,
   serializePublicBook,
   serializeV1Book,
   serializeV1BookSummary,

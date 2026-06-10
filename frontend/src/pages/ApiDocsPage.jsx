@@ -37,6 +37,7 @@ const ON_THIS_PAGE = [
   { id: "authentication", label: "Authentication" },
   { id: "credits", label: "Check credits" },
   { id: "generate", label: "Generate ebook" },
+  { id: "from-document", label: "Book from a document" },
   { id: "poll", label: "Poll job" },
   { id: "lists", label: "List jobs & books" },
   { id: "retrieve", label: "Retrieve book" },
@@ -58,6 +59,7 @@ const NAV_GROUPS = [
     items: [
       { id: "credits", label: "Check credits", icon: CreditCard },
       { id: "generate", label: "Generate ebook", icon: BookOpen },
+      { id: "from-document", label: "Book from a document", icon: FileText },
       { id: "poll", label: "Poll generation", icon: RefreshCw },
       { id: "lists", label: "List jobs & books", icon: ListChecks },
       { id: "retrieve", label: "Retrieve book", icon: Library },
@@ -165,6 +167,107 @@ const GENERATE_RESPONSE = `{
 const POLL_CURL = `curl "${API_BASE}/api/v1/generation-jobs/JOB_ID" \\
   -H "Authorization: Bearer ${API_KEY}"`;
 
+const ALL_PARAMS_CURL = `curl -X POST "${API_BASE}/api/v1/ebooks" \\
+  -H "Authorization: Bearer ${API_KEY}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "provider": "gemini",
+    "useGoogleSearch": true,
+
+    "title": "The Tides of Mars",
+    "topic": "A terraforming crew discovers the planet is already alive",
+    "description": "Hard sci-fi with an ensemble cast and a slow-burn mystery.",
+    "genre": "Sci-Fi",
+    "audience": "Adult science-fiction readers",
+    "language": "English",
+    "style": "Cinematic",
+    "chapterCount": 10,
+    "chapterLength": "large",
+    "includeTextGraphics": false,
+
+    "includeImages": true,
+    "imagesPerChapter": 2,
+    "imageModel": "gemini-3-pro-image-preview",
+    "imageSize": "2K",
+    "generateCover": true,
+    "coverModel": "gemini-3-pro-image-preview",
+    "coverImageSize": "2K",
+
+    "useBibleForInput": true,
+    "useBibleForImages": true,
+    "bible": {
+      "characters": "Capt. Ade Okafor — pragmatic, haunted. Dr. Lin Bao — xenobiologist.",
+      "worldRules": "No FTL. Comms to Earth lag 14 minutes. Dust storms season the plot.",
+      "styleGuide": "Tight third-person, present-tense action beats, restrained prose."
+    },
+    "visualBible": {
+      "enabled": true,
+      "palette": "rust-orange dust, teal habitat lighting, cold starlight",
+      "characters": "Okafor: dark skin, shaved head, scarred brow. Lin: wiry, goggles."
+    }
+  }'`;
+
+const SOURCE_UPLOAD_CURL = `# Step 1 — upload one or more documents (multipart/form-data).
+# Gemini only. Max 6 files, 12MB each. Types: PDF, DOCX, MD, TXT, HTML, CSV, RTF, JSON.
+curl -X POST "${API_BASE}/api/v1/source-files" \\
+  -H "Authorization: Bearer ${API_KEY}" \\
+  -F "sourceFiles=@./research.pdf" \\
+  -F "sourceFiles=@./interview-notes.md"`;
+
+const SOURCE_UPLOAD_RESPONSE = `{
+  "object": "source_files",
+  "message": "Source files uploaded. Pass these objects as \`sourceFiles\` on a Gemini generation job.",
+  "sourceFiles": [
+    {
+      "id": "0c4f...",
+      "name": "research.pdf",
+      "url": "/uploads/sourceFiles-1717000000000-123.pdf",
+      "mimeType": "application/pdf",
+      "size": 824133,
+      "extractedText": "Full extracted text...",
+      "textPreview": "First 1,800 characters..."
+    }
+  ]
+}`;
+
+const SOURCE_GEN_CURL = `# Step 2 — paste the returned objects straight into sourceFiles on a Gemini job.
+curl -X POST "${API_BASE}/api/v1/ebooks" \\
+  -H "Authorization: Bearer ${API_KEY}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "provider": "gemini",
+    "title": "Findings From the Field",
+    "topic": "Turn this research into a readable book",
+    "genre": "Nonfiction",
+    "chapterCount": 8,
+    "chapterLength": "medium",
+    "sourceFiles": [
+      {
+        "name": "research.pdf",
+        "url": "/uploads/sourceFiles-1717000000000-123.pdf",
+        "mimeType": "application/pdf",
+        "size": 824133,
+        "extractedText": "Full extracted text..."
+      }
+    ],
+    "generateBibleFromSource": true,
+    "includeImages": true,
+    "generateCover": true
+  }'`;
+
+const SOURCE_PARAMS_NOTE = `// Companion flags once you have sourceFiles (or a bookId that already has stored sources):
+//   "useSourceFiles": true,            // reuse the book's stored sources (with bookId)
+//   "regenerateFromSource": true,      // rebuild the book from them
+//   "regenerateOutlineFromSource": true,
+//   "generateBibleFromSource": true    // build the Book Bible from them first
+//
+// No upload? You can still inline text directly — "url" is then just a required label
+// and the PDF binary attachment is skipped (Gemini sees your text only):
+//   "sourceFiles": [{ "name": "notes.txt", "url": "/uploads/notes.txt", "mimeType": "text/plain", "extractedText": "..." }]
+//
+// Provide your own structure to skip AI outline generation entirely:
+//   "outline": [{ "title": "Landfall", "description": "Arrival; first anomaly." }, ...]`;
+
 const LIST_JOBS_CURL = `curl "${API_BASE}/api/v1/generation-jobs?status=failed&limit=20" \\
   -H "Authorization: Bearer ${API_KEY}"`;
 
@@ -258,6 +361,12 @@ const ENDPOINTS = [
     method: "POST",
     path: "/api/v1/generation-jobs",
     purpose: "Alias for creating the same full-book job.",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/source-files",
+    purpose:
+      "Upload documents (multipart) for Gemini grounding; returns objects to pass as `sourceFiles`.",
   },
   {
     method: "GET",
@@ -939,6 +1048,61 @@ function ApiDocsContent() {
             </section>
 
             <section
+              id="from-document"
+              className="scroll-mt-24 mt-14 border-t border-slate-100 pt-14"
+            >
+              <SectionHeader
+                eyebrow="Source documents"
+                title="Make a book from your own document"
+                description="Ground a Gemini book in your own files (research, notes, a draft). Upload the documents, then pass the returned objects into a generation job. Gemini only."
+              />
+
+              <EndpointCard
+                endpoint={findEndpoint("POST", "/api/v1/source-files")}
+              />
+
+              <div className="mt-4 space-y-4">
+                <CodeBlock label="Step 1 — upload" code={SOURCE_UPLOAD_CURL} />
+                <CodeBlock label="201 response" code={SOURCE_UPLOAD_RESPONSE} />
+                <CodeBlock label="Step 2 — generate" code={SOURCE_GEN_CURL} />
+                <CodeBlock label="companion flags" code={SOURCE_PARAMS_NOTE} />
+              </div>
+
+              <div className="mt-5 grid gap-4 md:grid-cols-3">
+                {[
+                  {
+                    icon: FileText,
+                    title: "What's accepted",
+                    text: "Up to 6 files, 12MB each: PDF, DOCX, Markdown, TXT, HTML, CSV, RTF, JSON. The response includes extracted text and a preview.",
+                  },
+                  {
+                    icon: ShieldCheck,
+                    title: "How Gemini reads them",
+                    text: "Extracted text grounds the outline and chapters. PDFs are also attached natively so Gemini sees the original document.",
+                  },
+                  {
+                    icon: Library,
+                    title: "Build the Book Bible",
+                    text: "Add generateBibleFromSource: true to distill characters, facts, and canon from your files before writing.",
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.title}
+                    className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+                  >
+                    <DocIcon icon={item.icon} className="size-5 text-violet-600" />
+                    <h3 className="mt-4 text-base font-black text-slate-950">
+                      {item.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      {item.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section
               id="poll"
               className="scroll-mt-24 mt-14 border-t border-slate-100 pt-14"
             >
@@ -1038,6 +1202,22 @@ function ApiDocsContent() {
                 false. And most invalid values do not error: they silently fall
                 back to the documented default. Hard 400/402/403/404 errors are
                 reserved for the cases in the error reference below.
+              </div>
+
+              <div className="mb-6">
+                <h3 className="mb-2 text-sm font-black text-slate-950">
+                  Full request — every common field
+                </h3>
+                <p className="mb-3 max-w-3xl text-sm leading-6 text-slate-500">
+                  A maximal Gemini job: AI-written outline, 10 long chapters, 2
+                  illustrations per chapter, a generated cover, and a Book Bible
+                  plus Visual Bible for character and art continuity. Drop any
+                  field to fall back to its default.
+                </p>
+                <CodeBlock label="curl — all parameters" code={ALL_PARAMS_CURL} />
+                <div className="mt-3">
+                  <CodeBlock label="optional add-ons" code={SOURCE_PARAMS_NOTE} />
+                </div>
               </div>
 
               <div className="space-y-5">

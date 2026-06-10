@@ -146,7 +146,52 @@ const uploadBookSourceFiles = multer({
   },
 }).array("sourceFiles", 8);
 
+// Developer API variant: caps at 6 files (the count generation actually uses) and
+// maps multer/filter errors to clear 400s instead of falling through to the
+// generic 500 handler with a misleading "Max 2MB" message.
+const API_SOURCE_FILE_LIMIT = 6;
+
+const apiSourceUpload = multer({
+  storage: storageEngine,
+  limits: {
+    files: API_SOURCE_FILE_LIMIT,
+    fileSize: 12 * 1024 * 1024,
+  },
+  fileFilter(req, file, callback) {
+    checkSourceFileType(file, callback);
+  },
+}).array("sourceFiles", API_SOURCE_FILE_LIMIT);
+
+function mapSourceUploadError(err) {
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return "Each source file must be 12MB or smaller.";
+    }
+    if (err.code === "LIMIT_FILE_COUNT") {
+      return `You can upload at most ${API_SOURCE_FILE_LIMIT} source files per request.`;
+    }
+    if (err.code === "LIMIT_UNEXPECTED_FILE") {
+      return "Unexpected upload field. Send files under the `sourceFiles` form field.";
+    }
+    return err.message;
+  }
+
+  return err.message || "Unsupported source file.";
+}
+
+function uploadApiSourceFiles(req, res, next) {
+  apiSourceUpload(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ error: mapSourceUploadError(err) });
+    }
+
+    return next();
+  });
+}
+
 module.exports = {
+  mapSourceUploadError,
+  uploadApiSourceFiles,
   uploadAvatarImage,
   uploadBookCoverImage,
   uploadBookSourceFiles,
