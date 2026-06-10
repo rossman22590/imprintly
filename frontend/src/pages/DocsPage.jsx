@@ -1640,14 +1640,26 @@ function DocsPage() {
 
               <div className="border-t border-slate-100 pt-6">
                 <p className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
-                  Public launch stack
+                  Set up before you share
                 </p>
                 <div className="space-y-2.5">
                   {[
-                    { icon: Type, text: "Profile name → pretty URLs" },
-                    { icon: Store, text: "Store Link → buy buttons" },
-                    { icon: Brush, text: "Theme → public colors" },
-                    { icon: ExternalLink, text: "Shelf + preview links" },
+                    {
+                      icon: Type,
+                      text: "Add your full name for a clean public URL.",
+                    },
+                    {
+                      icon: Store,
+                      text: "Add a Store Link to show buy buttons.",
+                    },
+                    {
+                      icon: Brush,
+                      text: "Pick a theme color for your public pages.",
+                    },
+                    {
+                      icon: ExternalLink,
+                      text: "Share your shelf or a single-book preview.",
+                    },
                   ].map((item) => (
                     <div key={item.text} className="flex items-start gap-2">
                       <DocIcon
