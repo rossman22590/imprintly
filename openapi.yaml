@@ -1,0 +1,988 @@
+openapi: 3.1.0
+info:
+  title: Bookify Developer API
+  version: "1.0.0"
+  summary: API-key-authenticated ebook generation, retrieval, and export.
+  description: |
+    Programmatic access to Bookify ebook generation lives under `/api/v1`.
+    All routes require `Authorization: Bearer book_sk_...`.
+
+    Generation is asynchronous: create a generation job, poll it until
+    `status` is `complete`, then retrieve or download the generated book.
+servers:
+  - url: https://api.bookify.myapps.ai
+    description: Production API
+  - url: http://localhost:3000
+    description: Local development
+security:
+  - bearerApiKey: []
+tags:
+  - name: Credits
+  - name: Generation jobs
+  - name: Books
+  - name: Downloads
+paths:
+  /api/v1/credits:
+    get:
+      tags: [Credits]
+      summary: Get credit balance
+      operationId: getCreditsV1
+      responses:
+        "200":
+          description: Current credit balance for the API key owner.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credits"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/generation-jobs:
+    post:
+      tags: [Generation jobs]
+      summary: Create an ebook generation job
+      operationId: createGenerationJobV1
+      description: |
+        Starts an async full-book generation job. Alias: `POST /api/v1/ebooks`.
+
+        Most invalid generation values silently fall back to defaults. Hard
+        errors are reserved for source files on non-Gemini jobs, insufficient
+        credits, invalid/foreign `bookId`, and authentication failures.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGenerationJobRequest"
+      responses:
+        "202":
+          description: Job accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerationJob"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/InsufficientCredits"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    get:
+      tags: [Generation jobs]
+      summary: List generation jobs
+      operationId: listGenerationJobsV1
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/GenerationJobStatus"
+          description: Optional status filter. Invalid values return 400.
+      responses:
+        "200":
+          description: Newest-first job list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerationJobList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/ebooks:
+    post:
+      tags: [Generation jobs]
+      summary: Create an ebook generation job
+      operationId: createEbookGenerationJobV1
+      description: Alias for `POST /api/v1/generation-jobs`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGenerationJobRequest"
+      responses:
+        "202":
+          description: Job accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerationJob"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/InsufficientCredits"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    get:
+      tags: [Books]
+      summary: List books
+      operationId: listBooksV1
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Newest-first book summaries. Chapter content is not included.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookSummaryList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/books:
+    get:
+      tags: [Books]
+      summary: List books
+      operationId: listBooksAliasV1
+      description: Alias for `GET /api/v1/ebooks`.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Newest-first book summaries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookSummaryList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/generation-jobs/{jobId}:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    get:
+      tags: [Generation jobs]
+      summary: Get a generation job
+      operationId: getGenerationJobV1
+      responses:
+        "200":
+          description: Job status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerationJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+    delete:
+      tags: [Generation jobs]
+      summary: Cancel a generation job
+      operationId: cancelGenerationJobV1
+      description: Complete, failed, or already-cancelled jobs are returned unchanged.
+      responses:
+        "200":
+          description: Cancellation requested or job already terminal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerationJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/generation-jobs/{jobId}/retry:
+    parameters:
+      - $ref: "#/components/parameters/JobId"
+    post:
+      tags: [Generation jobs]
+      summary: Retry failed job steps
+      operationId: retryGenerationJobV1
+      description: Creates a new job for failed/incomplete chapters and missing images.
+      responses:
+        "202":
+          description: Retry job accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerationJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/ebooks/{bookId}:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    get:
+      tags: [Books]
+      summary: Get a book
+      operationId: getBookV1
+      responses:
+        "200":
+          description: Full saved book, chapters, image assets, and download links.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/books/{bookId}:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    get:
+      tags: [Books]
+      summary: Get a book
+      operationId: getBookAliasV1
+      description: Alias for `GET /api/v1/ebooks/{bookId}`.
+      responses:
+        "200":
+          description: Full saved book, chapters, image assets, and download links.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/ebooks/{bookId}/pdf:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    get:
+      tags: [Downloads]
+      summary: Download PDF
+      operationId: exportBookPdfV1
+      responses:
+        "200":
+          description: PDF file.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/ebooks/{bookId}/epub:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    get:
+      tags: [Downloads]
+      summary: Download EPUB
+      operationId: exportBookEpubV1
+      responses:
+        "200":
+          description: EPUB file.
+          content:
+            application/epub+zip:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/books/{bookId}/pdf:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    get:
+      tags: [Downloads]
+      summary: Download PDF
+      operationId: exportBookPdfAliasV1
+      description: Alias for `GET /api/v1/ebooks/{bookId}/pdf`.
+      responses:
+        "200":
+          description: PDF file.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/books/{bookId}/epub:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    get:
+      tags: [Downloads]
+      summary: Download EPUB
+      operationId: exportBookEpubAliasV1
+      description: Alias for `GET /api/v1/ebooks/{bookId}/epub`.
+      responses:
+        "200":
+          description: EPUB file.
+          content:
+            application/epub+zip:
+              schema:
+                type: string
+                format: binary
+        "409":
+          $ref: "#/components/responses/Conflict"
+components:
+  securitySchemes:
+    bearerApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: book_sk
+      description: Personal API key created in Profile > API keys.
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Page size. Values are clamped into 1-100.
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      description: Number of records to skip. Negative or invalid values become 0.
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Generation job UUID.
+    BookId:
+      name: bookId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Mongo ObjectId for a book owned by the API key user.
+  responses:
+    BadRequest:
+      description: Invalid input that cannot be defaulted.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing, malformed, invalid, or revoked API key.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InsufficientCredits:
+      description: Not enough account credits for the requested job.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: Not enough credits. Required 24 credits, available 3.
+            code: INSUFFICIENT_CREDITS
+    Forbidden:
+      description: Banned account or resource belongs to another user.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Job or book not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: Book export is not ready because generation is still running, failed, or cancelled.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: IP-based API rate limit exceeded.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+    Credits:
+      type: object
+      required: [object, creditsLeft, credits]
+      properties:
+        object:
+          const: credits
+        creditsLeft:
+          type: number
+        credits:
+          type: object
+          properties:
+            balance:
+              type: number
+            lifetimeGranted:
+              type: number
+            lifetimeSpent:
+              type: number
+            monthlyAllowance:
+              type: number
+            monthlyPreset:
+              type: string
+            monthlyResetAt:
+              type: [string, "null"]
+              format: date-time
+            nextMonthlyResetAt:
+              type: [string, "null"]
+              format: date-time
+    GenerationJobStatus:
+      type: string
+      enum: [queued, generating, cancelling, cancelled, complete, failed]
+    Provider:
+      type: string
+      enum: [groq, gemini]
+      default: groq
+      description: Unknown values silently fall back to groq.
+    GroqTextModel:
+      type: string
+      enum:
+        - openai/gpt-oss-120b
+        - openai/gpt-oss-20b
+        - meta-llama/llama-4-scout-17b-16e-instruct
+        - llama-3.3-70b-versatile
+    GeminiImageModel:
+      type: string
+      enum:
+        - gemini-3.1-flash-image-preview
+        - gemini-3-pro-image-preview
+        - gemini-2.5-flash-image
+      default: gemini-3.1-flash-image-preview
+      description: Unknown values silently fall back to the default.
+    ImageSize:
+      type: string
+      enum: ["512", 1K, 2K, 4K]
+      default: 1K
+      description: Unknown values silently fall back to 1K.
+    BooleanLike:
+      description: Exactly `true`, `"true"`, `"yes"`, or number `1` counts as true. Everything else is false.
+      oneOf:
+        - type: boolean
+        - type: string
+        - type: number
+    SourceFile:
+      type: object
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          description: Must be an app `/uploads/...` URL.
+        mimeType:
+          type: string
+          enum:
+            - application/pdf
+            - application/json
+            - application/msword
+            - application/rtf
+            - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+            - text/csv
+            - text/html
+            - text/markdown
+            - text/plain
+            - text/rtf
+        size:
+          type: number
+          description: Files are capped at 12 MB at upload time.
+        extractedText:
+          type: string
+      additionalProperties: true
+    BookBible:
+      type: object
+      properties:
+        source:
+          type: string
+        characters:
+          type: string
+        locations:
+          type: string
+        worldRules:
+          type: string
+        timeline:
+          type: string
+        styleGuide:
+          type: string
+        canonFacts:
+          type: string
+        unresolvedThreads:
+          type: string
+        notes:
+          type: string
+      additionalProperties: true
+    VisualBible:
+      type: object
+      description: Visual canon for image consistency. Keys are normalized server-side.
+      additionalProperties: true
+    CreateGenerationJobRequest:
+      type: object
+      additionalProperties: true
+      description: |
+        All fields are optional. `apiSource` and `apiKeyId` are reserved and
+        overwritten by the server. Where aliases exist, the first listed field
+        wins when multiple aliases are sent.
+      properties:
+        provider:
+          $ref: "#/components/schemas/Provider"
+        model:
+          $ref: "#/components/schemas/GroqTextModel"
+        structureModel:
+          $ref: "#/components/schemas/GroqTextModel"
+        sectionModel:
+          $ref: "#/components/schemas/GroqTextModel"
+        useGoogleSearch:
+          $ref: "#/components/schemas/BooleanLike"
+        googleSearch:
+          $ref: "#/components/schemas/BooleanLike"
+        title:
+          type: string
+          maxLength: 200
+          description: HTML is stripped. If omitted, derived from topic.
+        topic:
+          type: string
+          maxLength: 300
+          description: Defaults to title when omitted.
+        description:
+          type: string
+          maxLength: 800
+        genre:
+          type: string
+          maxLength: 100
+          default: Nonfiction
+          description: |
+            Free-form. App dropdown values: Nonfiction, How-to Guide, Business,
+            Technical, Textbook, Self-help, Academic, Novel, Fiction, Fantasy,
+            Sci-Fi, Children's Book, Workbook, Course.
+
+            Genre controls the generation family: fiction, children, textbook,
+            learning, technical, practical, academic, or nonfiction.
+        audience:
+          type: string
+          maxLength: 200
+          default: General readers
+        language:
+          type: string
+          maxLength: 50
+          default: English
+        bookLanguage:
+          type: string
+          maxLength: 50
+        style:
+          type: string
+          maxLength: 50
+          default: Informative
+          description: Free-form writing style. App dropdown values are advisory, not exclusive.
+        chapterCount:
+          type: integer
+          minimum: 1
+          maximum: 26
+          default: 8
+          description: Clamped to 1-26. Children's books treat this as a page count, clamp 2-52, then convert to spreads.
+        chapterLength:
+          type: string
+          enum: [small, medium, large]
+          default: medium
+          description: Invalid values fall back to medium.
+        outline:
+          type: array
+          description: Supplies the chapter structure and skips outline generation. Length overrides chapterCount.
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              description:
+                type: string
+        bookId:
+          type: string
+          description: Existing book to regenerate into. Must belong to the API key user.
+        includeTextGraphics:
+          $ref: "#/components/schemas/BooleanLike"
+        includeGraphics:
+          $ref: "#/components/schemas/BooleanLike"
+        allowTextGraphics:
+          $ref: "#/components/schemas/BooleanLike"
+        includeImages:
+          $ref: "#/components/schemas/BooleanLike"
+        generateImages:
+          $ref: "#/components/schemas/BooleanLike"
+        imagesPerChapter:
+          type: integer
+          minimum: 1
+          maximum: 4
+          default: 1
+          description: Clamped into 1-4. Aliases are `chapterImageCount` and `imageCountPerChapter`.
+        chapterImageCount:
+          type: integer
+          minimum: 1
+          maximum: 4
+        imageCountPerChapter:
+          type: integer
+          minimum: 1
+          maximum: 4
+        generateCover:
+          $ref: "#/components/schemas/BooleanLike"
+        includeCover:
+          $ref: "#/components/schemas/BooleanLike"
+        imageModel:
+          $ref: "#/components/schemas/GeminiImageModel"
+        coverModel:
+          $ref: "#/components/schemas/GeminiImageModel"
+        imageSize:
+          $ref: "#/components/schemas/ImageSize"
+        coverImageSize:
+          $ref: "#/components/schemas/ImageSize"
+        sourceFiles:
+          type: array
+          maxItems: 6
+          description: Gemini only. Invalid entries are silently dropped. With Groq, source files return 400.
+          items:
+            $ref: "#/components/schemas/SourceFile"
+        useSourceFiles:
+          $ref: "#/components/schemas/BooleanLike"
+        regenerateFromSource:
+          $ref: "#/components/schemas/BooleanLike"
+        regenerateOutlineFromSource:
+          $ref: "#/components/schemas/BooleanLike"
+        bible:
+          $ref: "#/components/schemas/BookBible"
+        useBibleForInput:
+          $ref: "#/components/schemas/BooleanLike"
+        useBible:
+          $ref: "#/components/schemas/BooleanLike"
+        generateBibleFromSource:
+          $ref: "#/components/schemas/BooleanLike"
+        generateBibleFromSources:
+          $ref: "#/components/schemas/BooleanLike"
+        generateBibleFromDocuments:
+          $ref: "#/components/schemas/BooleanLike"
+        visualBible:
+          $ref: "#/components/schemas/VisualBible"
+        useBibleForImages:
+          $ref: "#/components/schemas/BooleanLike"
+    GenerationJob:
+      type: object
+      required: [object, id, status]
+      properties:
+        object:
+          const: generation_job
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/GenerationJobStatus"
+        bookId:
+          type: [string, "null"]
+        provider:
+          type: string
+        progress:
+          type: [object, "null"]
+          properties:
+            total:
+              type: number
+            completed:
+              type: number
+            failed:
+              type: number
+            currentChapterIndex:
+              type: [number, "null"]
+            currentChapterTitle:
+              type: string
+            message:
+              type: string
+        failedChapters:
+          type: array
+          items:
+            type: object
+        error:
+          type: string
+        createdAt:
+          type: [string, "null"]
+          format: date-time
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        completedAt:
+          type: [string, "null"]
+          format: date-time
+    ListEnvelope:
+      type: object
+      required: [object, data, count, limit, offset, hasMore]
+      properties:
+        object:
+          const: list
+        count:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        hasMore:
+          type: boolean
+          description: True when another page exists. Request it with `offset += limit`.
+    GenerationJobList:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/GenerationJob"
+    DownloadLink:
+      type: object
+      properties:
+        url:
+          type: string
+        method:
+          const: GET
+        contentType:
+          type: string
+        auth:
+          const: Bearer API key
+    DownloadLinks:
+      type: object
+      properties:
+        pdf:
+          $ref: "#/components/schemas/DownloadLink"
+        epub:
+          $ref: "#/components/schemas/DownloadLink"
+    ImageAsset:
+      type: object
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        prompt:
+          type: string
+        alt:
+          type: string
+        model:
+          type: string
+        mimeType:
+          type: string
+        aspectRatio:
+          type: string
+        imageSize:
+          type: string
+        source:
+          type: string
+        createdAt:
+          type: [string, "null"]
+          format: date-time
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+    Chapter:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+        generationStatus:
+          type: string
+        wordCount:
+          type: number
+        outlinePath:
+          type: array
+          items:
+            type: string
+        generationStats:
+          type: [object, "null"]
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImageAsset"
+        createdAt:
+          type: [string, "null"]
+          format: date-time
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+    PublicBook:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        subtitle:
+          type: string
+        author:
+          type: string
+        genre:
+          type: string
+        audience:
+          type: string
+        language:
+          type: string
+        status:
+          type: string
+        coverImage:
+          type: string
+        coverGeneration:
+          type: [object, "null"]
+        chapters:
+          type: array
+          items:
+            $ref: "#/components/schemas/Chapter"
+        generation:
+          type: [object, "null"]
+        kdp:
+          type: [object, "null"]
+        bible:
+          type: [object, "null"]
+        visualBible:
+          type: [object, "null"]
+        createdAt:
+          type: [string, "null"]
+          format: date-time
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+    BookResponse:
+      type: object
+      required: [object, id, book, downloads]
+      properties:
+        object:
+          const: book
+        id:
+          type: string
+        status:
+          type: string
+        book:
+          $ref: "#/components/schemas/PublicBook"
+        downloads:
+          $ref: "#/components/schemas/DownloadLinks"
+    BookSummary:
+      type: object
+      required: [object, id]
+      properties:
+        object:
+          const: book_summary
+        id:
+          type: string
+        title:
+          type: string
+        subtitle:
+          type: string
+        author:
+          type: string
+        genre:
+          type: string
+        audience:
+          type: string
+        language:
+          type: string
+        status:
+          type: string
+          description: Generation status, or `manual`.
+        bookStatus:
+          type: string
+          description: Draft/published book status.
+        coverImage:
+          type: string
+        chapterCount:
+          type: integer
+        createdAt:
+          type: [string, "null"]
+          format: date-time
+        updatedAt:
+          type: [string, "null"]
+          format: date-time
+        downloads:
+          $ref: "#/components/schemas/DownloadLinks"
+    BookSummaryList:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/BookSummary"

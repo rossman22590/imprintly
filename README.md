@@ -237,6 +237,22 @@ imprintly/
 - `GET /api/exports/:bookId/pdf` - Export as PDF
 - `GET /api/exports/:bookId/docx` - Export as DOCX
 
+### Developer API (v1)
+
+A public, API-key-authenticated REST API for programmatic book generation lives under `/api/v1`. Create a key in the web app (Profile → API keys) and send it as `Authorization: Bearer book_sk_...`.
+
+- `GET /api/v1/credits` - Credit balance
+- `POST /api/v1/generation-jobs` - Start an async book generation job
+- `GET /api/v1/generation-jobs` - List jobs (filter by `status`, paginate with `limit`/`offset`)
+- `GET /api/v1/generation-jobs/:jobId` - Poll a job
+- `DELETE /api/v1/generation-jobs/:jobId` - Cancel a job
+- `POST /api/v1/generation-jobs/:jobId/retry` - Retry failed chapters
+- `GET /api/v1/ebooks` - List your books (summaries with download links)
+- `GET /api/v1/ebooks/:bookId` - Full book with chapters
+- `GET /api/v1/ebooks/:bookId/pdf` / `GET /api/v1/ebooks/:bookId/epub` - Download exports
+
+See **[API.md](./API.md)** for the complete reference: every accepted parameter (engine/provider selection, image models and sizes, source documents, Book Bible), allowed vs. rejected values, error codes, and end-to-end examples. Use **[openapi.yaml](./openapi.yaml)** for generated clients, API explorers, and contract checks.
+
 ---
 
 ## 🌐 Deployment

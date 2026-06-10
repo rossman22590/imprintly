@@ -124,11 +124,7 @@ const router = createBrowserRouter([
       },
       {
         path: "api-docs",
-        element: routeElement(
-          <ProtectedRoute>
-            <ApiDocsPage />
-          </ProtectedRoute>
-        ),
+        element: routeElement(<ApiDocsPage />),
       },
       {
         path: "jobs",

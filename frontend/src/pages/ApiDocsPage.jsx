@@ -21,7 +21,10 @@ import {
   ShieldCheck,
   Terminal,
 } from "lucide-react";
+import { LogoIcon } from "../components";
+import { useAuthContext } from "../contexts/AuthContext";
 import DashboardLayout from "../layouts/DashboardLayout";
+import { BOOK_GENRES, WRITING_STYLES } from "../utils/constants";
 
 const PRODUCTION_API_BASE = "https://api.bookify.myapps.ai";
 const API_BASE = (
@@ -35,8 +38,10 @@ const ON_THIS_PAGE = [
   { id: "credits", label: "Check credits" },
   { id: "generate", label: "Generate ebook" },
   { id: "poll", label: "Poll job" },
+  { id: "lists", label: "List jobs & books" },
   { id: "retrieve", label: "Retrieve book" },
   { id: "downloads", label: "Download files" },
+  { id: "parameters", label: "Parameters" },
   { id: "errors", label: "Errors" },
 ];
 
@@ -54,19 +59,78 @@ const NAV_GROUPS = [
       { id: "credits", label: "Check credits", icon: CreditCard },
       { id: "generate", label: "Generate ebook", icon: BookOpen },
       { id: "poll", label: "Poll generation", icon: RefreshCw },
+      { id: "lists", label: "List jobs & books", icon: ListChecks },
       { id: "retrieve", label: "Retrieve book", icon: Library },
       { id: "downloads", label: "PDF and EPUB", icon: Download },
     ],
   },
   {
     title: "Reference",
-    items: [{ id: "errors", label: "Errors", icon: AlertTriangle }],
+    items: [
+      { id: "parameters", label: "Parameters", icon: Code2 },
+      { id: "errors", label: "Errors", icon: AlertTriangle },
+    ],
   },
 ];
 
 const QUICK_LINKS = [
   { label: "Manage API Keys", to: "/profile", icon: KeyRound },
   { label: "Main Docs", to: "/docs", icon: FileText },
+];
+
+const GENRE_FAMILY_ROWS = [
+  {
+    family: "Fiction",
+    matches:
+      "Novel, Novella, Fiction, Fantasy, Sci-Fi, Science Fiction, Romance, Thriller, Mystery, Horror, Literary Fiction, Historical Fiction, Young Adult, YA",
+    behavior:
+      "Story-driven chapters with scene work, POV, dialogue, conflict, reversals, and narrative continuity.",
+  },
+  {
+    family: "Children",
+    matches:
+      "Children's Book, kids book, picture book, storybook, early reader, or any custom genre containing those terms",
+    behavior:
+      "Two-page illustrated storybook scenes. chapterCount is treated as an interior page count from 2 to 52, then converted to spreads.",
+  },
+  {
+    family: "Textbook",
+    matches:
+      "Textbook, text book, school textbook, college textbook, academic textbook, course textbook",
+    behavior:
+      "Formal textbook chapters with objectives, key terms, definitions, examples, summaries, and review questions.",
+  },
+  {
+    family: "Learning",
+    matches:
+      "Workbook, worksheet, activity book, Course, study guide, lesson book, curriculum, training manual, journal, planner",
+    behavior:
+      "Interactive learning modules with exercises, reflection prompts, worksheet space, and practice tasks.",
+  },
+  {
+    family: "Technical",
+    matches: "Technical",
+    behavior:
+      "Precise technical chapters with prerequisites, examples, tradeoffs, implementation detail, and troubleshooting.",
+  },
+  {
+    family: "Practical",
+    matches: "How-to Guide, Self-help, Business",
+    behavior:
+      "Outcome-driven guide chapters with steps, examples, decisions, common mistakes, and applied takeaways.",
+  },
+  {
+    family: "Academic",
+    matches: "Academic",
+    behavior:
+      "Rigorous academic-style chapters with definitions, context, evidence, counterpoints, and careful reasoning.",
+  },
+  {
+    family: "Nonfiction",
+    matches: "Nonfiction or any custom value that does not match another family",
+    behavior:
+      "Polished explanatory ebook chapters with examples, implications, and a coherent reader journey.",
+  },
 ];
 
 const GENERATE_CURL = `curl -X POST "${API_BASE}/api/v1/ebooks" \\
@@ -100,6 +164,36 @@ const GENERATE_RESPONSE = `{
 
 const POLL_CURL = `curl "${API_BASE}/api/v1/generation-jobs/JOB_ID" \\
   -H "Authorization: Bearer ${API_KEY}"`;
+
+const LIST_JOBS_CURL = `curl "${API_BASE}/api/v1/generation-jobs?status=failed&limit=20" \\
+  -H "Authorization: Bearer ${API_KEY}"`;
+
+const LIST_BOOKS_CURL = `curl "${API_BASE}/api/v1/ebooks?limit=20&offset=0" \\
+  -H "Authorization: Bearer ${API_KEY}"`;
+
+const LIST_BOOKS_RESPONSE = `{
+  "object": "list",
+  "data": [
+    {
+      "object": "book_summary",
+      "id": "BOOK_ID",
+      "title": "My Generated Ebook",
+      "author": "Ross",
+      "genre": "Nonfiction",
+      "status": "complete",
+      "bookStatus": "draft",
+      "chapterCount": 6,
+      "downloads": {
+        "pdf": { "url": "${API_BASE}/api/v1/books/BOOK_ID/pdf" },
+        "epub": { "url": "${API_BASE}/api/v1/books/BOOK_ID/epub" }
+      }
+    }
+  ],
+  "count": 1,
+  "limit": 20,
+  "offset": 0,
+  "hasMore": false
+}`;
 
 const CREDITS_CURL = `curl "${API_BASE}/api/v1/credits" \\
   -H "Authorization: Bearer ${API_KEY}"`;
@@ -172,6 +266,12 @@ const ENDPOINTS = [
   },
   {
     method: "GET",
+    path: "/api/v1/generation-jobs",
+    purpose:
+      "List your jobs, newest first. Filter with `status`, paginate with `limit` and `offset`.",
+  },
+  {
+    method: "GET",
     path: "/api/v1/generation-jobs/:jobId",
     purpose: "Poll status until `status` is `complete` and `bookId` is set.",
   },
@@ -184,6 +284,12 @@ const ENDPOINTS = [
     method: "POST",
     path: "/api/v1/generation-jobs/:jobId/retry",
     purpose: "Retry failed generation steps for an existing job.",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/ebooks",
+    purpose:
+      "List your books as lightweight summaries with download links. Chapter content is not included.",
   },
   {
     method: "GET",
@@ -208,7 +314,203 @@ function findEndpoint(method, path) {
   );
 }
 
+const PARAM_GROUPS = [
+  {
+    title: "Engine selection",
+    params: [
+      {
+        name: "provider",
+        allowed: '"groq" | "gemini"',
+        fallback: '"groq"',
+        notes: "Unknown values silently fall back to groq.",
+      },
+      {
+        name: "model / structureModel / sectionModel",
+        allowed:
+          "openai/gpt-oss-120b, openai/gpt-oss-20b, meta-llama/llama-4-scout-17b-16e-instruct, llama-3.3-70b-versatile",
+        fallback: "openai/gpt-oss-120b",
+        notes:
+          "Groq only. Gemini text models are configured server-side and cannot be picked per request.",
+      },
+      {
+        name: "useGoogleSearch",
+        allowed: "boolean",
+        fallback: "false",
+        notes: "Gemini only — grounded outlines and content. Alias: googleSearch.",
+      },
+    ],
+  },
+  {
+    title: "Book definition",
+    params: [
+      {
+        name: "title / topic / description",
+        allowed: "strings",
+        fallback: "—",
+        notes: "Truncated to 200 / 300 / 800 characters; HTML is stripped.",
+      },
+      {
+        name: "genre",
+        allowed:
+          `${BOOK_GENRES.join(", ")} — or any custom string (max 100 chars)`,
+        fallback: '"Nonfiction"',
+        notes:
+          "Uses the same dropdown options as the create-book form, but the API also accepts custom values. The value is matched into the genre families below.",
+      },
+      {
+        name: "audience",
+        allowed: "string (max 200 chars)",
+        fallback: '"General readers"',
+        notes: "",
+      },
+      {
+        name: "language",
+        allowed: "string (max 50 chars)",
+        fallback: '"English"',
+        notes: "Alias: bookLanguage.",
+      },
+      {
+        name: "style",
+        allowed: "string (max 50 chars)",
+        fallback: '"Informative"',
+        notes: `Free-form. The app dropdown offers: ${WRITING_STYLES.join(", ")}.`,
+      },
+      {
+        name: "chapterCount",
+        allowed: "1–26",
+        fallback: "8",
+        notes:
+          "Clamped into range. Children's books treat it as a page count (2–52) and build two-page spreads.",
+      },
+      {
+        name: "chapterLength",
+        allowed: '"small" | "medium" | "large"',
+        fallback: '"medium"',
+        notes:
+          "~1,000–1,600 / 2,000–3,000 / 3,500–5,000 words. Invalid values fall back to medium.",
+      },
+      {
+        name: "outline",
+        allowed: "array of { title, description }",
+        fallback: "generated",
+        notes:
+          "Supplies the chapter structure and skips outline generation. Its length overrides chapterCount.",
+      },
+      {
+        name: "bookId",
+        allowed: "ID of a book you own",
+        fallback: "new book",
+        notes: "404 if unknown, 403 if it belongs to someone else.",
+      },
+      {
+        name: "includeTextGraphics",
+        allowed: "boolean",
+        fallback: "false",
+        notes:
+          "Text-based diagrams and figures. Aliases: includeGraphics, allowTextGraphics.",
+      },
+    ],
+  },
+  {
+    title: "Images — always generated by Gemini, even with groq text",
+    params: [
+      {
+        name: "includeImages",
+        allowed: "boolean",
+        fallback: "false",
+        notes: "Chapter illustrations. Alias: generateImages.",
+      },
+      {
+        name: "imagesPerChapter",
+        allowed: "1–4",
+        fallback: "1",
+        notes: "Clamped into range. Aliases: chapterImageCount, imageCountPerChapter.",
+      },
+      {
+        name: "generateCover",
+        allowed: "boolean",
+        fallback: "false",
+        notes: "Alias: includeCover. Covers always render at a 2:3 aspect ratio.",
+      },
+      {
+        name: "imageModel / coverModel",
+        allowed:
+          "gemini-3.1-flash-image-preview, gemini-3-pro-image-preview, gemini-2.5-flash-image",
+        fallback: "gemini-3.1-flash-image-preview",
+        notes: "Unknown models silently fall back to the default.",
+      },
+      {
+        name: "imageSize / coverImageSize",
+        allowed: '"512" | "1K" | "2K" | "4K"',
+        fallback: '"1K"',
+        notes: "Unknown sizes silently fall back to 1K.",
+      },
+    ],
+  },
+  {
+    title: "Source documents — Gemini only (400 with groq)",
+    params: [
+      {
+        name: "sourceFiles",
+        allowed: "array, max 6 entries",
+        fallback: "[]",
+        notes:
+          "Each: { name, url, mimeType, size }. PDF, DOCX, Markdown, TXT, HTML, CSV, JSON, RTF. Invalid entries are silently dropped; files are capped at 12MB at upload time.",
+      },
+      {
+        name: "useSourceFiles",
+        allowed: "boolean",
+        fallback: "true when bookId has stored sources",
+        notes: "Send false to ignore the book's stored source files.",
+      },
+      {
+        name: "regenerateFromSource / regenerateOutlineFromSource",
+        allowed: "boolean",
+        fallback: "false",
+        notes: "Regenerate the book (or just its outline) from stored sources.",
+      },
+    ],
+  },
+  {
+    title: "Book Bible & Visual Bible",
+    params: [
+      {
+        name: "bible",
+        allowed: "object",
+        fallback: "book's stored bible",
+        notes:
+          "String keys: source, characters, locations, worldRules, timeline, styleGuide, canonFacts, unresolvedThreads, notes.",
+      },
+      {
+        name: "useBibleForInput",
+        allowed: "boolean",
+        fallback: "true",
+        notes:
+          "The only flag that defaults ON — send false to exclude the Book Bible from generation context. Alias: useBible.",
+      },
+      {
+        name: "generateBibleFromSource",
+        allowed: "boolean",
+        fallback: "false",
+        notes:
+          "Builds the Book Bible from sourceFiles before writing. Aliases: generateBibleFromSources, generateBibleFromDocuments.",
+      },
+      {
+        name: "visualBible / useBibleForImages",
+        allowed: "object / boolean",
+        fallback: "stored / false",
+        notes: "Visual canon (characters, palette, style) for image consistency.",
+      },
+    ],
+  },
+];
+
 const ERRORS = [
+  {
+    code: "400",
+    title: "Invalid input",
+    text: "Malformed book IDs, source files on a non-Gemini job, or an invalid `status` list filter. Most other invalid values silently fall back to defaults instead.",
+  },
   {
     code: "401",
     title: "Missing or invalid API key",
@@ -233,6 +535,11 @@ const ERRORS = [
     code: "409",
     title: "Export not ready",
     text: "PDF and EPUB downloads are blocked while a generated book is queued, generating, failed, or cancelled.",
+  },
+  {
+    code: "429",
+    title: "Rate limited",
+    text: "All `/api` traffic shares a limit of 600 requests per 15 minutes. Standard `RateLimit-*` headers are returned.",
   },
 ];
 
@@ -294,6 +601,106 @@ function CodeBlock({ label, code }) {
   );
 }
 
+function ParamTable({ group }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 px-4 py-3 text-sm font-black text-slate-950">
+        {group.title}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 text-xs font-bold uppercase tracking-wider text-slate-400">
+              <th className="px-4 py-2.5">Field</th>
+              <th className="px-4 py-2.5">Allowed</th>
+              <th className="px-4 py-2.5">Default</th>
+              <th className="px-4 py-2.5">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {group.params.map((param) => (
+              <tr
+                key={param.name}
+                className="border-b border-slate-50 align-top last:border-b-0"
+              >
+                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-bold text-slate-900">
+                  {param.name}
+                </td>
+                <td className="px-4 py-3 text-xs leading-5 text-slate-600">
+                  {param.allowed}
+                </td>
+                <td className="px-4 py-3 font-mono text-xs text-slate-600">
+                  {param.fallback}
+                </td>
+                <td className="px-4 py-3 text-xs leading-5 text-slate-500">
+                  {param.notes}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function OptionChips({ title, options }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h3 className="text-sm font-black text-slate-950">{title}</h3>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {options.map((option) => (
+          <code
+            key={option}
+            className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700"
+          >
+            {option}
+          </code>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GenreFamilyTable() {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 px-4 py-3 text-sm font-black text-slate-950">
+        How genre changes generation
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-100 text-xs font-bold uppercase tracking-wider text-slate-400">
+              <th className="px-4 py-2.5">Family</th>
+              <th className="px-4 py-2.5">Matched values</th>
+              <th className="px-4 py-2.5">Behavior</th>
+            </tr>
+          </thead>
+          <tbody>
+            {GENRE_FAMILY_ROWS.map((row) => (
+              <tr
+                key={row.family}
+                className="border-b border-slate-50 align-top last:border-b-0"
+              >
+                <td className="whitespace-nowrap px-4 py-3 text-xs font-bold text-slate-900">
+                  {row.family}
+                </td>
+                <td className="px-4 py-3 text-xs leading-5 text-slate-600">
+                  {row.matches}
+                </td>
+                <td className="px-4 py-3 text-xs leading-5 text-slate-500">
+                  {row.behavior}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function EndpointCard({ endpoint }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -312,9 +719,42 @@ function EndpointCard({ endpoint }) {
   );
 }
 
-function ApiDocsPage() {
+function PublicApiDocsShell({ children }) {
   return (
-    <DashboardLayout>
+    <div className="min-h-screen bg-gray-50">
+      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-gray-200 bg-white/90 px-4 backdrop-blur-md md:h-16 md:px-6">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 rounded-lg font-bold text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+        >
+          <span className="flex size-8 items-center justify-center rounded-lg bg-linear-to-br from-violet-400 to-violet-500 text-white shadow-lg shadow-violet-500/20">
+            <LogoIcon className="size-5" />
+          </span>
+          <span className="text-lg">Bookify</span>
+        </Link>
+
+        <div className="flex items-center gap-2">
+          <Link
+            to="/login"
+            className="inline-flex h-10 items-center rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+          >
+            Sign in
+          </Link>
+          <Link
+            to="/register"
+            className="inline-flex h-10 items-center rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+          >
+            Create account
+          </Link>
+        </div>
+      </header>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+function ApiDocsContent() {
+  return (
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="grid gap-6 bg-[radial-gradient(circle_at_15%_15%,rgba(124,58,237,0.14),transparent_20rem),linear-gradient(135deg,#ffffff,#f8fafc)] p-6 md:grid-cols-[1fr_auto] md:items-end lg:p-8">
@@ -326,8 +766,9 @@ function ApiDocsPage() {
                 Generate ebooks with your own key
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 md:text-base">
-                Create full-book jobs, poll generation status, retrieve the saved
-                book, and download PDF or EPUB files from `/api/v1`.
+                Create full-book jobs, poll generation status, list your jobs
+                and books, retrieve the saved book, and download PDF or EPUB
+                files from `/api/v1`.
               </p>
             </div>
 
@@ -516,6 +957,31 @@ function ApiDocsPage() {
             </section>
 
             <section
+              id="lists"
+              className="scroll-mt-24 mt-14 border-t border-slate-100 pt-14"
+            >
+              <SectionHeader
+                eyebrow="Lists"
+                title="List your jobs and books"
+                description="Lost an ID? Both resources are listable, newest first. `hasMore: true` means another page exists — request it with `offset += limit` (limit 1-100, default 20). Jobs accept a `status` filter: queued, generating, cancelling, cancelled, complete, or failed."
+              />
+
+              <div className="grid gap-3">
+                <EndpointCard
+                  endpoint={findEndpoint("GET", "/api/v1/generation-jobs")}
+                />
+                <EndpointCard endpoint={findEndpoint("GET", "/api/v1/ebooks")} />
+              </div>
+              <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                <CodeBlock label="curl — failed jobs" code={LIST_JOBS_CURL} />
+                <CodeBlock label="curl — your books" code={LIST_BOOKS_CURL} />
+              </div>
+              <div className="mt-4">
+                <CodeBlock label="200 response" code={LIST_BOOKS_RESPONSE} />
+              </div>
+            </section>
+
+            <section
               id="retrieve"
               className="scroll-mt-24 mt-14 border-t border-slate-100 pt-14"
             >
@@ -549,6 +1015,40 @@ function ApiDocsPage() {
               <div className="mt-4 grid gap-4 xl:grid-cols-2">
                 <CodeBlock label="PDF" code={PDF_CURL} />
                 <CodeBlock label="EPUB" code={EPUB_CURL} />
+              </div>
+            </section>
+
+            <section
+              id="parameters"
+              className="scroll-mt-24 mt-14 border-t border-slate-100 pt-14"
+            >
+              <SectionHeader
+                eyebrow="Reference"
+                title="Generation job parameters"
+                description="Every field accepted by POST /api/v1/ebooks, with allowed values, defaults, and what happens when a value is invalid."
+              />
+
+              <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
+                <div className="mb-2 flex items-center gap-2 font-black">
+                  <AlertTriangle className="size-4" />
+                  Two rules to know
+                </div>
+                Boolean flags accept exactly true, "true", "yes", or the number
+                1 — anything else (including "1" as a string) is treated as
+                false. And most invalid values do not error: they silently fall
+                back to the documented default. Hard 400/402/403/404 errors are
+                reserved for the cases in the error reference below.
+              </div>
+
+              <div className="space-y-5">
+                <OptionChips
+                  title="Create-book genre dropdown values"
+                  options={BOOK_GENRES}
+                />
+                <GenreFamilyTable />
+                {PARAM_GROUPS.map((group) => (
+                  <ParamTable key={group.title} group={group} />
+                ))}
               </div>
             </section>
 
@@ -639,8 +1139,18 @@ function ApiDocsPage() {
           </aside>
         </div>
       </main>
-    </DashboardLayout>
   );
+}
+
+function ApiDocsPage() {
+  const { isAuthenticated } = useAuthContext();
+  const content = <ApiDocsContent />;
+
+  if (isAuthenticated) {
+    return <DashboardLayout>{content}</DashboardLayout>;
+  }
+
+  return <PublicApiDocsShell>{content}</PublicApiDocsShell>;
 }
 
 export default ApiDocsPage;

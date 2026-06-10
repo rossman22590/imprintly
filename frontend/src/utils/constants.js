@@ -147,7 +147,6 @@ export const BOOK_GENRES = [
   "Textbook",
   "Self-help",
   "Academic",
-  "Textbook",
   "Novel",
   "Fiction",
   "Fantasy",

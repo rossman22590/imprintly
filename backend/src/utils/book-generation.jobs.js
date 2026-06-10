@@ -632,11 +632,23 @@ async function validateFullBookJobRequest({ userId, payload = {} }) {
   }
 }
 
-async function listGenerationJobs(userId, { limit = 50 } = {}) {
-  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
-  const jobs = await GenerationJob.find({ userId })
+async function listGenerationJobs(
+  userId,
+  { limit = 50, offset = 0, status = "", maxLimit = 100 } = {}
+) {
+  const safeMaxLimit = Math.max(Number(maxLimit) || 100, 1);
+  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), safeMaxLimit);
+  const safeOffset = Math.max(Number(offset) || 0, 0);
+  const query = { userId };
+
+  if (status) {
+    query.status = status;
+  }
+
+  const jobs = await GenerationJob.find(query)
     .populate("bookId", "title author")
     .sort({ createdAt: -1 })
+    .skip(safeOffset)
     .limit(safeLimit);
 
   return jobs.map(publicJob);

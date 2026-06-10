@@ -4,8 +4,10 @@ const {
   buildBookDownloadLinks,
   serializePublicBook,
   serializeV1Book,
+  serializeV1BookSummary,
   serializeV1Credits,
   serializeV1GenerationJob,
+  serializeV1List,
 } = require("./developer-api.controller");
 
 test("serializes developer API generation jobs without user IDs", () => {
@@ -95,6 +97,79 @@ test("serializes retrieved books with download links", () => {
   assert.equal(Object.hasOwn(serialized.book, "previewShare"), false);
   assert.equal(serialized.downloads.pdf.method, "GET");
   assert.equal(serialized.downloads.epub.method, "GET");
+});
+
+test("serializes book summaries without chapter content or ownership data", () => {
+  const req = {
+    protocol: "https",
+    get(name) {
+      return {
+        host: "api.example.com",
+      }[name.toLowerCase()];
+    },
+  };
+  const serialized = serializeV1BookSummary(req, {
+    _id: { toString: () => "book_123" },
+    userId: "user_123",
+    title: "Generated Book",
+    author: "Ross",
+    status: "draft",
+    generation: { status: "complete" },
+    chapters: [{ _id: "chapter_1" }, { _id: "chapter_2" }],
+  });
+
+  assert.equal(serialized.object, "book_summary");
+  assert.equal(serialized.id, "book_123");
+  assert.equal(serialized.status, "complete");
+  assert.equal(serialized.bookStatus, "draft");
+  assert.equal(serialized.chapterCount, 2);
+  assert.equal(Object.hasOwn(serialized, "chapters"), false);
+  assert.equal(Object.hasOwn(serialized, "userId"), false);
+  assert.equal(
+    serialized.downloads.pdf.url,
+    "https://api.example.com/api/v1/books/book_123/pdf"
+  );
+});
+
+test("serializes book summaries for manual books without generation state", () => {
+  const serialized = serializeV1BookSummary(
+    { protocol: "https", get: () => "" },
+    {
+      _id: { toString: () => "book_456" },
+      title: "Manual Book",
+    }
+  );
+
+  assert.equal(serialized.status, "manual");
+  assert.equal(serialized.bookStatus, "draft");
+  assert.equal(serialized.chapterCount, 0);
+});
+
+test("serializes lists with pagination metadata", () => {
+  const full = serializeV1List([{ id: "a" }, { id: "b" }], {
+    limit: 2,
+    offset: 0,
+  });
+
+  assert.equal(full.object, "list");
+  assert.equal(full.count, 2);
+  assert.equal(full.limit, 2);
+  assert.equal(full.offset, 0);
+  assert.equal(full.hasMore, true);
+
+  const partial = serializeV1List([{ id: "a" }], { limit: 2, offset: 2 });
+
+  assert.equal(partial.count, 1);
+  assert.equal(partial.hasMore, false);
+
+  const exactLastPage = serializeV1List([{ id: "a" }, { id: "b" }], {
+    limit: 2,
+    offset: 4,
+    hasMore: false,
+  });
+
+  assert.equal(exactLastPage.count, 2);
+  assert.equal(exactLastPage.hasMore, false);
 });
 
 test("serializes public book fields without internal ownership data", () => {
