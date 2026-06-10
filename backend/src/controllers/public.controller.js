@@ -272,9 +272,12 @@ async function getCommunityBook(req, res) {
       return res.status(404).json({ error: "Community book is not active." });
     }
 
+    const { applyActiveTranslation } = require("../utils/translation.helper");
+    const translatedBook = applyActiveTranslation(book);
+
     return res.status(200).json({
       message: "Community book retrieved successfully.",
-      book: serializeCommunityBookDetails(book),
+      book: serializeCommunityBookDetails(translatedBook),
     });
   } catch (error) {
     console.error("Error getting community book:", error);
@@ -316,7 +319,10 @@ async function getCommunityBookPdf(req, res) {
       await book.save();
     }
 
-    const filename = `${book.title.replace(
+    const { applyActiveTranslation } = require("../utils/translation.helper");
+    const translatedBook = applyActiveTranslation(book);
+
+    const filename = `${translatedBook.title.replace(
       /[^a-zA-Z0-9]/g,
       "_"
     )}_free_full_book.pdf`;
@@ -325,7 +331,7 @@ async function getCommunityBookPdf(req, res) {
     res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
     res.setHeader("Content-Transfer-Encoding", "binary");
 
-    await generatePdf(book, res);
+    await generatePdf(translatedBook, res);
   } catch (error) {
     console.error("Error getting community book PDF:", error);
 
@@ -354,9 +360,12 @@ async function getPublicBookPreview(req, res) {
       return res.status(404).json({ error: "Preview link is not active." });
     }
 
+    const { applyActiveTranslation } = require("../utils/translation.helper");
+    const translatedBook = applyActiveTranslation(book);
+
     return res.status(200).json({
       message: "Book preview retrieved successfully.",
-      book: serializePublicPreview(book),
+      book: serializePublicPreview(translatedBook),
     });
   } catch (error) {
     console.error("Error getting public book preview:", error);
@@ -388,14 +397,17 @@ async function getPublicBookPreviewPdf(req, res) {
       await book.save();
     }
 
-    const chapter = firstPreviewChapter(book);
+    const { applyActiveTranslation } = require("../utils/translation.helper");
+    const translatedBook = applyActiveTranslation(book);
+
+    const chapter = firstPreviewChapter(translatedBook);
     const previewBook = {
-      ...book.toObject(),
+      ...(typeof translatedBook.toObject === "function" ? translatedBook.toObject() : translatedBook),
       chapters: chapter
         ? [chapter.toObject ? chapter.toObject() : chapter]
         : [],
     };
-    const filename = `${book.title.replace(
+    const filename = `${translatedBook.title.replace(
       /[^a-zA-Z0-9]/g,
       "_"
     )}_first_chapter_preview.pdf`;

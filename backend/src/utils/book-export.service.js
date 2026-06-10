@@ -56,7 +56,8 @@ async function prepareOwnedBookForExport(userId, bookId) {
     await book.save();
   }
 
-  return book;
+  const { applyActiveTranslation } = require("./translation.helper");
+  return applyActiveTranslation(book);
 }
 
 function assertBookReadyForApiExport(book) {

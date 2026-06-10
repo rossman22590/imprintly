@@ -63,4 +63,56 @@ router
 // PATCH /api/books/:bookId/community-listing - Post/remove a book in the community bookshelf
 router.route("/:bookId/community-listing").patch(updateBookCommunityListing);
 
+// Translation routes
+const {
+  createTranslation,
+  getTranslations,
+  toggleTranslationActive,
+  deleteTranslation,
+  translateChapter,
+  translateBook,
+  estimateChapterTranslation,
+  estimateBookTranslation,
+  getTranslationAudiobookVoices,
+  updateTranslationAudiobookSettings,
+  generateTranslationAudiobookChapter,
+  getTranslationAudiobookState,
+  updateTranslationDetails
+} = require("../controllers/translations.controller");
+
+router.route("/:bookId/translations")
+  .get(getTranslations)
+  .post(createTranslation);
+
+router.route("/:bookId/translations/:transId")
+  .delete(deleteTranslation)
+  .patch(updateTranslationDetails);
+
+router.route("/:bookId/translations/:transId/active")
+  .patch(toggleTranslationActive);
+
+router.route("/:bookId/translations/:transId/estimate")
+  .get(estimateBookTranslation);
+
+router.route("/:bookId/translations/:transId/translate")
+  .post(translateBook);
+
+router.route("/:bookId/translations/:transId/chapters/:chapterId/estimate")
+  .get(estimateChapterTranslation);
+
+router.route("/:bookId/translations/:transId/chapters/:chapterId/translate")
+  .post(translateChapter);
+
+router.route("/:bookId/translations/:transId/audiobook/voices")
+  .get(getTranslationAudiobookVoices);
+
+router.route("/:bookId/translations/:transId/audiobook/settings")
+  .patch(updateTranslationAudiobookSettings);
+
+router.route("/:bookId/translations/:transId/audiobook/chapters/:chapterId/generate")
+  .post(generateTranslationAudiobookChapter);
+
+router.route("/:bookId/translations/:transId/audiobook")
+  .get(getTranslationAudiobookState);
+
 module.exports = router;

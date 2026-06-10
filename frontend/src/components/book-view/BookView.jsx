@@ -9,6 +9,7 @@ import {
   Settings2,
   Store,
   Headphones,
+  Languages,
   Sun,
   Moon,
   BookOpen,
@@ -17,6 +18,9 @@ import {
 } from "lucide-react";
 import { ReaderMarkdownContent } from "../../utils/reader-diagrams";
 import BookViewSidebar from "./BookViewSidebar";
+import toast from "react-hot-toast";
+import axiosInstance from "../../lib/axios";
+import { API_ENDPOINTS } from "../../utils/api-endpoints";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -77,6 +81,31 @@ const storePrefs = (prefs) => {
 
 function BookView({ book }) {
   const prefs = getStoredPrefs();
+
+  const handleLanguageChange = async (e) => {
+    const val = e.target.value;
+    const toastId = toast.loading("Switching language...");
+    try {
+      if (val === "english") {
+        const active = book.translations?.find(t => t.isActive);
+        if (active) {
+          await axiosInstance.patch(API_ENDPOINTS.TRANSLATION.TOGGLE_ACTIVE(book._id, active._id), {
+            isActive: false
+          });
+        }
+      } else {
+        await axiosInstance.patch(API_ENDPOINTS.TRANSLATION.TOGGLE_ACTIVE(book._id, val), {
+          isActive: true
+        });
+      }
+      toast.dismiss(toastId);
+      window.location.reload();
+    } catch (err) {
+      toast.dismiss(toastId);
+      console.error(err);
+      toast.error("Failed to change language.");
+    }
+  };
 
   const [selectedChapterIndex, setSelectedChapterIndex] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(
@@ -604,6 +633,34 @@ function BookView({ book }) {
                           ))}
                         </div>
                       </div>
+
+                      {/* Language selection dropdown */}
+                      <div>
+                        <label
+                          className="block text-xs font-semibold uppercase tracking-wider mb-2"
+                          style={{ color: "var(--reader-text-subtle)" }}
+                        >
+                          Language
+                        </label>
+                        <select
+                          value={book.translations?.find(t => t.isActive)?._id || "english"}
+                          onChange={handleLanguageChange}
+                          className="w-full rounded-xl border px-3 py-2 text-sm focus:outline-none focus:ring-2"
+                          style={{
+                            background: "var(--reader-hover)",
+                            borderColor: "var(--reader-border)",
+                            color: "var(--reader-text)",
+                            "--tw-ring-color": "var(--reader-accent)",
+                          }}
+                        >
+                          <option value="english">English (Original)</option>
+                          {(book.translations || []).map((t) => (
+                            <option key={t._id} value={t._id}>
+                              {t.targetLanguage}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
 
                     {/* KDP Studio link */}
@@ -648,6 +705,26 @@ function BookView({ book }) {
                       >
                         <Headphones className="size-4" />
                         Open Audiobook
+                      </Link>
+
+                      <Link
+                        to={`/books/${book._id}/translation`}
+                        className="mt-2 flex items-center justify-center gap-2 w-full rounded-xl py-2.5 text-sm font-medium border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2"
+                        style={{
+                          borderColor: "var(--reader-accent)",
+                          color: "var(--reader-accent)",
+                          "--tw-ring-color": "var(--reader-accent)",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.opacity = "0.78")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.opacity = "1")
+                        }
+                        onClick={() => setIsSettingsOpen(false)}
+                      >
+                        <Languages className="size-4" />
+                        Open Translations
                       </Link>
                     </div>
                   </div>

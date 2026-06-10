@@ -613,6 +613,98 @@ const audiobookSchema = new mongoose.Schema(
   }
 );
 
+const translatedChapterSchema = new mongoose.Schema(
+  {
+    chapterId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: [true, "Chapter ID is required"],
+    },
+    originalChapterId: {
+      type: String,
+      default: function() {
+        return this.chapterId ? this.chapterId.toString() : "";
+      }
+    },
+    title: {
+      type: String,
+      default: "",
+    },
+    content: {
+      type: String,
+      default: "",
+    },
+    translationStatus: {
+      type: String,
+      enum: {
+        values: ["queued", "translating", "complete", "failed"],
+        message: "Translation status must be queued, translating, complete, or failed",
+      },
+      default: "queued",
+    },
+    status: {
+      type: String,
+      enum: ["empty", "translating", "complete", "failed"],
+      default: "empty"
+    },
+    wordCount: {
+      type: Number,
+      default: 0,
+    },
+    translationStats: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+const translationSchema = new mongoose.Schema(
+  {
+    targetLanguage: {
+      type: String,
+      required: [true, "Target language is required"],
+      trim: true,
+    },
+    engine: {
+      type: String,
+      required: [true, "Translation engine is required"],
+      enum: {
+        values: ["gemini", "groq"],
+        message: "Translation engine must be gemini or groq",
+      },
+    },
+    model: {
+      type: String,
+      required: [true, "Translation model is required"],
+    },
+    isActive: {
+      type: Boolean,
+      default: false,
+    },
+    title: {
+      type: String,
+      default: "",
+    },
+    subtitle: {
+      type: String,
+      default: "",
+    },
+    chapters: {
+      type: [translatedChapterSchema],
+      default: [],
+    },
+    audiobook: {
+      type: audiobookSchema,
+      default: () => ({}),
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
 const bookSchema = new mongoose.Schema(
   {
     userId: {
@@ -804,6 +896,10 @@ const bookSchema = new mongoose.Schema(
     audiobook: {
       type: audiobookSchema,
       default: () => ({}),
+    },
+    translations: {
+      type: [translationSchema],
+      default: [],
     },
     bible: {
       type: bookBibleSchema,

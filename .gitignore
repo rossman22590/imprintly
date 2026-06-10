@@ -73,3 +73,16 @@ coverage/
 .cache
 .temp
 tmp/
+
+# ====================================
+# pnpm
+# ====================================
+pnpm-lock.yaml
+.pnpm-store/
+backend/.pnpm-store/
+
+# ====================================
+# AI / Agent workspaces
+# ====================================
+.agents/
+scratch/

@@ -980,6 +980,7 @@ module.exports = {
   MONTHLY_CREDIT_PRESETS,
   adjustUserCredits,
   assertHasCredits,
+  debitCredits,
   buildCreditHistoryQuery,
   calculateAudioCharge,
   calculateImageCharge,

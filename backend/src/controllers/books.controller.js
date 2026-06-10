@@ -313,9 +313,15 @@ async function getBookById(req, res) {
 
     await repairBookChapterImageMarkdown(book);
 
+    const { applyActiveTranslation } = require("../utils/translation.helper");
+    let returnedBook = book;
+    if (req.query.raw !== "true") {
+      returnedBook = applyActiveTranslation(book);
+    }
+
     return res.status(200).json({
       message: "Book retrieved successfully!",
-      book,
+      book: returnedBook,
     });
   } catch (error) {
     console.error("Error getting book:", error);
@@ -452,6 +458,145 @@ async function updateBookContent(req, res) {
         .json({ error: "Forbidden: You cannot update this book!" });
     }
 
+    // Check if there is an active translation
+    const activeTranslation = book.translations?.find(t => t.isActive);
+    if (activeTranslation) {
+      if (req.body.title !== undefined) {
+        activeTranslation.title = req.body.title;
+      }
+      if (req.body.subtitle !== undefined) {
+        activeTranslation.subtitle = req.body.subtitle;
+      }
+
+      const updateData = {
+        author: req.body.author,
+        genre: req.body.genre,
+        audience: req.body.audience,
+        targetWordCount: req.body.targetWordCount,
+        generation: normalizeGenerationPayload(req.body.generation),
+        sourceFiles: normalizeBookSourcesForSave(req.body.sourceFiles),
+        bible:
+          req.body.bible === undefined
+            ? undefined
+            : {
+                ...normalizeBookBiblePayload(req.body.bible),
+                updatedAt: new Date(),
+              },
+        visualBible: normalizeVisualBibleForSave(req.body.visualBible),
+        status: req.body.status,
+      };
+
+      // remove undefined fields to avoid overwriting with undefined
+      Object.keys(updateData).forEach((key) => {
+        if (updateData[key] === undefined) {
+          delete updateData[key];
+        }
+      });
+
+      // Apply the updates to book
+      Object.assign(book, updateData);
+
+      if (req.body.chapters !== undefined) {
+        const incomingChapters = await normalizeChapterPayloads(req.body.chapters);
+        const newBookChapters = [];
+        const newTranslationChapters = [];
+
+        for (const incCh of incomingChapters) {
+          let originalCh = null;
+          if (incCh._id) {
+            originalCh = book.chapters.id(incCh._id);
+          }
+
+          if (originalCh) {
+            // Chapter exists! Keep structure (non-text metadata) in book.chapters
+            if (incCh.outlinePath !== undefined) originalCh.outlinePath = incCh.outlinePath;
+            if (incCh.images !== undefined) originalCh.images = incCh.images;
+            if (incCh.generationStatus !== undefined) originalCh.generationStatus = incCh.generationStatus;
+            
+            newBookChapters.push(originalCh);
+
+            // Update the translation with the edited content
+            const chWords = String(incCh.content || "").split(/\s+/).filter(Boolean).length;
+            newTranslationChapters.push({
+              chapterId: originalCh._id,
+              originalChapterId: originalCh._id.toString(),
+              title: incCh.title || "",
+              content: incCh.content || "",
+              translationStatus: "complete",
+              status: "complete",
+              wordCount: chWords
+            });
+          } else {
+            // New chapter! Generate new ID
+            const newId = new mongoose.Types.ObjectId();
+            const chWords = String(incCh.content || "").split(/\s+/).filter(Boolean).length;
+            
+            newBookChapters.push({
+              _id: newId,
+              title: incCh.title || "Untitled Chapter",
+              description: incCh.description || "",
+              content: incCh.content || "",
+              generationStatus: incCh.generationStatus || "empty",
+              wordCount: chWords,
+              outlinePath: incCh.outlinePath || [],
+              images: incCh.images || []
+            });
+
+            newTranslationChapters.push({
+              chapterId: newId,
+              originalChapterId: newId.toString(),
+              title: incCh.title || "",
+              content: incCh.content || "",
+              translationStatus: "complete",
+              status: "complete",
+              wordCount: chWords
+            });
+          }
+        }
+
+        book.chapters = newBookChapters;
+        activeTranslation.chapters = newTranslationChapters;
+
+        // Keep other translations aligned as well
+        book.translations.forEach(trans => {
+          if (trans._id.toString() === activeTranslation._id.toString()) return;
+
+          const alignedChapters = [];
+          book.chapters.forEach(ch => {
+            const existingCh = trans.chapters.find(tc => 
+              (tc.chapterId && tc.chapterId.toString() === ch._id.toString()) ||
+              (tc.originalChapterId && tc.originalChapterId === ch._id.toString())
+            );
+            if (existingCh) {
+              existingCh.chapterId = ch._id;
+              existingCh.originalChapterId = ch._id.toString();
+              alignedChapters.push(existingCh);
+            } else {
+              alignedChapters.push({
+                chapterId: ch._id,
+                originalChapterId: ch._id.toString(),
+                title: ch.title || "",
+                content: "",
+                translationStatus: "queued",
+                status: "empty",
+                wordCount: 0
+              });
+            }
+          });
+          trans.chapters = alignedChapters;
+        });
+      }
+
+      const updatedBook = await book.save();
+      const { applyActiveTranslation } = require("../utils/translation.helper");
+      const returnedBook = applyActiveTranslation(updatedBook);
+
+      return res.status(200).json({
+        message: "Book updated successfully!",
+        book: returnedBook,
+      });
+    }
+
     const updateData = {
       title: req.body.title,
       subtitle: req.body.subtitle,
@@ -484,11 +629,40 @@ async function updateBookContent(req, res) {
       }
     });
 
-    // update book with validation
-    const updatedBook = await Book.findByIdAndUpdate(bookId, updateData, {
-      new: true, // return updated document
-      runValidators: true, // run Mongoose validators
-    });
+    // Apply the updates to book
+    Object.assign(book, updateData);
+
+    if (updateData.chapters !== undefined) {
+      if (book.translations && book.translations.length > 0) {
+        book.translations.forEach(trans => {
+          const alignedChapters = [];
+          book.chapters.forEach(ch => {
+            const existingCh = trans.chapters.find(tc => 
+              (tc.chapterId && tc.chapterId.toString() === ch._id.toString()) ||
+              (tc.originalChapterId && tc.originalChapterId === ch._id.toString())
+            );
+            if (existingCh) {
+              existingCh.chapterId = ch._id;
+              existingCh.originalChapterId = ch._id.toString();
+              alignedChapters.push(existingCh);
+            } else {
+              alignedChapters.push({
+                chapterId: ch._id,
+                originalChapterId: ch._id.toString(),
+                title: ch.title || "",
+                content: "",
+                translationStatus: "queued",
+                status: "empty",
+                wordCount: 0
+              });
+            }
+          });
+          trans.chapters = alignedChapters;
+        });
+      }
+    }
+
+    const updatedBook = await book.save();
 
     return res.status(200).json({
       message: "Book updated successfully!",

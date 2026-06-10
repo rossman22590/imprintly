@@ -19,6 +19,7 @@ import {
   FileType,
   Headphones,
   Image,
+  Languages,
   Library,
   Menu,
   NotebookText,
@@ -3119,6 +3120,21 @@ function EditBookPage() {
                 Audiobook
               </Button>
 
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  requestEditorNavigation(`/books/${bookId}/translation`)
+                }
+                icon={Languages}
+                size="sm"
+                ariaLabel="Open Translation Studio"
+                title="Open Translation Studio"
+                className="h-9 px-3"
+              >
+                Translation
+              </Button>
+
               <Dropdown
                 trigger={
                   <Button
@@ -3249,6 +3265,32 @@ function EditBookPage() {
             )}
           </div>
         </header>
+
+        {/* Translation active notice banner */}
+        {book?.activeTextLanguage && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 sm:px-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-amber-900 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <Languages className="size-4 text-amber-600 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold">
+                  You are editing the <span className="underline font-bold">{book.activeTextLanguage}</span> translation of this book.
+                </p>
+                <p className="text-[11px] text-amber-700 truncate">
+                  Changes will be saved to the translation. The original English manuscript remains untouched.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={() => requestEditorNavigation(`/books/${bookId}/translation`)}
+              className="text-[11px] bg-white hover:bg-amber-100 border-amber-300 text-amber-950 font-medium py-1 px-2.5 self-start sm:self-center"
+            >
+              Translation Studio
+            </Button>
+          </div>
+        )}
 
         {generationJob && (
           <section className="bg-emerald-50 border-b border-emerald-200 px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">

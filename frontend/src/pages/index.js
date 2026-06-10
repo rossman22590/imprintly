@@ -22,3 +22,4 @@ export { default as ErrorPage } from "./ErrorPage";
 export { default as PublicBookshelfPage } from "./PublicBookshelfPage";
 export { default as PublicBookPreviewPage } from "./PublicBookPreviewPage";
 export { default as PublicSharePage } from "./PublicSharePage";
+export { default as TranslationStudioPage } from "./TranslationStudioPage";

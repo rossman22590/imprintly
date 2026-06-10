@@ -62,6 +62,7 @@ async function getAudiobook(req, res) {
       title: book.title,
       author: book.author,
       coverImage: book.coverImage,
+      activeTextLanguage: book.activeTextLanguage || "English",
       models: [
         { id: "eleven_v3", label: "Alpha V3 (High Quality)" },
         { id: "eleven_multilingual_v2", label: "Multilingual v2" },
