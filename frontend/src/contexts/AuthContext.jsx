@@ -10,6 +10,23 @@ const clearStoredAuth = () => {
   localStorage.removeItem("user");
 };
 
+const isAllowedSSOReferrer = (referrer) => {
+  if (!referrer) return false;
+  try {
+    const url = new URL(referrer);
+    const hostname = url.hostname;
+    const port = url.port;
+
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return port === "3000" || port === "3001";
+    }
+
+    return hostname === "myapps.ai" || hostname.endsWith(".myapps.ai");
+  } catch (e) {
+    return false;
+  }
+};
+
 export function AuthContextProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -40,6 +57,28 @@ export function AuthContextProvider({ children }) {
     setIsLoading(true);
 
     try {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const ssoToken = params.get("sso_token");
+        const ssoUser = params.get("sso_user");
+
+        if (ssoToken && ssoUser) {
+          const referrer = document.referrer;
+          if (isAllowedSSOReferrer(referrer)) {
+            localStorage.setItem("token", ssoToken);
+            localStorage.setItem("user", ssoUser);
+          } else {
+            console.error("SSO rejected: invalid referrer domain", referrer);
+          }
+          
+          // Clean the query parameters from the URL
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete("sso_token");
+          cleanUrl.searchParams.delete("sso_user");
+          window.history.replaceState({}, document.title, cleanUrl.pathname + cleanUrl.search);
+        }
+      }
+
       const jwt = localStorage.getItem("token");
       const stringifiedUser = localStorage.getItem("user");
 
