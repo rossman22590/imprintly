@@ -4,13 +4,27 @@ import { Link, useNavigate } from "react-router";
 import { CreditBalancePill, LogoIcon, ProfileMenu } from "../components";
 import axiosInstance from "../lib/axios";
 import { API_ENDPOINTS } from "../utils/api-endpoints";
-import { Clock3, FileText, KeyRound, Library } from "lucide-react";
+import { Clock3, FileText, KeyRound, Library, AlertTriangle, X } from "lucide-react";
 
 function DashboardLayout({ children }) {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
+  const [insufficientDetails, setInsufficientDetails] = useState(null);
 
   const { user, unauthenticateUser, updateUser } = useAuthContext();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleInsufficient = (event) => {
+      setInsufficientDetails(event.detail || null);
+      setShowInsufficientModal(true);
+    };
+
+    window.addEventListener("credits:insufficient", handleInsufficient);
+    return () => {
+      window.removeEventListener("credits:insufficient", handleInsufficient);
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -120,6 +134,61 @@ function DashboardLayout({ children }) {
 
       {/* Main content */}
       <div className="flex-1 overflow-y-auto">{children}</div>
+
+      {/* Insufficient Credits Global Modal */}
+      {showInsufficientModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setShowInsufficientModal(false)}
+              className="absolute top-4 right-4 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+              aria-label="Close modal"
+            >
+              <X className="size-5" />
+            </button>
+
+             <div className="flex items-start gap-4">
+              <div className="size-12 rounded-xl bg-amber-50 flex items-center justify-center shrink-0 border border-amber-200">
+                <AlertTriangle className="size-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-slate-900">
+                  Credit Top-Up Required
+                </h3>
+                <p className="text-slate-500 text-sm mt-2 leading-relaxed">
+                  Your account does not have a sufficient credit balance to complete this action. Add a one-time credit pack or upgrade to a subscription plan to continue.
+                </p>
+
+                {insufficientDetails && (
+                  <div className="mt-3 p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs space-y-1">
+                    <p className="text-slate-400 font-semibold uppercase tracking-wider">Details</p>
+                    <p className="text-slate-700">Available: <span className="font-bold">{insufficientDetails.balance || 0}</span> credits</p>
+                    <p className="text-slate-700">Required: <span className="font-bold text-rose-600">{insufficientDetails.requiredCredits || 0}</span> credits</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowInsufficientModal(false)}
+                className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowInsufficientModal(false);
+                  navigate("/credits");
+                }}
+                className="px-5 py-2.5 text-sm font-bold text-white bg-violet-600 hover:bg-violet-700 shadow-lg shadow-violet-500/20 active:scale-98 rounded-xl transition"
+              >
+                Add Credits / Upgrade
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

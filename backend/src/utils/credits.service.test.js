@@ -24,8 +24,8 @@ test("new users default to 500 starting credits", () => {
   assert.equal(CREDIT_CONFIG.startingCredits, 500);
 });
 
-test("one Bookify credit is worth one cent", () => {
-  assert.equal(CREDIT_CONFIG.usdPerCredit, 0.01);
+test("one Bookify credit is worth ten cents", () => {
+  assert.equal(CREDIT_CONFIG.usdPerCredit, 0.10);
 });
 
 test("$50 paid value maps to $25 raw provider budget", () => {
@@ -45,7 +45,7 @@ test("token charges use provider and model pricing with 50 percent gross margin"
   assert.equal(CREDIT_CONFIG.tokenMarkupMultiplier, 2);
   assert.equal(charge.baseUsd, 0.75);
   assert.equal(charge.usdCost, 1.5);
-  assert.equal(charge.credits, 150);
+  assert.equal(charge.credits, 15);
   assert.equal(roundUsd(charge.credits * CREDIT_CONFIG.usdPerCredit), charge.usdCost);
 });
 
@@ -65,7 +65,7 @@ test("Gemini thinking tokens are billed as output tokens", () => {
   assert.equal(charge.outputTokens, 1_000_000);
   assert.equal(charge.baseUsd, 10.5);
   assert.equal(charge.usdCost, 21);
-  assert.equal(charge.credits, 2100);
+  assert.equal(charge.credits, 210);
   assert.equal(roundUsd(charge.credits * CREDIT_CONFIG.usdPerCredit), charge.usdCost);
 });
 
@@ -78,8 +78,8 @@ test("default Gemini image charges are based on model and size", () => {
 
   assert.equal(charge.baseUsd, 0.067);
   assert.equal(charge.usdCost, 0.134);
-  assert.equal(charge.credits, 13.4);
-  assert.equal(CREDIT_CONFIG.imageCredits, 13.4);
+  assert.equal(charge.credits, 1.34);
+  assert.equal(CREDIT_CONFIG.imageCredits, 1.34);
   assert.equal(roundUsd(charge.credits * CREDIT_CONFIG.usdPerCredit), charge.usdCost);
 });
 
@@ -163,6 +163,6 @@ test("ElevenLabs audiobook generation charges are based on characters and model"
     charCount: 1000,
   });
 
-  assert.equal(multilingualCharge.credits, 12);
-  assert.equal(flashCharge.credits, 6);
+  assert.equal(multilingualCharge.credits, 1.2);
+  assert.equal(flashCharge.credits, 0.6);
 });

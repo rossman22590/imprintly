@@ -6,6 +6,7 @@ const { syncUserAdminRole } = require("../utils/admin.service");
 const { ensureUserCredits, serializeCredits } = require("../utils/credits.service");
 const { clearAuthCookie, setAuthCookie } = require("../utils/auth-cookie");
 const { sendPasswordResetEmail } = require("../utils/email.service");
+const { serializeProfileUser } = require("./profile.controller");
 
 const PASSWORD_RESET_REQUEST_MESSAGE =
   "If an account exists for that email, we'll send a password reset link shortly.";
@@ -103,21 +104,7 @@ async function registerUser(req, res) {
 
     return res.status(201).json({
       message: "User registered successfully!",
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        storeUrl: user.storeUrl || "",
-        shelfPageName: user.shelfPageName || "",
-        shelfPhotoUrl: user.shelfPhotoUrl || "",
-        publicShareMetaTitle: user.publicShareMetaTitle || "",
-        publicShareMetaDescription: user.publicShareMetaDescription || "",
-        publicShareImageUrl: user.publicShareImageUrl || "",
-        publicShareTheme: user.publicShareTheme || "",
-        role: user.role,
-        status: user.status || "active",
-        credits: serializeCredits(user),
-      },
+      user: serializeProfileUser(user),
       token,
     });
   } catch (error) {
@@ -152,22 +139,7 @@ async function signInUser(req, res) {
 
     return res.status(200).json({
       message: "User signed in successfully!",
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        avatar: user.avatar,
-        storeUrl: user.storeUrl || "",
-        shelfPageName: user.shelfPageName || "",
-        shelfPhotoUrl: user.shelfPhotoUrl || "",
-        publicShareMetaTitle: user.publicShareMetaTitle || "",
-        publicShareMetaDescription: user.publicShareMetaDescription || "",
-        publicShareImageUrl: user.publicShareImageUrl || "",
-        publicShareTheme: user.publicShareTheme || "",
-        role: user.role,
-        status: user.status || "active",
-        credits: serializeCredits(user),
-      },
+      user: serializeProfileUser(user),
       token,
     });
   } catch (error) {

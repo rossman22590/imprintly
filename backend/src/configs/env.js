@@ -81,7 +81,7 @@ const ENV = {
     "pixiomedia.nyc3.digitaloceanspaces.com",
   STARTING_CREDITS: process.env.STARTING_CREDITS ?? "500",
   BOOKIFY_USD_PER_CREDIT:
-    process.env.BOOKIFY_USD_PER_CREDIT ?? "0.01",
+    process.env.BOOKIFY_USD_PER_CREDIT ?? "0.10",
   AI_TOKEN_MARKUP_MULTIPLIER:
     process.env.AI_TOKEN_MARKUP_MULTIPLIER ?? "2",
   ADMIN_EMAILS: process.env.ADMIN_EMAILS ?? "rcohen@mytsi.org",
@@ -97,6 +97,9 @@ const ENV = {
   MAIL_FROM_EMAIL: process.env.MAIL_FROM_EMAIL ?? "bookify@myapps.ai",
   PASSWORD_RESET_TOKEN_TTL_MINUTES:
     process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES ?? "60",
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ?? "",
+  STRIPE_PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY ?? "",
+  STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ?? "",
 };
 
 module.exports = ENV;

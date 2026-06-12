@@ -43,6 +43,7 @@ function formatCredits(value) {
 }
 
 const DEFAULT_MONTHLY_CREDIT_PRESETS = [
+  { id: "starter", label: "Starter", amount: 100, icon: Coins },
   { id: "premium", label: "Premium", amount: 500, icon: Crown },
   { id: "ultra", label: "Ultra", amount: 1000, icon: Gem },
 ];

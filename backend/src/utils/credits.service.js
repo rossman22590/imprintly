@@ -214,6 +214,16 @@ const MONTHLY_CREDIT_PRESETS = DEFAULT_MONTHLY_CREDIT_PRESETS;
 
 function serializeCredits(user) {
   const credits = user?.credits || {};
+  let subTier = user?.subscriptionTier || "";
+  let subStatus = user?.subscriptionStatus || "";
+  const overrideTier =
+    user?.subscriptionOverrideTier ||
+    (!user?.stripeSubscriptionId && subTier && subStatus !== "canceled" ? subTier : "");
+
+  if (!subTier && credits.monthlyPreset && ["starter", "premium", "ultra"].includes(credits.monthlyPreset)) {
+    subTier = credits.monthlyPreset;
+    subStatus = "active";
+  }
 
   return {
     balance: roundCredits(credits.balance),
@@ -228,6 +238,17 @@ function serializeCredits(user) {
     usdPerCredit: CREDIT_CONFIG.usdPerCredit,
     imageCredits: CREDIT_CONFIG.imageCredits,
     tokenMarkupMultiplier: CREDIT_CONFIG.tokenMarkupMultiplier,
+    // Split balances
+    recurringBalance: roundCredits(credits.recurringBalance),
+    oneTimeBalance: roundCredits(credits.oneTimeBalance),
+    // Subscription details
+    stripeCustomerId: user?.stripeCustomerId || "",
+    stripeSubscriptionId: user?.stripeSubscriptionId || "",
+    subscriptionStatus: subStatus,
+    subscriptionTier: subTier,
+    subscriptionOverrideTier: overrideTier,
+    subscriptionCancelAtPeriodEnd: user?.subscriptionCancelAtPeriodEnd || false,
+    subscriptionCurrentPeriodEnd: user?.subscriptionCurrentPeriodEnd || null,
   };
 }
 
@@ -322,8 +343,23 @@ async function ensureUserCredits(userId) {
   }
 
   const credits = user.credits || {};
+  let modified = false;
 
   if (credits.ledgerInitialized) {
+    if (credits.recurringBalance === undefined || credits.oneTimeBalance === undefined) {
+      const recBal = credits.recurringBalance ?? 0;
+      const oneTimeBal = credits.oneTimeBalance ?? (credits.balance - recBal);
+
+      user.credits.recurringBalance = roundCredits(recBal);
+      user.credits.oneTimeBalance = roundCredits(oneTimeBal);
+      user.credits.balance = roundCredits(recBal + oneTimeBal);
+      modified = true;
+    }
+
+    if (modified) {
+      await user.save({ validateBeforeSave: false });
+    }
+
     return resetMonthlyCreditsIfDue(user);
   }
 
@@ -334,6 +370,8 @@ async function ensureUserCredits(userId) {
 
   user.credits = {
     balance: roundCredits(startingBalance),
+    recurringBalance: 0,
+    oneTimeBalance: roundCredits(startingBalance),
     lifetimeGranted: roundCredits(startingBalance),
     lifetimeSpent: roundCredits(credits.lifetimeSpent || 0),
     monthlyAllowance: roundCredits(credits.monthlyAllowance || 0),
@@ -371,11 +409,17 @@ async function resetMonthlyCreditsIfDue(user, now = new Date()) {
     return user;
   }
 
+  const currentRecurring = roundCredits(user.credits?.recurringBalance || 0);
+  const currentOneTime = roundCredits(user.credits?.oneTimeBalance || 0);
   const currentBalance = roundCredits(user.credits?.balance);
-  const nextBalance = allowance;
+
+  const nextRecurring = allowance;
+  const nextBalance = roundCredits(nextRecurring + currentOneTime);
   const delta = roundCredits(nextBalance - currentBalance);
+
   const update = {
     $set: {
+      "credits.recurringBalance": nextRecurring,
       "credits.balance": nextBalance,
       "credits.monthlyResetKey": currentResetKey,
       "credits.monthlyResetAt": now,
@@ -389,10 +433,22 @@ async function resetMonthlyCreditsIfDue(user, now = new Date()) {
     };
   }
 
-  const updatedUser = await User.findByIdAndUpdate(user._id, update, {
+  const updatedUser = await User.findOneAndUpdate({
+    _id: user._id,
+    "credits.monthlyResetKey": { $ne: currentResetKey },
+  }, update, {
     new: true,
   });
-  const transactionAmount = roundCredits(Math.abs(nextBalance - currentBalance));
+
+  if (!updatedUser) {
+    return User.findById(user._id);
+  }
+
+  if (delta === 0) {
+    return updatedUser;
+  }
+
+  const transactionAmount = roundCredits(Math.abs(delta));
 
   await CreditTransaction.create({
     userId: user._id,
@@ -400,18 +456,20 @@ async function resetMonthlyCreditsIfDue(user, now = new Date()) {
     amount: transactionAmount,
     balanceAfter: nextBalance,
     reason: "monthly_credit_reset",
-    description: `Monthly credit balance reset to ${nextBalance} credits.`,
+    description: `Monthly credit balance reset to ${allowance} recurring credits. Total balance: ${nextBalance}.`,
     creditRateUsd: CREDIT_CONFIG.usdPerCredit,
     markupMultiplier: 1,
     metadata: {
       action: "monthly_reset",
       direction:
-        nextBalance < currentBalance
+        delta < 0
           ? "remove"
-          : nextBalance > currentBalance
+          : delta > 0
             ? "add"
             : "none",
       previousBalance: currentBalance,
+      previousRecurring: currentRecurring,
+      previousOneTime: currentOneTime,
       monthlyAllowance: allowance,
       resetKey: currentResetKey,
     },
@@ -470,26 +528,29 @@ async function debitCredits({
     };
   }
 
-  await ensureUserCredits(userId);
-
-  const updatedUser = await User.findOneAndUpdate(
-    {
-      _id: userId,
-      "credits.balance": { $gte: chargeAmount },
-    },
-    {
-      $inc: {
-        "credits.balance": -chargeAmount,
-        "credits.lifetimeSpent": chargeAmount,
-      },
-    },
-    { new: true }
-  );
-
-  if (!updatedUser) {
-    const user = await User.findById(userId);
-    throw buildInsufficientCreditsError(user?.credits?.balance || 0, chargeAmount);
+  const user = await ensureUserCredits(userId);
+  const currentBalance = roundCredits(user.credits.balance);
+  if (currentBalance + 0.000001 < chargeAmount) {
+    throw buildInsufficientCreditsError(currentBalance, chargeAmount);
   }
+
+  let recurringBal = roundCredits(user.credits.recurringBalance || 0);
+  let oneTimeBal = roundCredits(user.credits.oneTimeBalance || 0);
+
+  if (recurringBal >= chargeAmount) {
+    recurringBal = roundCredits(recurringBal - chargeAmount);
+  } else {
+    const remainder = roundCredits(chargeAmount - recurringBal);
+    recurringBal = 0;
+    oneTimeBal = roundCredits(oneTimeBal - remainder);
+  }
+
+  user.credits.recurringBalance = recurringBal;
+  user.credits.oneTimeBalance = oneTimeBal;
+  user.credits.balance = roundCredits(recurringBal + oneTimeBal);
+  user.credits.lifetimeSpent = roundCredits((user.credits.lifetimeSpent || 0) + chargeAmount);
+
+  const updatedUser = await user.save({ validateBeforeSave: false });
 
   const transaction = await CreditTransaction.create({
     userId,
@@ -818,6 +879,8 @@ async function adjustUserCredits({
   }
 
   const user = await ensureUserCredits(userId);
+  const currentRecurring = roundCredits(user.credits?.recurringBalance || 0);
+  const currentOneTime = roundCredits(user.credits?.oneTimeBalance || 0);
   const currentBalance = roundCredits(user.credits?.balance);
   let delta = 0;
   let reason = "";
@@ -854,13 +917,15 @@ async function adjustUserCredits({
   }
 
   const nextBalance = roundCredits(currentBalance + delta);
+  const nextOneTime = roundCredits(currentOneTime + delta);
 
-  if (nextBalance < 0) {
+  if (nextOneTime < 0 || nextBalance < 0) {
     throw buildInsufficientCreditsError(currentBalance, Math.abs(delta));
   }
 
   const update = {
     $set: {
+      "credits.oneTimeBalance": nextOneTime,
       "credits.balance": nextBalance,
     },
   };
@@ -888,6 +953,8 @@ async function adjustUserCredits({
       action,
       direction: delta < 0 ? "remove" : delta > 0 ? "add" : "none",
       previousBalance: currentBalance,
+      previousOneTime: currentOneTime,
+      previousRecurring: currentRecurring,
       requestedAmount: numericAmount,
       adminUserId,
       note,
@@ -910,7 +977,7 @@ async function setMonthlyCreditAllowance({
 }) {
   const rawAmount = Number(amount);
   const numericAmount = roundCredits(rawAmount);
-  const normalizedPreset = ["premium", "ultra", "custom", ""].includes(preset)
+  const normalizedPreset = ["starter", "premium", "ultra", "custom", ""].includes(preset)
     ? preset
     : "custom";
 
@@ -920,9 +987,16 @@ async function setMonthlyCreditAllowance({
     throw error;
   }
 
+  if (normalizedPreset === "starter" && numericAmount !== 100) {
+    const error = new Error("Monthly credit preset amount does not match Starter plan.");
+    error.statusCode = 400;
+    throw error;
+  }
+
   if (
     normalizedPreset &&
     normalizedPreset !== "custom" &&
+    normalizedPreset !== "starter" &&
     (await getMonthlyCreditPlanAmounts())[normalizedPreset] !== numericAmount
   ) {
     const error = new Error("Monthly credit preset amount does not match.");
@@ -930,17 +1004,49 @@ async function setMonthlyCreditAllowance({
     throw error;
   }
 
+  let subscriptionTier = "";
+  let subscriptionStatus = "";
+
+  if (numericAmount > 0) {
+    const planAmounts = await getMonthlyCreditPlanAmounts();
+    if (["starter", "premium", "ultra"].includes(normalizedPreset)) {
+      subscriptionTier = normalizedPreset;
+      subscriptionStatus = "active";
+    } else if (numericAmount === 100) {
+      subscriptionTier = "starter";
+      subscriptionStatus = "active";
+    } else if (numericAmount === planAmounts.premium || numericAmount === 500) {
+      subscriptionTier = "premium";
+      subscriptionStatus = "active";
+    } else if (numericAmount === planAmounts.ultra || numericAmount === 1000 || numericAmount === 1500) {
+      subscriptionTier = "ultra";
+      subscriptionStatus = "active";
+    }
+  }
+
   const user = await ensureUserCredits(userId);
   const currentBalance = roundCredits(user.credits?.balance);
   const nextPreset = numericAmount > 0 ? normalizedPreset || "custom" : "";
+  const oneTimeBal = roundCredits(user.credits?.oneTimeBalance || 0);
+  const nextResetAt = getNextMonthlyResetAt();
+
   const updatedUser = await User.findByIdAndUpdate(
     userId,
     {
       $set: {
         "credits.monthlyAllowance": numericAmount,
         "credits.monthlyPreset": nextPreset,
+        "credits.recurringBalance": numericAmount,
+        "credits.balance": roundCredits(numericAmount + oneTimeBal),
         "credits.monthlyResetDay": 1,
         "credits.monthlyResetKey": getMonthlyResetKey(),
+        "credits.nextMonthlyResetAt": numericAmount > 0 ? nextResetAt : null,
+        subscriptionTier,
+        subscriptionStatus,
+        subscriptionOverrideTier: subscriptionStatus === "active" ? subscriptionTier : "",
+        stripeSubscriptionId: "",
+        subscriptionCancelAtPeriodEnd: false,
+        subscriptionCurrentPeriodEnd: subscriptionStatus === "active" ? nextResetAt : null,
       },
     },
     { new: true }
@@ -949,7 +1055,7 @@ async function setMonthlyCreditAllowance({
     userId,
     type: "adjustment",
     amount: 0,
-    balanceAfter: currentBalance,
+    balanceAfter: roundCredits(numericAmount + oneTimeBal),
     reason: "admin_monthly_credit_allowance",
     description:
       numericAmount > 0

@@ -17,6 +17,7 @@ const exportsRouter = require("./routes/exports.route");
 const audiobookRouter = require("./routes/audiobook.route");
 const publicRouter = require("./routes/public.route");
 const developerApiRouter = require("./routes/developer-api.route");
+const stripeRouter = require("./routes/stripe.route");
 const {
   recoverInterruptedGenerationJobs,
 } = require("./utils/book-generation.jobs");
@@ -106,7 +107,14 @@ app.use(
 );
 app.use(cors(corsOptions));
 app.options("/{*any}", cors(corsOptions));
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({
+  limit: "10mb",
+  verify: (req, res, buf) => {
+    if (req.originalUrl && req.originalUrl.startsWith("/api/stripe/webhook")) {
+      req.rawBody = buf;
+    }
+  }
+}));
 app.use(express.urlencoded({ extended: true, limit: "10mb" })); // for form data
 
 app.use((req, res, next) => {
@@ -127,6 +135,7 @@ app.use("/api/exports", exportsRouter);
 app.use("/api/audiobook", audiobookRouter);
 app.use("/api/public", publicRouter);
 app.use("/api/v1", developerApiRouter);
+app.use("/api/stripe", stripeRouter);
 
 // Static folder for user uploads - serve from backend/uploads
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));

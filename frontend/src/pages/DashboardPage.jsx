@@ -23,6 +23,10 @@ import {
   PencilLine,
   Share2,
   Unlink,
+  Sparkles,
+  ArrowRight,
+  X,
+  Coins,
 } from "lucide-react";
 
 const BOOKS_PER_ROW = 5;
@@ -486,12 +490,24 @@ function DashboardPage() {
         ? "shelf"
         : "flat";
   });
+  const [showPromoModal, setShowPromoModal] = useState(false);
 
   const navigate = useNavigate();
   const { user, updateUser } = useAuthContext();
   const isShelfView = bookViewMode === "shelf";
   const bookshelfShare = user?.bookshelfShare || null;
   const publicShareTheme = normalizePublicShareTheme(user?.publicShareTheme);
+
+  useEffect(() => {
+    const hasSubscription = user?.credits?.subscriptionTier && user?.credits?.subscriptionStatus !== "canceled";
+    const dismissed = sessionStorage.getItem("bookify-promo-dismissed");
+    if (!hasSubscription && !dismissed && !isLoading) {
+      const timer = setTimeout(() => {
+        setShowPromoModal(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [user, isLoading]);
 
   useEffect(() => {
     const fetchBooks = async () => {
@@ -659,6 +675,88 @@ function DashboardPage() {
         selectedTheme={publicShareTheme}
         isSaving={isBookshelfShareSaving}
       />
+      {showPromoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-200">
+            {/* Top decorative gradient band */}
+            <div className="h-2 bg-gradient-to-r from-violet-600 via-indigo-600 to-pink-600" />
+
+            <button
+              onClick={() => {
+                setShowPromoModal(false);
+                sessionStorage.setItem("bookify-promo-dismissed", "true");
+              }}
+              className="absolute top-4 right-4 rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+              aria-label="Close modal"
+            >
+              <X className="size-5" />
+            </button>
+
+            <div className="p-6 sm:p-8">
+              <div className="flex items-center gap-3">
+                <span className="size-12 rounded-2xl bg-violet-100 text-violet-600 flex items-center justify-center shadow-inner">
+                  <Sparkles className="size-6" />
+                </span>
+                <div>
+                  <span className="text-violet-600 text-xs font-bold uppercase tracking-widest">Subscription Benefits</span>
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-950 mt-0.5">
+                    Unlock Recurring Monthly Credits
+                  </h3>
+                </div>
+              </div>
+
+              <p className="text-slate-600 text-sm mt-4 leading-relaxed">
+                You are currently on a pay-as-you-go account. Subscribing to a monthly plan is the most cost-effective way to Narration, exports, and AI-generation features.
+              </p>
+
+              <div className="mt-6 space-y-3.5">
+                <div className="flex items-start gap-3 p-3 bg-slate-50 border border-slate-100 rounded-2xl">
+                  <span className="size-8 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <Coins className="size-4.5" />
+                  </span>
+                  <div>
+                    <h4 className="text-slate-950 text-sm font-bold">Save on Credit Rates</h4>
+                    <p className="text-slate-500 text-xs mt-0.5">Monthly plans offer up to a 50% discount on credit rates compared to individual credit packs.</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-3 bg-slate-50 border border-slate-100 rounded-2xl">
+                  <span className="size-8 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <BookPlus className="size-4.5" />
+                  </span>
+                  <div>
+                    <h4 className="text-slate-950 text-sm font-bold">Uninterrupted Access</h4>
+                    <p className="text-slate-500 text-xs mt-0.5">Enjoy automatic monthly credit resets alongside complete access to premium voices and advanced formats.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-end gap-3 mt-8">
+                <button
+                  onClick={() => {
+                    setShowPromoModal(false);
+                    sessionStorage.setItem("bookify-promo-dismissed", "true");
+                  }}
+                  className="w-full sm:w-auto px-5 py-3 text-sm font-semibold text-slate-500 hover:bg-slate-100 rounded-xl transition"
+                >
+                  Keep Free Account
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPromoModal(false);
+                    sessionStorage.setItem("bookify-promo-dismissed", "true");
+                    navigate("/credits");
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-black text-white bg-violet-600 hover:bg-violet-700 shadow-lg shadow-violet-500/25 active:scale-98 rounded-xl transition-all"
+                >
+                  Explore Subscription Plans
+                  <ArrowRight className="size-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 

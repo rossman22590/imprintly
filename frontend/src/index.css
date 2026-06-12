@@ -135,6 +135,25 @@
 }
 
 @layer components {
+  .credit-pack-slider-hitbox {
+    appearance: none;
+    background: transparent;
+    opacity: 0;
+  }
+
+  .credit-pack-slider-hitbox::-webkit-slider-runnable-track {
+    appearance: none;
+    background: transparent;
+  }
+
+  .credit-pack-slider-hitbox::-webkit-slider-thumb {
+    appearance: none;
+  }
+
+  .credit-pack-slider-hitbox::-moz-range-track {
+    background: transparent;
+  }
+
   /* Book page reading content styles */
   .reading-content.wmde-markdown {
     background: transparent !important;

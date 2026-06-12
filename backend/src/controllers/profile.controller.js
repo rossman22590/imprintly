@@ -49,6 +49,13 @@ function serializeProfileUser(user) {
     status: user.status || "active",
     credits: serializeCredits(user),
     bookshelfShare: serializeBookshelfShare(user),
+    stripeCustomerId: user.stripeCustomerId || "",
+    stripeSubscriptionId: user.stripeSubscriptionId || "",
+    subscriptionStatus: user.subscriptionStatus || "",
+    subscriptionTier: user.subscriptionTier || "",
+    subscriptionOverrideTier: user.subscriptionOverrideTier || "",
+    subscriptionCancelAtPeriodEnd: user.subscriptionCancelAtPeriodEnd || false,
+    subscriptionCurrentPeriodEnd: user.subscriptionCurrentPeriodEnd || null,
   };
 }
 
@@ -464,4 +471,5 @@ module.exports = {
   deleteAvatar,
   enableBookshelfShare,
   disableBookshelfShare,
+  serializeProfileUser,
 };

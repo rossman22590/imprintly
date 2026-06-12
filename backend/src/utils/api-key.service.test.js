@@ -1,5 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+
+process.env.API_KEY_HASH_SECRET = "test-hash-secret-for-unit-testing";
 const {
   API_KEY_PREFIX,
   LAST_USED_UPDATE_INTERVAL_MS,

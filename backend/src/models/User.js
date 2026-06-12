@@ -135,6 +135,16 @@ const userSchema = new mongoose.Schema(
         default: 50,
         min: [0, "Credit balance cannot be negative"],
       },
+      recurringBalance: {
+        type: Number,
+        default: 0,
+        min: [0, "Recurring credit balance cannot be negative"],
+      },
+      oneTimeBalance: {
+        type: Number,
+        default: 50,
+        min: [0, "One-time credit balance cannot be negative"],
+      },
       lifetimeGranted: {
         type: Number,
         default: 50,
@@ -152,7 +162,7 @@ const userSchema = new mongoose.Schema(
       },
       monthlyPreset: {
         type: String,
-        enum: ["", "premium", "ultra", "custom"],
+        enum: ["", "starter", "premium", "ultra", "custom"],
         default: "",
       },
       monthlyResetDay: {
@@ -191,6 +201,37 @@ const userSchema = new mongoose.Schema(
         type: Date,
         default: null,
       },
+    },
+    stripeCustomerId: {
+      type: String,
+      default: "",
+    },
+    stripeSubscriptionId: {
+      type: String,
+      default: "",
+    },
+    subscriptionStatus: {
+      type: String,
+      enum: ["", "active", "trialing", "past_due", "canceled", "incomplete", "incomplete_expired", "unpaid", "paused"],
+      default: "",
+    },
+    subscriptionTier: {
+      type: String,
+      enum: ["", "starter", "premium", "ultra"],
+      default: "",
+    },
+    subscriptionOverrideTier: {
+      type: String,
+      enum: ["", "starter", "premium", "ultra"],
+      default: "",
+    },
+    subscriptionCancelAtPeriodEnd: {
+      type: Boolean,
+      default: false,
+    },
+    subscriptionCurrentPeriodEnd: {
+      type: Date,
+      default: null,
     },
   },
   {

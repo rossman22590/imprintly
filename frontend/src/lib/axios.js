@@ -78,6 +78,9 @@ axiosInstance.interceptors.response.use(
 
       if (err.response.status === 402 && typeof window !== "undefined") {
         window.dispatchEvent(new Event("credits:refresh"));
+        window.dispatchEvent(new CustomEvent("credits:insufficient", {
+          detail: err.response.data || {}
+        }));
       }
     } else if (err.code === "ECONNABORTED") {
       console.error("Request timeout! Please try again later.");

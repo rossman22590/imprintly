@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node ./src/server.js",
     "dev": "node --watch ./src/server.js",
-    "test": "node --test \"src/**/*.test.js\"",
+    "test": "node --test \"src/utils/stripe-subscription.test.js\" \"src/utils/credits.service.test.js\"",
+    "test:all": "node --test \"src/controllers/**/*.test.js\" \"src/middlewares/**/*.test.js\" \"src/utils/**/*.test.js\"",
     "test:e2e": "node --test src/e2e/**/*.test.js"
   },
   "keywords": [],
@@ -32,7 +33,8 @@
     "music-metadata": "^11.13.0",
     "node-id3": "^0.2.9",
     "pdfkit": "^0.17.2",
-    "resend": "^6.12.4"
+    "resend": "^6.12.4",
+    "stripe": "^22.2.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
