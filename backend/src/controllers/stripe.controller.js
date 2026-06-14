@@ -19,6 +19,7 @@ const PLAN_PRICES = {
 
 const PLAN_ORDER = ["starter", "premium", "ultra"];
 const CREDIT_UNIT_PRICE = 10; // $0.10 per credit in cents
+const MIN_STRIPE_CHARGE_CENTS = 50;
 
 function getPlanIndex(tier = "") {
   return PLAN_ORDER.indexOf(tier);
@@ -181,6 +182,139 @@ function getStripeSubscriptionOverrideTier(stripeSub, user) {
   return getSubscriptionOverrideTier(user);
 }
 
+function normalizeCouponCode(value = "") {
+  return String(value || "").trim();
+}
+
+function calculateDiscountedAmountCents(amountCents, coupon) {
+  const baseAmount = Math.max(0, Number(amountCents || 0));
+
+  if (!coupon) {
+    return {
+      amountCents: baseAmount,
+      discountCents: 0,
+    };
+  }
+
+  let discountCents = 0;
+
+  if (coupon.percent_off) {
+    discountCents = Math.floor(baseAmount * (Number(coupon.percent_off) / 100));
+  } else if (coupon.amount_off) {
+    discountCents = Number(coupon.amount_off || 0);
+  }
+
+  discountCents = Math.min(baseAmount, Math.max(0, discountCents));
+
+  return {
+    amountCents: baseAmount - discountCents,
+    discountCents,
+  };
+}
+
+async function resolveStripeDiscount(couponCode, amountCents) {
+  const normalizedCode = normalizeCouponCode(couponCode);
+
+  if (!normalizedCode) return null;
+
+  const promotionCodes = await stripe.promotionCodes.list({
+    code: normalizedCode,
+    active: true,
+    limit: 1,
+  });
+  const promotionCode = promotionCodes.data?.[0];
+  let coupon = promotionCode?.coupon || null;
+
+  if (!coupon) {
+    try {
+      coupon = await stripe.coupons.retrieve(normalizedCode);
+    } catch {
+      coupon = null;
+    }
+  }
+
+  if (!coupon || coupon.deleted || coupon.valid === false) {
+    const error = new Error("Coupon code is invalid or expired.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (coupon.amount_off && coupon.currency && String(coupon.currency).toLowerCase() !== "usd") {
+    const error = new Error("Coupon currency must be USD.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const restrictions = promotionCode?.restrictions;
+  if (
+    restrictions?.minimum_amount &&
+    String(restrictions.minimum_amount_currency || "").toLowerCase() === "usd" &&
+    amountCents < restrictions.minimum_amount
+  ) {
+    const error = new Error("Coupon code does not meet the minimum checkout amount.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const discounted = calculateDiscountedAmountCents(amountCents, coupon);
+
+  if (discounted.amountCents > 0 && discounted.amountCents < MIN_STRIPE_CHARGE_CENTS) {
+    const error = new Error("Coupon discount leaves a charge below Stripe's minimum payment amount.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (discounted.amountCents <= 0) {
+    const error = new Error("This checkout does not support fully discounted coupon codes yet.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    code: normalizedCode,
+    coupon,
+    promotionCode,
+    amountCents: discounted.amountCents,
+    discountCents: discounted.discountCents,
+    stripeDiscount: promotionCode
+      ? { promotion_code: promotionCode.id }
+      : { coupon: coupon.id },
+  };
+}
+
+async function cancelPreviousIncompleteCheckout({
+  userId,
+  previousSubscriptionId,
+  previousPaymentIntentId,
+}) {
+  if (previousSubscriptionId) {
+    try {
+      const subscription = await stripe.subscriptions.retrieve(previousSubscriptionId);
+
+      if (subscription.metadata?.userId === userId && subscription.status === "incomplete") {
+        await stripe.subscriptions.cancel(previousSubscriptionId);
+      }
+    } catch (error) {
+      console.warn("Failed to cancel previous incomplete Stripe subscription:", error.message);
+    }
+  }
+
+  if (previousPaymentIntentId) {
+    try {
+      const paymentIntent = await stripe.paymentIntents.retrieve(previousPaymentIntentId);
+
+      if (
+        paymentIntent.metadata?.userId === userId &&
+        ["requires_payment_method", "requires_confirmation", "requires_action"].includes(paymentIntent.status)
+      ) {
+        await stripe.paymentIntents.cancel(previousPaymentIntentId);
+      }
+    } catch (error) {
+      console.warn("Failed to cancel previous incomplete Stripe payment intent:", error.message);
+    }
+  }
+}
+
 async function createSubscriptionPriceData(tier, allowance, unitAmount, options = {}) {
   const planLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
   const name = options.overrideTier
@@ -323,7 +457,14 @@ async function applyPaidSubscriptionInvoice(invoice) {
 
 async function createCheckoutSession(req, res) {
   try {
-    const { mode, tier, credits } = req.body;
+    const {
+      mode,
+      tier,
+      credits,
+      couponCode,
+      previousSubscriptionId,
+      previousPaymentIntentId,
+    } = req.body;
     const userId = req.user.id;
 
     if (!["subscription", "payment"].includes(mode)) {
@@ -351,7 +492,10 @@ async function createCheckoutSession(req, res) {
     let lineItems = [];
     let metadata = { userId, mode };
     let checkoutAmountCents = 0;
+    let checkoutSubtotalCents = 0;
     let checkoutOverrideTier = "";
+    let checkoutPaidAllowance = 0;
+    let discount = null;
 
     if (mode === "subscription") {
       if (!PLAN_CREDITS[tier]) {
@@ -382,6 +526,10 @@ async function createCheckoutSession(req, res) {
         return res.status(400).json({ error: "Invalid upgrade target for this account." });
       }
       checkoutAmountCents = priceCents;
+      checkoutSubtotalCents = priceCents;
+      checkoutPaidAllowance = allowance;
+      discount = await resolveStripeDiscount(couponCode, checkoutSubtotalCents);
+      checkoutAmountCents = discount?.amountCents ?? checkoutSubtotalCents;
 
       lineItems = [
         {
@@ -392,6 +540,14 @@ async function createCheckoutSession(req, res) {
         },
       ];
       metadata.tier = tier;
+      if (discount) {
+        metadata.couponCode = discount.code;
+        metadata.couponId = discount.coupon.id;
+        metadata.discountCents = String(discount.discountCents);
+        if (discount.promotionCode?.id) {
+          metadata.promotionCodeId = discount.promotionCode.id;
+        }
+      }
       if (overrideTier) {
         metadata.overrideTier = overrideTier;
         metadata.paidAllowance = String(allowance);
@@ -404,6 +560,9 @@ async function createCheckoutSession(req, res) {
       }
 
       const totalCostCents = creditCount * CREDIT_UNIT_PRICE;
+      checkoutSubtotalCents = totalCostCents;
+      discount = await resolveStripeDiscount(couponCode, checkoutSubtotalCents);
+      checkoutAmountCents = discount?.amountCents ?? checkoutSubtotalCents;
 
       lineItems = [
         {
@@ -419,7 +578,21 @@ async function createCheckoutSession(req, res) {
         },
       ];
       metadata.credits = String(creditCount);
+      if (discount) {
+        metadata.couponCode = discount.code;
+        metadata.couponId = discount.coupon.id;
+        if (discount.promotionCode?.id) {
+          metadata.promotionCodeId = discount.promotionCode.id;
+        }
+        metadata.discountCents = String(discount.discountCents);
+      }
     }
+
+    await cancelPreviousIncompleteCheckout({
+      userId,
+      previousSubscriptionId,
+      previousPaymentIntentId,
+    });
 
     if (mode === "subscription") {
       const subscription = await stripe.subscriptions.create({
@@ -427,6 +600,7 @@ async function createCheckoutSession(req, res) {
         items: lineItems,
         payment_behavior: "default_incomplete",
         payment_settings: { save_default_payment_method: "on_subscription" },
+        ...(discount ? { discounts: [discount.stripeDiscount] } : {}),
         metadata,
         expand: ["latest_invoice.confirmation_secret"],
       });
@@ -443,15 +617,17 @@ async function createCheckoutSession(req, res) {
         type: "subscription",
         subscriptionId: subscription.id,
         amountCents: checkoutAmountCents,
+        subtotalCents: checkoutSubtotalCents,
+        discountCents: discount?.discountCents || 0,
+        couponCode: discount?.code || "",
         totalAmountCents: PLAN_PRICES[tier],
-        paidAllowance: overrideTier ? PLAN_CREDITS[tier] - PLAN_CREDITS[overrideTier] : PLAN_CREDITS[tier],
+        paidAllowance: checkoutPaidAllowance,
         overrideTier: checkoutOverrideTier,
       });
     }
 
-    const totalCostCents = Number(metadata.credits) * CREDIT_UNIT_PRICE;
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: totalCostCents,
+      amount: checkoutAmountCents,
       currency: "usd",
       customer: customerId,
       automatic_payment_methods: { enabled: true },
@@ -463,10 +639,16 @@ async function createCheckoutSession(req, res) {
       publishableKey: ENV.STRIPE_PUBLISHABLE_KEY,
       type: "payment",
       paymentIntentId: paymentIntent.id,
+      amountCents: checkoutAmountCents,
+      subtotalCents: checkoutSubtotalCents,
+      discountCents: discount?.discountCents || 0,
+      couponCode: discount?.code || "",
     });
   } catch (error) {
     console.error("Error creating checkout session:", error);
-    return res.status(500).json({ error: "Failed to initiate Stripe checkout." });
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: error.statusCode ? error.message : "Failed to initiate Stripe checkout." });
   }
 }
 

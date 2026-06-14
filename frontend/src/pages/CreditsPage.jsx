@@ -186,11 +186,41 @@ function renderTransactionRow(transaction) {
   );
 }
 
-function StripePaymentForm({ checkoutSession, checkoutPrice, customerEmail, fetchCredits, onClose }) {
+function StripePaymentForm({
+  checkoutSession,
+  checkoutPrice,
+  customerEmail,
+  fetchCredits,
+  onApplyCoupon,
+  onClose,
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [message, setMessage] = useState("");
+  const [couponCode, setCouponCode] = useState(checkoutSession?.couponCode || "");
+  const [couponMessage, setCouponMessage] = useState("");
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
+
+  useEffect(() => {
+    setCouponCode(checkoutSession?.couponCode || "");
+    setCouponMessage("");
+  }, [checkoutSession?.couponCode, checkoutSession?.clientSecret]);
+
+  const handleApplyCoupon = async (nextCouponCode) => {
+    const trimmedCode = String(nextCouponCode || "").trim();
+
+    setCouponMessage("");
+    setIsApplyingCoupon(true);
+    try {
+      await onApplyCoupon(trimmedCode);
+      setCouponMessage(trimmedCode ? "Coupon applied." : "Coupon removed.");
+    } catch (error) {
+      setCouponMessage(error.response?.data?.error || "Coupon code could not be applied.");
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -237,6 +267,50 @@ function StripePaymentForm({ checkoutSession, checkoutPrice, customerEmail, fetc
 
   return (
     <form onSubmit={handleSubmit} className="flex min-h-[520px] flex-col">
+      <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <label htmlFor="checkout-coupon" className="text-sm font-bold text-slate-900">
+          Coupon code
+        </label>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <input
+            id="checkout-coupon"
+            type="text"
+            value={couponCode}
+            onChange={(event) => setCouponCode(event.target.value)}
+            placeholder="Enter coupon code"
+            disabled={isApplyingCoupon || isPaying}
+            className="min-h-11 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+          />
+          <button
+            type="button"
+            onClick={() => handleApplyCoupon(couponCode)}
+            disabled={isApplyingCoupon || isPaying || !String(couponCode || "").trim()}
+            className="min-h-11 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isApplyingCoupon ? "Applying..." : "Apply"}
+          </button>
+        </div>
+        {checkoutSession?.couponCode && (
+          <button
+            type="button"
+            onClick={() => handleApplyCoupon("")}
+            disabled={isApplyingCoupon || isPaying}
+            className="mt-3 text-sm font-bold text-slate-500 transition hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Remove {checkoutSession.couponCode}
+          </button>
+        )}
+        {couponMessage && (
+          <p
+            className={`mt-3 text-sm font-semibold ${
+              couponMessage.includes("could not") ? "text-rose-600" : "text-emerald-700"
+            }`}
+          >
+            {couponMessage}
+          </p>
+        )}
+      </div>
+
       <PaymentElement
         options={{
           layout: {
@@ -540,6 +614,14 @@ function CreditsPage() {
     checkoutSession?.mode === "subscription"
       ? checkoutPlan?.price
       : Number(checkoutSession?.creditAmount || 0) * 0.1;
+  const checkoutSubtotalPrice =
+    Number.isFinite(Number(checkoutSession?.subtotalCents))
+      ? Number(checkoutSession.subtotalCents) / 100
+      : checkoutPrice;
+  const checkoutDiscountPrice =
+    Number.isFinite(Number(checkoutSession?.discountCents))
+      ? Number(checkoutSession.discountCents) / 100
+      : 0;
   const checkoutMonthlyTotal =
     checkoutSession?.mode === "subscription" && Number.isFinite(Number(checkoutSession?.totalAmountCents))
       ? Number(checkoutSession.totalAmountCents) / 100
@@ -655,7 +737,12 @@ function CreditsPage() {
           mode,
           tier,
           creditAmount,
+          subscriptionId: data.subscriptionId,
+          paymentIntentId: data.paymentIntentId,
           amountCents: data.amountCents,
+          subtotalCents: data.subtotalCents,
+          discountCents: data.discountCents,
+          couponCode: data.couponCode,
           totalAmountCents: data.totalAmountCents,
           paidAllowance: data.paidAllowance,
           overrideTier: data.overrideTier,
@@ -675,6 +762,46 @@ function CreditsPage() {
       toast.error(error.response?.data?.error || "Failed to start payment process.");
       setIsSubmitting(false);
     }
+  };
+
+  const handleApplyCheckoutCoupon = async (couponCode) => {
+    if (!checkoutSession?.mode) {
+      throw new Error("No active checkout session.");
+    }
+
+    const body = {
+      mode: checkoutSession.mode,
+      couponCode,
+      previousSubscriptionId: checkoutSession.subscriptionId,
+      previousPaymentIntentId: checkoutSession.paymentIntentId,
+    };
+
+    if (checkoutSession.mode === "subscription") {
+      body.tier = checkoutSession.tier;
+    } else {
+      body.credits = checkoutSession.creditAmount;
+    }
+
+    const { data } = await axiosInstance.post("/api/stripe/create-checkout-session", body);
+
+    if (!data?.clientSecret || !data?.publishableKey) {
+      throw new Error("No embedded checkout data returned from session initialization.");
+    }
+
+    setCheckoutSession((currentSession) => ({
+      ...currentSession,
+      clientSecret: data.clientSecret,
+      stripePromise: loadStripe(data.publishableKey),
+      subscriptionId: data.subscriptionId,
+      paymentIntentId: data.paymentIntentId,
+      amountCents: data.amountCents,
+      subtotalCents: data.subtotalCents,
+      discountCents: data.discountCents,
+      couponCode: data.couponCode,
+      totalAmountCents: data.totalAmountCents,
+      paidAllowance: data.paidAllowance,
+      overrideTier: data.overrideTier,
+    }));
   };
 
   const handleCancelSubscription = async () => {
@@ -1329,8 +1456,43 @@ function CreditsPage() {
                         {formatUsd(checkoutPrice)}
                       </p>
                       {checkoutSession?.mode === "subscription" && (
-                        <p className="text-xs text-slate-400">per month</p>
+                        <p className="text-xs text-slate-400">
+                          {checkoutSession?.overrideTier ? "additional per month" : "per month"}
+                        </p>
                       )}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 border-t border-white/10 pt-5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-300">Subtotal</span>
+                      <span className="font-semibold">
+                        {formatUsd(checkoutSubtotalPrice)}
+                        {checkoutSession?.mode === "subscription" ? "/month" : ""}
+                      </span>
+                    </div>
+                    {checkoutDiscountPrice > 0 && (
+                      <div className="mt-3 flex items-center justify-between text-sm">
+                        <span className="text-slate-300">
+                          Coupon{checkoutSession?.couponCode ? ` (${checkoutSession.couponCode})` : ""}
+                        </span>
+                        <span className="font-semibold text-emerald-300">
+                          -{formatUsd(checkoutDiscountPrice)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="mt-3 flex items-center justify-between rounded-xl bg-white/10 px-3 py-2 text-sm">
+                      <span className="text-slate-200">
+                        {checkoutSession?.mode === "subscription"
+                          ? checkoutOverridePlan
+                            ? "Due now, then additional monthly"
+                            : "Due now, then monthly"
+                          : "Due now"}
+                      </span>
+                      <span className="font-black">
+                        {formatUsd(checkoutPrice)}
+                        {checkoutSession?.mode === "subscription" ? "/month" : ""}
+                      </span>
                     </div>
                   </div>
 
@@ -1419,12 +1581,14 @@ function CreditsPage() {
                     <Elements
                       stripe={checkoutSession.stripePromise}
                       options={checkoutOptions}
+                      key={checkoutSession.clientSecret}
                     >
                       <StripePaymentForm
                         checkoutSession={checkoutSession}
                         checkoutPrice={checkoutPrice}
                         customerEmail={user?.email || ""}
                         fetchCredits={fetchCredits}
+                        onApplyCoupon={handleApplyCheckoutCoupon}
                         onClose={closeCheckout}
                       />
                     </Elements>

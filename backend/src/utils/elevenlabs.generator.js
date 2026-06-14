@@ -1,3 +1,10 @@
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const ffmpegStatic = require("ffmpeg-static");
+const ffmpeg = require("fluent-ffmpeg");
+ffmpeg.setFfmpegPath(ffmpegStatic);
+
 const ENV = require("../configs/env");
 
 const MOCK_VOICES = [
@@ -203,9 +210,185 @@ async function addSharedVoice({ publicUserId, voiceId, voiceName }) {
   }
 }
 
-async function synthesizeSpeech({ text, voiceId, modelId }) {
+const modelLimitsCache = new Map();
+
+async function getModelLimit(modelId) {
+  if (!modelId) modelId = ENV.ELEVENLABS_DEFAULT_MODEL || "eleven_v3";
+  if (modelLimitsCache.has(modelId)) {
+    return modelLimitsCache.get(modelId);
+  }
+
+  // Static fallback mapping of known limits
+  const MODEL_LIMITS = {
+    "eleven_flash_v2_5": 40000,
+    "eleven_flash_v2": 30000,
+    "eleven_turbo_v2_5": 40000,
+    "eleven_turbo_v2": 30000,
+    "eleven_multilingual_v2": 10000,
+    "eleven_v3": 5000,
+    "eleven_monolingual_v1": 10000,
+    "eleven_multilingual_v1": 10000,
+  };
+
+  let limit = MODEL_LIMITS[modelId];
+
+  const apiKey = ENV.ELEVENLABS_API_KEY;
+  if (apiKey) {
+    try {
+      const response = await fetch("https://api.elevenlabs.io/v1/models", {
+        headers: { "xi-api-key": apiKey },
+      });
+      if (response.ok) {
+        const models = await response.json();
+        for (const m of models) {
+          const maxTextLength = m.maximum_text_length_per_request || m.max_characters_request_subscribed_user || m.max_characters_request_free_user;
+          if (maxTextLength) {
+            modelLimitsCache.set(m.model_id, maxTextLength);
+          }
+        }
+        if (modelLimitsCache.has(modelId)) {
+          return modelLimitsCache.get(modelId);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch model limits from ElevenLabs, using fallback:", err.message);
+    }
+  }
+
+  const finalLimit = limit || 5000;
+  modelLimitsCache.set(modelId, finalLimit);
+  return finalLimit;
+}
+
+function splitTextIntoChunks(text, maxChars) {
+  if (!text) return [];
+  if (text.length <= maxChars) {
+    return [text];
+  }
+
+  const paragraphs = text.split("\n\n");
+  const chunks = [];
+  let currentChunk = "";
+
+  for (const paragraph of paragraphs) {
+    const separator = currentChunk ? "\n\n" : "";
+    if ((currentChunk + separator + paragraph).length <= maxChars) {
+      currentChunk += separator + paragraph;
+    } else {
+      if (currentChunk) {
+        chunks.push(currentChunk);
+        currentChunk = "";
+      }
+
+      if (paragraph.length <= maxChars) {
+        currentChunk = paragraph;
+      } else {
+        const sentences = (paragraph.match(/[^.?!]+[.?!]+(?:\s+|$)|[^.?!]+(?:\s+|$)/g) || [paragraph]).map(s => s.trim());
+        
+        for (let sentence of sentences) {
+          const sSeparator = currentChunk ? " " : "";
+          if ((currentChunk + sSeparator + sentence).length <= maxChars) {
+            currentChunk += sSeparator + sentence;
+          } else {
+            if (currentChunk) {
+              chunks.push(currentChunk);
+              currentChunk = "";
+            }
+
+            if (sentence.length <= maxChars) {
+              currentChunk = sentence;
+            } else {
+              const words = sentence.split(" ");
+              for (const word of words) {
+                const wSeparator = currentChunk ? " " : "";
+                if ((currentChunk + wSeparator + word).length <= maxChars) {
+                  currentChunk += wSeparator + word;
+                } else {
+                  if (currentChunk) {
+                    chunks.push(currentChunk);
+                    currentChunk = "";
+                  }
+
+                  if (word.length <= maxChars) {
+                    currentChunk = word;
+                  } else {
+                    let remainingWord = word;
+                    while (remainingWord.length > 0) {
+                      const cutLength = Math.min(remainingWord.length, maxChars);
+                      chunks.push(remainingWord.slice(0, cutLength));
+                      remainingWord = remainingWord.slice(cutLength);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (currentChunk) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
+
+async function concatMp3Buffers(buffers) {
+  if (buffers.length === 0) return Buffer.alloc(0);
+  if (buffers.length === 1) return buffers[0];
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mp3-concat-"));
+  const tempFiles = [];
+  const listFilePath = path.join(tempDir, "list.txt");
+  const outputFilePath = path.join(tempDir, "output.mp3");
+
+  try {
+    const listLines = [];
+    for (let i = 0; i < buffers.length; i++) {
+      const filePath = path.join(tempDir, `chunk-${i}.mp3`);
+      fs.writeFileSync(filePath, buffers[i]);
+      tempFiles.push(filePath);
+      const safePath = filePath.replace(/\\/g, "/").replace(/'/g, "'\\''");
+      listLines.push(`file '${safePath}'`);
+    }
+
+    fs.writeFileSync(listFilePath, listLines.join("\n"));
+    tempFiles.push(listFilePath);
+
+    await new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(listFilePath)
+        .inputOptions(["-f", "concat", "-safe", "0"])
+        .outputOptions("-c", "copy")
+        .output(outputFilePath)
+        .on("end", () => resolve())
+        .on("error", (err) => reject(err))
+        .run();
+    });
+
+    const combinedBuffer = fs.readFileSync(outputFilePath);
+    return combinedBuffer;
+  } finally {
+    for (const f of tempFiles) {
+      try {
+        if (fs.existsSync(f)) fs.unlinkSync(f);
+      } catch (err) {}
+    }
+    try {
+      if (fs.existsSync(outputFilePath)) fs.unlinkSync(outputFilePath);
+    } catch (err) {}
+    try {
+      if (fs.existsSync(tempDir)) fs.rmdirSync(tempDir);
+    } catch (err) {}
+  }
+}
+
+async function synthesizeSpeechSingleChunk({ text, voiceId, modelId }) {
   const apiKey = ENV.ELEVENLABS_API_KEY;
   if (!apiKey) {
+    console.error("[ElevenLabs] API key is missing");
     const error = new Error(
       "ElevenLabs API key is not configured. Set ELEVENLABS_API_KEY in backend/.env."
     );
@@ -213,9 +396,8 @@ async function synthesizeSpeech({ text, voiceId, modelId }) {
     throw error;
   }
 
-  const selectedModel =
-    modelId || ENV.ELEVENLABS_DEFAULT_MODEL || "eleven_v3";
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+  const startTime = Date.now();
 
   try {
     const response = await fetch(url, {
@@ -227,21 +409,68 @@ async function synthesizeSpeech({ text, voiceId, modelId }) {
       },
       body: JSON.stringify({
         text,
-        model_id: selectedModel,
+        model_id: modelId,
       }),
     });
 
+    const duration = Date.now() - startTime;
     if (!response.ok) {
       const errText = await response.text();
+      console.error(`[ElevenLabs] API request failed after ${duration}ms with status ${response.status}: ${errText}`);
       const error = new Error(`ElevenLabs speech synthesis failed: ${errText}`);
       error.statusCode = response.status;
       throw error;
     }
 
     const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(arrayBuffer);
+    console.log(`[ElevenLabs] API request succeeded in ${duration}ms. Buffer size: ${buffer.length} bytes.`);
+    return buffer;
   } catch (error) {
-    console.error("Error synthesizing speech via ElevenLabs:", error);
+    console.error(`[ElevenLabs] Network or API error after ${Date.now() - startTime}ms:`, error);
+    throw error;
+  }
+}
+
+async function synthesizeSpeech({ text, voiceId, modelId }) {
+  const selectedModel =
+    modelId || ENV.ELEVENLABS_DEFAULT_MODEL || "eleven_v3";
+
+  console.log(`[ElevenLabs] synthesizeSpeech called. Model: ${selectedModel}, Voice: ${voiceId}, Text Length: ${text.length} characters.`);
+
+  const limit = await getModelLimit(selectedModel);
+  console.log(`[ElevenLabs] Model "${selectedModel}" limit is ${limit} characters.`);
+
+  if (text.length <= limit) {
+    console.log("[ElevenLabs] Text length is within limit. Initiating single-chunk synthesis...");
+    return synthesizeSpeechSingleChunk({ text, voiceId, modelId: selectedModel });
+  }
+
+  console.log(`[ElevenLabs] Text length exceeds limit. Splitting into chunks...`);
+  const chunks = splitTextIntoChunks(text, limit);
+  console.log(`[ElevenLabs] Split text into ${chunks.length} chunks.`);
+
+  // Make parallel synthesis requests
+  const chunkPromises = chunks.map((chunk, index) => {
+    console.log(`[ElevenLabs] Starting synthesis for chunk ${index + 1}/${chunks.length} (${chunk.length} chars)...`);
+    return synthesizeSpeechSingleChunk({
+      text: chunk,
+      voiceId,
+      modelId: selectedModel,
+    }).then(buffer => {
+      console.log(`[ElevenLabs] Successfully synthesized chunk ${index + 1}/${chunks.length}`);
+      return buffer;
+    });
+  });
+
+  try {
+    const buffers = await Promise.all(chunkPromises);
+    console.log(`[ElevenLabs] All ${buffers.length} chunks synthesized. Combining chunk MP3 buffers...`);
+    const combinedBuffer = await concatMp3Buffers(buffers);
+    console.log(`[ElevenLabs] Successfully combined MP3 buffers. Total size: ${combinedBuffer.length} bytes.`);
+    return combinedBuffer;
+  } catch (error) {
+    console.error("[ElevenLabs] Synthesis failed during chunk generation or combination:", error);
     throw error;
   }
 }
@@ -251,4 +480,7 @@ module.exports = {
   addSharedVoice,
   synthesizeSpeech,
   narrationTextFromMarkdown,
+  splitTextIntoChunks,
+  concatMp3Buffers,
+  getModelLimit,
 };
