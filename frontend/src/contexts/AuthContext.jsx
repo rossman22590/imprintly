@@ -112,6 +112,17 @@ export function AuthContextProvider({ children }) {
     checkAuthStatus();
   }, [checkAuthStatus]);
 
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      unauthenticateUser();
+    };
+
+    window.addEventListener("auth:session-expired", handleSessionExpired);
+    return () => {
+      window.removeEventListener("auth:session-expired", handleSessionExpired);
+    };
+  }, [unauthenticateUser]);
+
   return (
     <AuthContext.Provider
       value={{

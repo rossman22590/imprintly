@@ -76,6 +76,19 @@ axiosInstance.interceptors.response.use(
         );
       }
 
+      if (err.response.status === 401 && typeof window !== "undefined") {
+        const url = err.config?.url || "";
+        const isAuthEndpoint =
+          url.includes("/auth/login") || url.includes("/auth/register");
+        const hasToken = localStorage.getItem("token");
+
+        if (!isAuthEndpoint && hasToken) {
+          // Remove the token immediately so concurrent 401s don't fire duplicate events
+          localStorage.removeItem("token");
+          window.dispatchEvent(new Event("auth:session-expired"));
+        }
+      }
+
       if (err.response.status === 402 && typeof window !== "undefined") {
         window.dispatchEvent(new Event("credits:refresh"));
         window.dispatchEvent(new CustomEvent("credits:insufficient", {
