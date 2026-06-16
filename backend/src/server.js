@@ -23,6 +23,7 @@ const {
 } = require("./utils/book-generation.jobs");
 const {
   getPublicShareMetaForPath,
+  getDefaultSiteMeta,
   injectPublicShareMeta,
 } = require("./utils/public-share-meta");
 
@@ -173,16 +174,14 @@ if (ENV.NODE_ENV === "production" && fs.existsSync(frontendIndexPath)) {
     try {
       const origin = getRequestOrigin(req);
       const pageUrl = `${origin}${req.originalUrl || req.url}`;
-      const meta = await getPublicShareMetaForPath(req.path, {
-        origin,
-        pageUrl,
-      });
-
-      if (meta) {
-        const html = fs.readFileSync(frontendIndexPath, "utf8");
-        res.type("html").send(injectPublicShareMeta(html, meta));
-        return;
-      }
+      const meta =
+        (await getPublicShareMetaForPath(req.path, {
+          origin,
+          pageUrl,
+        })) || getDefaultSiteMeta({ origin, pageUrl });
+      const html = fs.readFileSync(frontendIndexPath, "utf8");
+      res.type("html").send(injectPublicShareMeta(html, meta));
+      return;
     } catch (error) {
       console.error("Error rendering public share meta:", error);
     }

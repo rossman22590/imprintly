@@ -1,5 +1,10 @@
-const DEFAULT_SHARE_IMAGE = "/images/hero-image.png";
+const DEFAULT_SHARE_IMAGE = "/images/og-share.png";
 const DEFAULT_SITE_NAME = "Bookify";
+const DEFAULT_SITE_PUBLISHER = "TSI · AI Tutor Suite";
+const DEFAULT_SITE_AUTHOR = "TSI";
+const DEFAULT_SITE_DESCRIPTION =
+  "From quick notes to fully published novels and audiobooks. Created by TSI as part of the AI Tutor Suite.";
+const TWITTER_SITE = "@myaitutor";
 
 export function compactMetaText(value = "", maxLength = 180) {
   const text = String(value || "")
@@ -66,14 +71,13 @@ export function applyShareMeta({
   url,
   author,
   type = "website",
-  siteName = DEFAULT_SITE_NAME,
+  siteName = DEFAULT_SITE_PUBLISHER,
 }) {
   if (typeof document === "undefined") return;
 
   const pageTitle = compactMetaText(title, 80) || DEFAULT_SITE_NAME;
   const pageDescription =
-    compactMetaText(description, 180) ||
-    "Read and share public book previews from Bookify.";
+    compactMetaText(description, 180) || DEFAULT_SITE_DESCRIPTION;
   const pageUrl =
     url || (typeof window !== "undefined" ? window.location.href : "");
   const pageImage = absoluteShareUrl(image || DEFAULT_SHARE_IMAGE);
@@ -81,7 +85,7 @@ export function applyShareMeta({
   document.title = pageTitle;
   setMetaAttribute("name", "title", pageTitle);
   setMetaAttribute("name", "description", pageDescription);
-  setMetaAttribute("name", "author", author || siteName);
+  setMetaAttribute("name", "author", author || DEFAULT_SITE_AUTHOR);
   setMetaAttribute("property", "og:type", type);
   setMetaAttribute("property", "og:url", pageUrl);
   setMetaAttribute("property", "og:title", pageTitle);
@@ -90,6 +94,8 @@ export function applyShareMeta({
   setMetaAttribute("property", "og:image:alt", pageTitle);
   setMetaAttribute("property", "og:site_name", siteName);
   setMetaAttribute("property", "twitter:card", "summary_large_image");
+  setMetaAttribute("property", "twitter:site", TWITTER_SITE);
+  setMetaAttribute("property", "twitter:creator", TWITTER_SITE);
   setMetaAttribute("property", "twitter:url", pageUrl);
   setMetaAttribute("property", "twitter:title", pageTitle);
   setMetaAttribute("property", "twitter:description", pageDescription);

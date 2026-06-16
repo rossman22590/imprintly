@@ -79,7 +79,7 @@ function CommunityBookshelfPage() {
       title: "Bookify Community Bookshelf",
       description:
         "Browse books shared by Bookify authors, including free full PDFs, public previews, and purchase links for physical copies.",
-      image: "/images/hero-image.png",
+      image: "/images/og-share.png",
       type: "website",
     });
   }, []);

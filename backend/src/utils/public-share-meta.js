@@ -1,8 +1,14 @@
 const Book = require("../models/Book");
 const User = require("../models/User");
 
-const DEFAULT_SHARE_IMAGE = "/images/hero-image.png";
+const DEFAULT_SHARE_IMAGE = "/images/og-share.png";
 const DEFAULT_SITE_NAME = "Bookify";
+const DEFAULT_SITE_TITLE = "Bookify — AI-Powered Book Creation Platform";
+const DEFAULT_SITE_DESCRIPTION =
+  "From quick notes to fully published novels and audiobooks. Bookify is an AI-powered book creation platform created by TSI as part of the AI Tutor Suite.";
+const DEFAULT_SITE_PUBLISHER = "TSI · AI Tutor Suite";
+const DEFAULT_SITE_AUTHOR = "TSI";
+const TWITTER_SITE = "@myaitutor";
 
 function activeOwnerQuery(query = {}) {
   return {
@@ -85,18 +91,29 @@ function buildMeta({
   origin,
   author,
   type = "website",
+  siteName = DEFAULT_SITE_PUBLISHER,
 }) {
   return {
-    title: compactText(title, 80) || DEFAULT_SITE_NAME,
-    description:
-      compactText(description, 180) ||
-      "Read and share public book previews from Bookify.",
+    title: compactText(title, 80) || DEFAULT_SITE_TITLE,
+    description: compactText(description, 180) || DEFAULT_SITE_DESCRIPTION,
     image: absoluteUrl(image || DEFAULT_SHARE_IMAGE, origin),
     url: pageUrl || origin || "",
-    author: compactText(author, 80),
+    author: compactText(author, 80) || DEFAULT_SITE_AUTHOR,
     type,
-    siteName: DEFAULT_SITE_NAME,
+    siteName,
   };
+}
+
+function getDefaultSiteMeta(options = {}) {
+  return buildMeta({
+    title: DEFAULT_SITE_TITLE,
+    description: DEFAULT_SITE_DESCRIPTION,
+    image: DEFAULT_SHARE_IMAGE,
+    author: DEFAULT_SITE_AUTHOR,
+    type: "website",
+    siteName: DEFAULT_SITE_PUBLISHER,
+    ...options,
+  });
 }
 
 async function getShelfMeta(token, options = {}) {
@@ -243,7 +260,9 @@ async function getCommunityBookMeta(bookId, options = {}) {
 async function getPublicShareMetaForPath(pathname = "", options = {}) {
   const route = getPublicShareRoute(pathname);
 
-  if (!route) return null;
+  if (!route) {
+    return getDefaultSiteMeta(options);
+  }
 
   if (route.type === "community") {
     return getCommunityMeta(options);
@@ -330,15 +349,18 @@ function injectPublicShareMeta(html = "", meta = {}) {
 
   nextHtml = upsertMetaName(nextHtml, "title", title);
   nextHtml = upsertMetaName(nextHtml, "description", description);
-  nextHtml = upsertMetaName(nextHtml, "author", meta.author || meta.siteName);
+  nextHtml = upsertMetaName(nextHtml, "author", meta.author || DEFAULT_SITE_AUTHOR);
+  nextHtml = upsertMetaName(nextHtml, "copyright", DEFAULT_SITE_PUBLISHER);
   nextHtml = upsertMetaProperty(nextHtml, "og:type", meta.type || "website");
   nextHtml = upsertMetaProperty(nextHtml, "og:url", url);
   nextHtml = upsertMetaProperty(nextHtml, "og:title", title);
   nextHtml = upsertMetaProperty(nextHtml, "og:description", description);
   nextHtml = upsertMetaProperty(nextHtml, "og:image", image);
   nextHtml = upsertMetaProperty(nextHtml, "og:image:alt", title);
-  nextHtml = upsertMetaProperty(nextHtml, "og:site_name", meta.siteName);
+  nextHtml = upsertMetaProperty(nextHtml, "og:site_name", meta.siteName || DEFAULT_SITE_PUBLISHER);
   nextHtml = upsertMetaProperty(nextHtml, "twitter:card", "summary_large_image");
+  nextHtml = upsertMetaProperty(nextHtml, "twitter:site", TWITTER_SITE);
+  nextHtml = upsertMetaProperty(nextHtml, "twitter:creator", TWITTER_SITE);
   nextHtml = upsertMetaProperty(nextHtml, "twitter:url", url);
   nextHtml = upsertMetaProperty(nextHtml, "twitter:title", title);
   nextHtml = upsertMetaProperty(
@@ -356,4 +378,5 @@ module.exports = {
   getPublicShareMetaForPath,
   injectPublicShareMeta,
   getPublicShareRoute,
+  getDefaultSiteMeta,
 };
